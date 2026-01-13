@@ -35,12 +35,17 @@ class UserAccountManager(BaseUserManager):
 
 # ✅ THIS MODEL WAS MISSING
 class UserAccount(AbstractBaseUser, PermissionsMixin):
+    choice = (
+        ('student', 'Student'),
+        ('college', 'College'),
+        ('admin', 'Admin'),
+    )
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     username = models.CharField(max_length=600, unique=True)
     email = models.EmailField(_('email address'), max_length=60, unique=True)
     first_name = models.CharField(_('first name'), max_length=40)
     last_name = models.CharField(_('last name'), max_length=40, blank=True, null=True)
-
+    type = models.CharField(max_length=20, default='student')
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(_('staff status'), default=False)
     is_active = models.BooleanField(_('active'), default=True)
