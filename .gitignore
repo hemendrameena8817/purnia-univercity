@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pkl
+*.egg-info/
+.eggs/
+*.env
+*.venv
+*.log
+
+# Virtual environments
+env/
+venv/
+ENV/
+VENV/
+.venv/
+.env/
+
+# Django
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/  # if using collectstatic output folder
+*.pot
+*.mo
+
+# Environment variables
+.env
+*.env
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# MacOS
+.DS_Store
+
+# Linux
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Test-related
+.tox/
+.pytest_cache/
+.junit.xml
+
+# Profiling
+profiler.log
+
+# Logs
+*.log
+logs/
+
+# mypy, pyright
+.mypy_cache/
+.pyright/
+
+# Build and dist
+build/
+dist/
+*.egg
+MANIFEST
+
+staticfiles/
+
+.envrc
