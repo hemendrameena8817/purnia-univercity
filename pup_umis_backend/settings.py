@@ -26,7 +26,43 @@ SECRET_KEY = "django-insecure-c5iwu*)-a*6)no^)4w_&+g&19rwb^*=gz(5+32u#2ej3h%u)vw
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
+
+# CSRF trusted origins for ngrok and other external domains
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.ngrok-free.app',  # Allow any ngrok subdomain
+]
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "https://*.ngrok-free.app",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
 
 
 # Application definition
@@ -42,6 +78,7 @@ INSTALLED_APPS = [
     # Third-party apps
     "rest_framework",
     "simple_history",
+    "corsheaders",
 
     # Local apps
     "accounts",
@@ -53,6 +90,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
