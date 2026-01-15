@@ -1,4 +1,4 @@
-curl --location 'http://127.0.0.1:8000/api/accounts/register/' \
+curl --location 'http://127.0.0.1:8000/accounts/register/' \
 --header 'Content-Type: application/json' \
 --header 'Cookie: auth-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY4MzAxMTA0LCJpYXQiOjE3Njc2OTYzMDQsImp0aSI6ImFkOWNkNWQzMTk1NTRjMTI4YjNiZGZkZDMwZDI4NTdmIiwidXNlcl9pZCI6MX0.DhHdcrBIlDzBoP-s_A949tKHY70OnfVuA5Jf2TvvhfA; csrftoken=NWffLT0NYrBMin1Qm3eP5OUSmObBN21u; refresh-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc2ODMwMTEwNCwiaWF0IjoxNzY3Njk2MzA0LCJqdGkiOiJiNWI5ODIzMDRiZWI0YjcxYWYyMDUwYzQ2ZDdjOGY1MSIsInVzZXJfaWQiOjF9.xGTjD-syUcJzX8-SJhJkaovva0060daMqU_KdACmEmg; sessionid=e9vefc9pn9mspl8y1acwk9fu4eu5ize3' \
 --data-raw '{
@@ -10,7 +10,7 @@ curl --location 'http://127.0.0.1:8000/api/accounts/register/' \
   }'
 
 
-curl --location 'http://127.0.0.1:8000/api/accounts/login/' \
+curl --location 'http://127.0.0.1:8000/accounts/login/' \
 --header 'Content-Type: application/json' \
 --header 'Cookie: auth-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY4MzAxMTA0LCJpYXQiOjE3Njc2OTYzMDQsImp0aSI6ImFkOWNkNWQzMTk1NTRjMTI4YjNiZGZkZDMwZDI4NTdmIiwidXNlcl9pZCI6MX0.DhHdcrBIlDzBoP-s_A949tKHY70OnfVuA5Jf2TvvhfA; csrftoken=NWffLT0NYrBMin1Qm3eP5OUSmObBN21u; refresh-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc2ODMwMTEwNCwiaWF0IjoxNzY3Njk2MzA0LCJqdGkiOiJiNWI5ODIzMDRiZWI0YjcxYWYyMDUwYzQ2ZDdjOGY1MSIsInVzZXJfaWQiOjF9.xGTjD-syUcJzX8-SJhJkaovva0060daMqU_KdACmEmg; sessionid=e9vefc9pn9mspl8y1acwk9fu4eu5ize3' \
 --data '{
@@ -20,7 +20,7 @@ curl --location 'http://127.0.0.1:8000/api/accounts/login/' \
 
 
 
-curl --location 'http://127.0.0.1:8000/api/accounts/profile/' \
+curl --location 'http://127.0.0.1:8000/accounts/profile/' \
 --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY4MzAwMzA0LCJpYXQiOjE3NjgyOTg1MDQsImp0aSI6IjBjMDFjOTY2NTVkNTQyZGY5YzZiODc5ZWMxOTQyMDYxIiwidXNlcl9pZCI6MX0.Z6N8zd5yXimeOSaWNqkKwovwaDKAjM75RxJ10osIorA' \
 --header 'Cookie: auth-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY4MzAxMTA0LCJpYXQiOjE3Njc2OTYzMDQsImp0aSI6ImFkOWNkNWQzMTk1NTRjMTI4YjNiZGZkZDMwZDI4NTdmIiwidXNlcl9pZCI6MX0.DhHdcrBIlDzBoP-s_A949tKHY70OnfVuA5Jf2TvvhfA; csrftoken=NWffLT0NYrBMin1Qm3eP5OUSmObBN21u; refresh-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCIsImV4cCI6MTc2ODMwMTEwNCwiaWF0IjoxNzY3Njk2MzA0LCJqdGkiOiJiNWI5ODIzMDRiZWI0YjcxYWYyMDUwYzQ2ZDdjOGY1MSIsInVzZXJfaWQiOjF9.xGTjD-syUcJzX8-SJhJkaovva0060daMqU_KdACmEmg; sessionid=e9vefc9pn9mspl8y1acwk9fu4eu5ize3'
 
