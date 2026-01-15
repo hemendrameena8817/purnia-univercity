@@ -19,6 +19,10 @@ class UserAccountManager(BaseUserManager):
             username=kwargs.get('username'),
             first_name=kwargs.get('first_name', ''),
             last_name=kwargs.get('last_name', ''),
+            is_staff=kwargs.get('is_staff', False),
+            is_superuser=kwargs.get('is_superuser', False),
+            is_active=kwargs.get('is_active', True),
+            user_type=kwargs.get('user_type', 'student'),
         )
         account.set_password(password)
         account.save(using=self._db)
