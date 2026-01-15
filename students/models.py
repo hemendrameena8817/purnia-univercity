@@ -30,8 +30,8 @@ class Student(models.Model):
     )
 
     # Student-specific Information
-    first_name = models.CharField(max_length=255)
-    last_name = models.CharField(max_length=255)
+    first_name = models.CharField(max_length=255, null=True, blank=True)
+    last_name = models.CharField(max_length=255, null=True, blank=True)
     json_data = models.JSONField(null=True, blank=True)
     registration_no = models.CharField(max_length=50, unique=True, db_index=True)
     address = models.TextField()
