@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "pup-umis-backend"
+version = "0.1.0"
+description = "Purnea University UMIS Backend"
+authors = ["Anuprash Gupta <anuprash.gupta@zucol.in>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+Django = "^6.0.1"
+django-simple-history = "^3.11.0"
+djangorestframework = "^3.16.1"
+djangorestframework-simplejwt = "^5.5.1"
+PyJWT = "^2.10.1"
+pillow = "^12.1.0"
+
+[tool.poetry.group.dev.dependencies]
+# Add development dependencies here as needed
+# pytest = "^7.4.0"
+# pytest-django = "^4.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
