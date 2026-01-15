@@ -26,3 +26,31 @@ curl --location 'http://127.0.0.1:8000/accounts/profile/' \
 
 
 
+curl --location 'http://127.0.0.1:8000/students/create/' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzY4NDgwMDE1LCJpYXQiOjE3Njg0NzgyMTUsImp0aSI6ImQ5ZDBjZDY0Y2Q0MDQ5Mjk4OWI2NGU2MTllMDJiYjQ2IiwidXNlcl9pZCI6IjEifQ.kb7fi8RVzarVlJXH6i6nBwva50Srcmfg9lBorWGy8Xw' \
+--data-raw '{
+    "email": "student7@example.com",
+    "password": "StrongPass123",
+    "first_name": "Rahul",
+    "last_name": "Kumar",
+    "registration_no": "REG2025002",
+    "address": "Patna, Bihar",
+    "admission_date": "2025-07-01",
+    "date_of_birth": "2003-05-12",
+    "gender": "Male",
+    "enrollment_date": "2025-07-10",
+    "enrollment_no": "ENR2025002",
+    "roll_no": "102",
+    "batch": "2025-2028",
+    "father_name": "Suresh Kumar",
+    "mother_name": "Anita Devi",
+    "current_semester": 1,
+    "session": "2025-2026",
+    "status": "Active",
+    "college": 1,
+    "department": 1,
+    "program": 1
+  }'
+
+

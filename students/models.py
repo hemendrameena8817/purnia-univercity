@@ -89,17 +89,8 @@ class Student(models.Model):
         return f"{self.user.get_full_name()} ({self.enrollment_no})"
 
     # 🔹 Proxy fields from UserAccount
-    @property
-    def first_name(self):
-        return self.user.first_name
-
-    @property
-    def last_name(self):
-        return self.user.last_name
-
-    @property
-    def email(self):
-        return self.user.email
+    def __str__(self):
+        return f"{self.first_name} {self.last_name} ({self.enrollment_no})"
 
     def get_full_name(self):
-        return self.user.get_full_name()
+        return f"{self.first_name} {self.last_name}"
