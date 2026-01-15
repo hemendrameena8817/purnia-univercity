@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,17 +38,18 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    
+
     # Third-party apps
-    'rest_framework',
-    'simple_history',
-    
+    "rest_framework",
+    "simple_history",
+
     # Local apps
-    'accounts',
-    'university',
-    'colleges',
-    'students',
+    "accounts",
+    "university",
+    "colleges",
+    "students",
 ]
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -57,11 +59,14 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "simple_history.middleware.HistoryRequestMiddleware",
 
+    # simple_history middleware
+    "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
+
 ROOT_URLCONF = "pup_umis_backend.urls"
+
 
 TEMPLATES = [
     {
@@ -77,6 +82,7 @@ TEMPLATES = [
         },
     },
 ]
+
 
 WSGI_APPLICATION = "pup_umis_backend.wsgi.application"
 
@@ -128,27 +134,34 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-AUTH_USER_MODEL = 'accounts.UserAccount'
 
-from datetime import timedelta
+# -------------------------------------------------
+# Custom User Model
+# -------------------------------------------------
+AUTH_USER_MODEL = "accounts.UserAccount"
 
+
+# -------------------------------------------------
+# Django REST Framework
+# -------------------------------------------------
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
 }
 
+
+# -------------------------------------------------
+# Simple JWT Settings
+# -------------------------------------------------
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "AUTH_HEADER_TYPES": ("Bearer",),
 }
-
-
-USERNAME_FIELD = 'email'
-REQUIRED_FIELDS = ['username']
