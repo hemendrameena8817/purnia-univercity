@@ -9,7 +9,7 @@ class CollegeAdmin(admin.ModelAdmin):
     list_filter = ('university',)
     ordering = ('name',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('uid', 'name', 'short_name', 'college_code', 'logo')
@@ -51,22 +51,34 @@ class ProgramAdmin(admin.ModelAdmin):
 
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'program', 'semester', 'course_category', 'course_type', 'credits', 'total_marks', 'is_elective', 'is_active')
+    list_display = (
+        'code', 'name', 'program', 'semester', 'course_category',
+        'course_type', 'credits', 'total_marks', 'is_elective', 'is_active'
+    )
     search_fields = ('name', 'code')
-    list_filter = ('program', 'semester', 'course_category', 'course_type', 'is_elective', 'is_active', 'college')
+    list_filter = (
+        'program', 'semester', 'course_category', 'course_type',
+        'is_elective', 'is_active', 'college'
+    )
     ordering = ('program', 'semester', 'name')
     readonly_fields = ('uid', 'created_at', 'updated_at')
     list_editable = ('is_active',)
-    
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('uid', 'name', 'code', 'description')
         }),
         ('Academic Details', {
-            'fields': ('program', 'semester', 'course_category', 'course_type', 'credits', 'is_elective')
+            'fields': (
+                'program', 'semester', 'course_category',
+                'course_type', 'credits', 'is_elective'
+            )
         }),
         ('Marks Configuration', {
-            'fields': ('theory_marks', 'practical_marks', 'internal_marks', 'total_marks', 'passing_marks')
+            'fields': (
+                'theory_marks', 'practical_marks', 'internal_marks',
+                'total_marks', 'passing_marks'
+            )
         }),
         ('Assignments', {
             'fields': ('college', 'faculty'),
@@ -93,7 +105,7 @@ class FacultyAdmin(admin.ModelAdmin):
     list_filter = ('department', 'designation')
     ordering = ('first_name', 'last_name')
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    
+
     fieldsets = (
         ('User Account', {
             'fields': ('uid', 'user'),
@@ -110,7 +122,7 @@ class FacultyAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     @admin.display(description='Has Login', boolean=True)
     def has_login(self, obj):
         return obj.user is not None
