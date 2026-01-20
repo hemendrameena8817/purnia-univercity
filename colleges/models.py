@@ -20,21 +20,23 @@ class College(models.Model):
         help_text='The user account for college administrator'
     )
 
-    name = models.CharField(max_length=255)
-    short_name = models.CharField(max_length=100)
-    college_code = models.CharField(max_length=50, unique=True)
-    address = models.TextField()
-    principal = models.CharField(max_length=255)
-    contact_no = models.CharField(max_length=15)
-    email = models.EmailField()
-    founded = models.DateField()
+    name = models.CharField(max_length=255, null=True, blank=True)
+    short_name = models.CharField(max_length=100, null=True, blank=True)
+    college_code = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+    principal = models.CharField(max_length=255, null=True, blank=True)
+    contact_no = models.CharField(max_length=15, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    founded = models.DateField(null=True, blank=True)
     website = models.URLField(blank=True, null=True)
     logo = models.ImageField(upload_to='college_logos/', null=True, blank=True)
 
     university = models.ForeignKey(
         'university.University',
         on_delete=models.CASCADE,
-        related_name='colleges'
+        related_name='colleges',
+        null=True,
+        blank=True,
     )
 
     json_data = models.JSONField(null=True, blank=True)

@@ -37,7 +37,6 @@ class LoginView(APIView):
 
         if serializer.is_valid():
             user = serializer.validated_data["user"]
-
             refresh = RefreshToken.for_user(user)
 
             return Response(
@@ -49,6 +48,9 @@ class LoginView(APIView):
                         "email": user.email,
                         "username": user.username,
                         "user_type": user.user_type,
+                        "first_name": user.first_name,
+                        "last_name": user.last_name,
+                        "full_name": user.get_full_name(),
                     },
                 },
                 status=status.HTTP_200_OK,
