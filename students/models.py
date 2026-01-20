@@ -39,8 +39,8 @@ class Student(models.Model):
     date_of_birth = models.DateField()
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES)
     enrollment_date = models.DateField()
-    enrollment_no = models.CharField(max_length=50, unique=True, db_index=True)
-    roll_no = models.CharField(max_length=50, unique=True)
+    # enrollment_no = models.CharField(max_length=50, unique=True, db_index=True)
+    roll_no = models.CharField(max_length=50, unique=True, db_index=True)
     batch = models.CharField(max_length=50)
 
     # Family Information
@@ -66,7 +66,7 @@ class Student(models.Model):
         blank=True
     )
     program = models.ForeignKey(
-        'colleges.Program',
+        'academics.Program',
         on_delete=models.CASCADE,
         related_name='students',
         null=True,

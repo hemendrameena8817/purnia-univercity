@@ -8,7 +8,6 @@ class StudentAdmin(admin.ModelAdmin):
         'registration_no',
         'get_first_name',
         'get_last_name',
-        'enrollment_no',
         'roll_no',
         'college',
         'program',
@@ -21,7 +20,6 @@ class StudentAdmin(admin.ModelAdmin):
         'registration_no',
         'user__first_name',
         'user__last_name',
-        'enrollment_no',
         'roll_no',
         'user__email',
     )
@@ -53,7 +51,6 @@ class StudentAdmin(admin.ModelAdmin):
         }),
         ('Academic Information', {
             'fields': (
-                'enrollment_no',
                 'enrollment_date',
                 'admission_date',
                 'roll_no',
