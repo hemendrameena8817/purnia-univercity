@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
     # Third-party apps
     "rest_framework",
+    "drf_yasg",
     "simple_history",
     "corsheaders",
 
@@ -158,6 +159,23 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
 }
+
+
+# -------------------------------------------------
+# Swagger/OpenAPI Settings
+# -------------------------------------------------
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header',
+            'description': 'Enter your bearer token in the format: Bearer <token>'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+}
+
 
 
 # -------------------------------------------------
