@@ -303,7 +303,9 @@ class Course(models.Model):
     department = models.ForeignKey(
         Department,
         on_delete=models.CASCADE,
-        related_name='courses'
+        related_name='courses',
+        null=True,
+        blank=True
     )
 
     is_elective = models.BooleanField(default=False, help_text='Is this an elective course?')
