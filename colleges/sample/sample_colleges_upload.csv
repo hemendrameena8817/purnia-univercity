@@ -1,0 +1,4 @@
+name,short_name,college_code,address,principal,contact_no,email,founded,website,university_id
+"Purnea College","PC","PC001","Purnea, Bihar","Dr. Ram Kumar","9876543210","principal@purneacollege.edu","2000-01-15","https://purneacollege.edu",1
+"Science College Purnea","SCP","SCP001","Line Bazar, Purnea","Dr. Sita Sharma","9876543211","principal@sciencecollege.edu","1995-06-20","https://sciencecollege.edu",1
+"Commerce College","CC","CC001","Main Road, Purnea","Dr. Mohan Singh","9876543212","principal@commercecollege.edu","1998-03-10","https://commercecollege.edu",1

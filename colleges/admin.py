@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import College, Department
+from .models import College
 
 
 @admin.register(College)
@@ -23,32 +23,6 @@ class CollegeAdmin(admin.ModelAdmin):
         }),
         ('Administration', {
             'fields': ('principal', 'founded', 'university')
-        }),
-        ('Additional Data', {
-            'fields': ('json_data',),
-            'classes': ('collapse',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
-
-
-@admin.register(Department)
-class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'head_of_department', 'college')
-    search_fields = ('name', 'code')
-    list_filter = ('college', 'college__university')
-    ordering = ('name',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('uid', 'name', 'code')
-        }),
-        ('Administration', {
-            'fields': ('head_of_department', 'college')
         }),
         ('Additional Data', {
             'fields': ('json_data',),

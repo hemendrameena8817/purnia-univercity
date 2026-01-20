@@ -20,21 +20,23 @@ class College(models.Model):
         help_text='The user account for college administrator'
     )
 
-    name = models.CharField(max_length=255)
-    short_name = models.CharField(max_length=100)
-    college_code = models.CharField(max_length=50, unique=True)
-    address = models.TextField()
-    principal = models.CharField(max_length=255)
-    contact_no = models.CharField(max_length=15)
-    email = models.EmailField()
-    founded = models.DateField()
+    name = models.CharField(max_length=255, null=True, blank=True)
+    short_name = models.CharField(max_length=100, null=True, blank=True)
+    college_code = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
+    principal = models.CharField(max_length=255, null=True, blank=True)
+    contact_no = models.CharField(max_length=15, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    founded = models.DateField(null=True, blank=True)
     website = models.URLField(blank=True, null=True)
     logo = models.ImageField(upload_to='college_logos/', null=True, blank=True)
 
     university = models.ForeignKey(
         'university.University',
         on_delete=models.CASCADE,
-        related_name='colleges'
+        related_name='colleges',
+        null=True,
+        blank=True,
     )
 
     json_data = models.JSONField(null=True, blank=True)
@@ -48,32 +50,3 @@ class College(models.Model):
 
     def __str__(self):
         return self.name
-
-
-class Department(models.Model):
-    """
-    Represents a Department within a College.
-    """
-    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-
-    name = models.CharField(max_length=255)
-    code = models.CharField(max_length=50, unique=True)
-    head_of_department = models.CharField(max_length=255)
-
-    college = models.ForeignKey(
-        College,
-        on_delete=models.CASCADE,
-        related_name='departments'
-    )
-
-    json_data = models.JSONField(null=True, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = 'Department'
-        verbose_name_plural = 'Departments'
-
-    def __str__(self):
-        return f"{self.name} - {self.college.short_name}"

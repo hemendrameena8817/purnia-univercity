@@ -59,7 +59,7 @@ class Student(models.Model):
         related_name='students'
     )
     department = models.ForeignKey(
-        'colleges.Department',
+        'academics.Department',
         on_delete=models.CASCADE,
         related_name='students',
         null=True,
