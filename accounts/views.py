@@ -37,7 +37,6 @@ class LoginView(APIView):
 
         if serializer.is_valid():
             user = serializer.validated_data["user"]
-
             refresh = RefreshToken.for_user(user)
 
             return Response(
