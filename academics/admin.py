@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Faculty, Degree, Batch, Session, Semester, Program, CourseType, Course, Designation, Professor
+from .models import Faculty, Department, Degree, Batch, Session, Semester, Program, CourseType, CourseSlot, Course, ProgramCourseStructure, BatchCourseStructure, Designation, Professor
 
 
 @admin.register(Faculty)
@@ -17,6 +17,33 @@ class FacultyAdmin(admin.ModelAdmin):
         }),
         ('University', {
             'fields': ('university',)
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    """Admin for Departments"""
+    list_display = ('name', 'code', 'head_of_department', 'faculty')
+    search_fields = ('name', 'code')
+    list_filter = ('faculty', 'faculty__university')
+    ordering = ('name',)
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('uid', 'name', 'code')
+        }),
+        ('Administration', {
+            'fields': ('head_of_department', 'faculty')
         }),
         ('Additional Data', {
             'fields': ('json_data',),
@@ -136,9 +163,9 @@ class SemesterAdmin(admin.ModelAdmin):
 
 @admin.register(Program)
 class ProgramAdmin(admin.ModelAdmin):
-    list_display = ('name', 'degree', 'get_degree_level', 'get_total_semesters', 'department', 'college')
+    list_display = ('name', 'degree', 'get_degree_level', 'get_total_semesters', 'department')
     search_fields = ('name', 'degree__name', 'degree__short_name')
-    list_filter = ('degree__degree_level', 'degree', 'department', 'college')
+    list_filter = ('degree__degree_level', 'degree', 'department')
     ordering = ('name',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
 
@@ -149,8 +176,8 @@ class ProgramAdmin(admin.ModelAdmin):
         ('Degree', {
             'fields': ('degree',)
         }),
-        ('Relationships', {
-            'fields': ('college', 'department')
+        ('Department', {
+            'fields': ('department',)
         }),
         ('Additional Data', {
             'fields': ('json_data',),
@@ -194,38 +221,24 @@ class CourseTypeAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(Course)
-class CourseAdmin(admin.ModelAdmin):
-    list_display = (
-        'code', 'name', 'program', 'semester', 'course_type', 'is_elective', 'is_active'
-    )
-    search_fields = ('name', 'code', 'course_type__code', 'course_type__name')
-    list_filter = (
-        'program', 'semester', 'course_type',
-        'is_elective', 'is_active', 'college'
-    )
-    ordering = ('program', 'semester', 'name')
+@admin.register(CourseSlot)
+class CourseSlotAdmin(admin.ModelAdmin):
+    """Admin for Course Slots (MJC-1 in Sem 1, SEC-2 in Sem 3, etc.)"""
+    list_display = ('sequence_name', 'name', 'semester', 'course_type', 'sequence_number', 'credits', 'marks')
+    search_fields = ('name', 'sequence_name')
+    list_filter = ('semester', 'course_type')
+    ordering = ('semester', 'course_type', 'sequence_number')
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_editable = ('is_active',)
 
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'name', 'code', 'description')
+            'fields': ('uid', 'name', 'sequence_name')
         }),
-        ('Course Classification', {
-            'fields': ('course_type',)
+        ('Classification', {
+            'fields': ('semester', 'course_type', 'sequence_number')
         }),
         ('Academic Details', {
-            'fields': (
-                'program', 'semester', 'is_elective'
-            )
-        }),
-        ('Assignments', {
-            'fields': ('college', 'professor'),
-            'classes': ('collapse',)
-        }),
-        ('Status', {
-            'fields': ('is_active',)
+            'fields': ('credits', 'marks')
         }),
         ('Additional Data', {
             'fields': ('json_data',),
@@ -236,6 +249,95 @@ class CourseAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+@admin.register(Course)
+class CourseAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'department', 'is_elective', 'is_active')
+    search_fields = ('name', 'code')
+    list_filter = ('department', 'is_elective', 'is_active')
+    ordering = ('department', 'name')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+    list_editable = ('is_active',)
+
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('uid', 'name', 'code', 'description')
+        }),
+        ('Department', {
+            'fields': ('department',)
+        }),
+        ('Status', {
+            'fields': ('is_elective', 'is_active')
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(ProgramCourseStructure)
+class ProgramCourseStructureAdmin(admin.ModelAdmin):
+    """Admin for Program Course Structure (mapping courses to slots in programs)"""
+    list_display = ('program', 'course_slot', 'course', 'get_semester')
+    search_fields = ('program__name', 'course__name', 'course__code', 'course_slot__sequence_name')
+    list_filter = ('program', 'course_slot__semester', 'course_slot__course_type')
+    ordering = ('program', 'course_slot')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+
+    fieldsets = (
+        ('Program & Course', {
+            'fields': ('uid', 'program', 'course_slot', 'course')
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    @admin.display(description='Semester')
+    def get_semester(self, obj):
+        return f"Sem {obj.course_slot.semester.number}"
+
+
+@admin.register(BatchCourseStructure)
+class BatchCourseStructureAdmin(admin.ModelAdmin):
+    """Admin for Batch Course Structure (mapping courses to slots for specific batches)"""
+    list_display = ('batch', 'program', 'course_slot', 'course', 'get_semester')
+    search_fields = ('batch__name', 'program__name', 'course__name', 'course__code', 'course_slot__sequence_name')
+    list_filter = ('batch', 'program', 'course_slot__semester', 'course_slot__course_type')
+    ordering = ('batch', 'program', 'course_slot')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+
+    fieldsets = (
+        ('Batch & Program', {
+            'fields': ('uid', 'batch', 'program')
+        }),
+        ('Course Assignment', {
+            'fields': ('course_slot', 'course')
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    @admin.display(description='Semester')
+    def get_semester(self, obj):
+        return f"Sem {obj.course_slot.semester.number}"
 
 
 @admin.register(Designation)

@@ -34,6 +34,35 @@ class Faculty(models.Model):
         return self.name
 
 
+class Department(models.Model):
+    """
+    Represents a Department within a Faculty (academic division).
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=50, unique=True)
+    head_of_department = models.CharField(max_length=255, blank=True, null=True)
+
+    faculty = models.ForeignKey(
+        Faculty,
+        on_delete=models.CASCADE,
+        related_name='departments'
+    )
+
+    json_data = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Department'
+        verbose_name_plural = 'Departments'
+
+    def __str__(self):
+        return f"{self.name} ({self.faculty.short_name})"
+
+
 class Degree(models.Model):
     """
     Represents a Degree type (e.g., Bachelor of Computer Applications, Master of Business Administration).
@@ -161,17 +190,11 @@ class Program(models.Model):
     )
 
     department = models.ForeignKey(
-        'colleges.Department',
+        Department,
         on_delete=models.CASCADE,
         related_name='programs',
         null=True,
         blank=True
-    )
-
-    college = models.ForeignKey(
-        'colleges.College',
-        on_delete=models.CASCADE,
-        related_name='programs'
     )
 
     json_data = models.JSONField(null=True, blank=True)
@@ -225,13 +248,51 @@ class CourseType(models.Model):
         return f"{self.code} - {self.name}"
 
 
+class CourseSlot(models.Model):
+    """
+    Represents a course slot in a semester curriculum.
+    Example: MJC-1 in Semester 1, SEC-2 in Semester 3, etc.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
+    name = models.CharField(max_length=100, help_text='e.g., Major Course 1, SEC 2')
+    
+    semester = models.ForeignKey(
+        Semester,
+        on_delete=models.CASCADE,
+        related_name='course_slots'
+    )
+    
+    course_type = models.ForeignKey(
+        CourseType,
+        on_delete=models.CASCADE,
+        related_name='course_slots'
+    )
+    
+    sequence_number = models.PositiveIntegerField(help_text='Sequence number (1, 2, 3...)')
+    sequence_name = models.CharField(max_length=50, blank=True, null=True, help_text='e.g., MJC-1, SEC-2')
+    
+    credits = models.PositiveIntegerField(default=0)
+    marks = models.PositiveIntegerField(default=100, help_text='Total marks for this slot')
+
+    json_data = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Course Slot'
+        verbose_name_plural = 'Course Slots'
+        ordering = ['semester', 'course_type', 'sequence_number']
+        # unique_together = ['semester', 'course_type', 'sequence_number']
+
+    def __str__(self):
+        return f"{self.sequence_name or self.name} - Sem {self.semester.number}"
 
 
 class Course(models.Model):
     """
-    Represents a Course/Subject within a Program.
-    Courses are offered in specific semesters of a program.
+    Represents a Course/Subject offered by a Department.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
@@ -239,41 +300,10 @@ class Course(models.Model):
     code = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True, null=True)
 
-    # Course Type (MJC, MNC, SEC, etc.)
-    course_type = models.ForeignKey(
-        CourseType,
-        on_delete=models.SET_NULL,
-        related_name='courses',
-        null=True,
-        blank=True
-    )
-
-    # Academic details
-
-    semester = models.PositiveIntegerField(help_text='Semester in which this course is offered')
-
-    # Relationships
-    program = models.ForeignKey(
-        Program,
+    department = models.ForeignKey(
+        Department,
         on_delete=models.CASCADE,
         related_name='courses'
-    )
-
-    college = models.ForeignKey(
-        'colleges.College',
-        on_delete=models.CASCADE,
-        related_name='courses',
-        null=True,
-        blank=True
-    )
-
-    # Optional: Which professor teaches this course
-    professor = models.ForeignKey(
-        'Professor',
-        on_delete=models.SET_NULL,
-        related_name='courses',
-        null=True,
-        blank=True
     )
 
     is_elective = models.BooleanField(default=False, help_text='Is this an elective course?')
@@ -287,18 +317,97 @@ class Course(models.Model):
     class Meta:
         verbose_name = 'Course'
         verbose_name_plural = 'Courses'
-        ordering = ['program', 'semester', 'name']
-        unique_together = ['program', 'code']
+        ordering = ['department', 'name']
 
     def __str__(self):
-        return f"{self.code} - {self.name} (Sem {self.semester})"
+        return f"{self.code} - {self.name}"
 
-    @property
-    def effective_credits(self):
-        """Returns course credits, falling back to course type default if 0"""
-        if self.credits > 0:
-            return self.credits
-        return self.course_type.credits if self.course_type else 0
+
+class ProgramCourseStructure(models.Model):
+    """
+    Maps courses to course slots within a program's curriculum structure.
+    Example: BCA Program -> MJC-1 slot in Sem 1 -> Introduction to Programming course
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    program = models.ForeignKey(
+        Program,
+        on_delete=models.CASCADE,
+        related_name='course_structure'
+    )
+
+    course_slot = models.ForeignKey(
+        CourseSlot,
+        on_delete=models.CASCADE,
+        related_name='program_courses'
+    )
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='program_structures'
+    )
+
+    json_data = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Program Course Structure'
+        verbose_name_plural = 'Program Course Structures'
+        ordering = ['program', 'course_slot']
+        # unique_together = ['program', 'course_slot', 'course']
+
+    def __str__(self):
+        return f"{self.program.short_name} - {self.course_slot.sequence_name} - {self.course.code}"
+
+
+class BatchCourseStructure(models.Model):
+    """
+    Maps courses to course slots within a batch's curriculum structure.
+    Similar to ProgramCourseStructure but specific to a batch.
+    Example: BCA 2024-2028 batch -> MJC-1 slot in Sem 1 -> Introduction to Programming course
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    batch = models.ForeignKey(
+        Batch,
+        on_delete=models.CASCADE,
+        related_name='course_structure'
+    )
+
+    program = models.ForeignKey(
+        Program,
+        on_delete=models.CASCADE,
+        related_name='batch_course_structure'
+    )
+
+    course_slot = models.ForeignKey(
+        CourseSlot,
+        on_delete=models.CASCADE,
+        related_name='batch_courses'
+    )
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='batch_structures'
+    )
+
+    json_data = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Batch Course Structure'
+        verbose_name_plural = 'Batch Course Structures'
+        ordering = ['batch', 'program', 'course_slot']
+        # unique_together = ['batch', 'program', 'course_slot', 'course']
+
+    def __str__(self):
+        return f"{self.batch.name} - {self.program.short_name} - {self.course_slot.sequence_name} - {self.course.code}"
 
 
 class Designation(models.Model):
@@ -356,7 +465,7 @@ class Professor(models.Model):
     )
 
     department = models.ForeignKey(
-        'colleges.Department',
+        Department,
         on_delete=models.CASCADE,
         related_name='professors'
     )
