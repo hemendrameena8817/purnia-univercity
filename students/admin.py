@@ -37,7 +37,7 @@ class StudentAdmin(admin.ModelAdmin):
 
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    # autocomplete_fields = ['user', 'college', 'program', 'department']
+    autocomplete_fields = ['user', 'college', 'program', 'department']
 
     fieldsets = (
         ('User Account', {
