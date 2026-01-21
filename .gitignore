@@ -10,7 +10,8 @@ __pycache__/
 *.env
 *.venv
 *.log
-
+poetry.lock
+*.lock
 # Virtual environments
 env/
 venv/
