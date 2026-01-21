@@ -1,75 +1,60 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 from .models import Student
-from accounts.models import UserAccount
+
+User = get_user_model()
 
 
-class StudentCreateSerializer(serializers.ModelSerializer):
-    # UserAccount fields
-    email = serializers.EmailField(write_only=True, required=True)
-    password = serializers.CharField(write_only=True, min_length=6, required=True)
-    first_name = serializers.CharField(required=True)
-    last_name = serializers.CharField(required=True)
-
+class StudentProfileSerializer(serializers.ModelSerializer):
+    college_name = serializers.CharField(source='college.name', read_only=True)
+    program_name = serializers.CharField(source='program.short_name', read_only=True)
+    
     class Meta:
         model = Student
         fields = [
-            # User fields
-            'email', 'password',
-
-            # Student personal info
-            'first_name', 'last_name', 'json_data',
-            'registration_no', 'address', 'admission_date',
-            'date_of_birth', 'gender', 'enrollment_date',
-            'enrollment_no', 'roll_no', 'batch',
-
-            # Family info
-            'father_name', 'mother_name',
-
-            # Academic info
-            'current_semester', 'session', 'status',
-
-            # Relations
-            'college', 'department', 'program',
-
-            # Documents
-            'profile_image', 'signature'
+            'registration_no', 'roll_no', 'college_name', 'program_name',
+            'current_semester', 'session', 'status'
         ]
 
+
+class StudentCreateSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    username = serializers.CharField()
+    
+    class Meta:
+        model = Student
+        fields = [
+            'email', 'password', 'username', 'first_name', 'last_name',
+            'registration_no', 'roll_no', 'batch', 'father_name', 'mother_name',
+            'current_semester', 'session', 'date_of_birth', 'gender', 
+            'admission_date', 'enrollment_date', 'address', 'college', 
+            'department', 'program'
+        ]
+        
     def validate_email(self, value):
-        if UserAccount.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email already exists")
+        return value
+        
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Username already exists")
         return value
 
     def create(self, validated_data):
         email = validated_data.pop('email')
         password = validated_data.pop('password')
-        first_name = validated_data.pop('first_name')
-        last_name = validated_data.pop('last_name')
-
-        # Generate username
-        base_username = email.split('@')[0]
-        username = base_username
-        counter = 1
-        while UserAccount.objects.filter(username=username).exists():
-            username = f"{base_username}{counter}"
-            counter += 1
-
-        # Create UserAccount
-        user = UserAccount.objects.create_user(
+        username = validated_data.pop('username')
+        
+        user = User.objects.create_user(
             email=email,
             username=username,
             password=password,
-            first_name=first_name,
-            last_name=last_name,
-            user_type='student'
+            user_type='student',
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', '')
         )
-
-        # Create Student
-        student = Student.objects.create(
-            user=user,
-            first_name=first_name,
-            last_name=last_name,
-            **validated_data
-        )
-
+        
+        student = Student.objects.create(user=user, **validated_data)
         return student

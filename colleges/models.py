@@ -6,19 +6,9 @@ class College(models.Model):
     """
     Represents a College affiliated to a University.
     Students belong to colleges, and colleges belong to the university.
-    The 'admin_user' is the college administrator who can login and manage college data.
+    Multiple users can be associated with a college through CollegeUserProfile.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-
-    # Link to UserAccount for college admin
-    admin_user = models.OneToOneField(
-        'accounts.UserAccount',
-        on_delete=models.SET_NULL,
-        related_name='college_profile',
-        null=True,
-        blank=True,
-        help_text='The user account for college administrator'
-    )
 
     name = models.CharField(max_length=255, null=True, blank=True)
     short_name = models.CharField(max_length=100, null=True, blank=True)
@@ -39,6 +29,7 @@ class College(models.Model):
         blank=True,
     )
 
+    is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -49,4 +40,12 @@ class College(models.Model):
         verbose_name_plural = 'Colleges'
 
     def __str__(self):
-        return self.name
+        return self.name or self.college_code or str(self.uid)
+
+    def get_admin_users(self):
+        """Get all admin users for this college"""
+        return self.users.filter(role__in=['principal', 'admin'], is_active=True)
+
+    def get_all_users(self):
+        """Get all users for this college"""
+        return self.users.filter(is_active=True)

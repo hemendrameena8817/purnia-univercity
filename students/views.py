@@ -25,7 +25,7 @@ class StudentCreateAPIView(APIView):
                     "username": student.user.username,
                     "first_name": student.first_name,
                     "last_name": student.last_name,
-                    "enrollment_no": student.enrollment_no,
+                    # "enrollment_no": student.enrollment_no,
                     "roll_no": student.roll_no,
                     "college": student.college.name,
                     "status": student.status,

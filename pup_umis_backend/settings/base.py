@@ -24,11 +24,19 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
+    
     # Third-party apps
     "rest_framework",
+    "rest_framework.authtoken",  # Required for dj-rest-auth
     "drf_yasg",
     "simple_history",
     "corsheaders",
+    
+    # Auth apps
+    "dj_rest_auth",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
 
     # Local apps
     "accounts",
@@ -48,6 +56,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",  # Required for allauth
 
     # simple_history middleware
     "simple_history.middleware.HistoryRequestMiddleware",
@@ -138,6 +147,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "accounts.UserAccount"
 
+SITE_ID = 1  # Required for allauth
 
 # -------------------------------------------------
 # Django REST Framework
@@ -145,6 +155,7 @@ AUTH_USER_MODEL = "accounts.UserAccount"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "dj_rest_auth.jwt_auth.JWTCookieAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
@@ -170,6 +181,25 @@ SWAGGER_SETTINGS = {
     },
     'USE_SESSION_AUTH': False,
 }
+
+
+# -------------------------------------------------
+# dj-rest-auth & AllAuth Settings
+# -------------------------------------------------
+
+ACCOUNT_LOGIN_METHODS = {'username'}  # Use username for login
+ACCOUNT_SIGNUP_FIELDS = ['username']  # Only username is required for signup
+# ACCOUNT_EMAIL_REQUIRED = False
+ACCOUNT_UNIQUE_EMAIL = True  # Keep email unique if provided
+# ACCOUNT_USERNAME_REQUIRED = True
+ACCOUNT_EMAIL_VERIFICATION = 'none'
+
+REST_AUTH = {
+    'LOGIN_SERIALIZER': 'accounts.serializers.LoginSerializer',
+    'USER_DETAILS_SERIALIZER': 'accounts.serializers.UserProfileSerializer',
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': None,
+    'JWT_AUTH_REFRESH_COOKIE': None,}
 
 
 # -------------------------------------------------
