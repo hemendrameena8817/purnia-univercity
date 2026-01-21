@@ -11,6 +11,7 @@ from .serializers import (
     CollegeUserCreateSerializer
 )
 from .permissions import IsUniversityAdmin, IsCollegeUser
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 
@@ -20,6 +21,8 @@ class LoginView(DjRestAuthLoginView):
     Unified Login endpoint using dj-rest-auth.
     Authenticates user via username/password and returns user profile.
     """
+    serializer_class = LoginSerializer
+
     def post(self, request, *args, **kwargs):
         self.request = request
         self.serializer = self.get_serializer(data=request.data)
@@ -36,10 +39,12 @@ class LoginView(DjRestAuthLoginView):
         return response
 
 
+
 class ProfileView(APIView):
     """
     Get current user's profile.
     """
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

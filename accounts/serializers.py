@@ -57,11 +57,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'uid', 'email', 'username', 'first_name', 'last_name',
+            'uid', 'email', 'username', 'first_name', 'last_name',
             'phone', 'user_type', 'is_verified', 'is_active', 
             'created_at', 'college_profile', 'student_profile'
         ]
-        read_only_fields = ['id', 'uid', 'email', 'created_at']
+        read_only_fields = ['uid', 'email', 'created_at']
 
     def get_student_profile(self, obj):
         if obj.user_type == 'student' and hasattr(obj, 'student_profile'):
