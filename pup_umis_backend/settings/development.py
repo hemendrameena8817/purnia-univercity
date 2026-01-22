@@ -46,28 +46,16 @@ DATABASES = {
 # CORS Settings (Development - Allow all)
 # -------------------------------------------------
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8080",
-]
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv())
 
 # Allow all origins in development (optional - less secure)
-# CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 # -------------------------------------------------
 # CSRF Settings (Development)
 # -------------------------------------------------
-
-CSRF_TRUSTED_ORIGINS = [
-    'https://*.ngrok-free.app',
-    'http://localhost:3000',
-    'http://localhost:5173',
-]
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', cast=Csv())
 
 
 # -------------------------------------------------
