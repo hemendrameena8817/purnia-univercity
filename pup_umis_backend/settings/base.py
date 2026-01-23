@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "students",
     "ug",
     "pg",
+    "grievance",
     "staging",
 ]
 
