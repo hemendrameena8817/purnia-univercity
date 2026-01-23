@@ -1,0 +1,504 @@
+from rest_framework import generics, status
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.shortcuts import get_object_or_404
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
+from .models import Grievance, GrievanceComment
+from .serializers import (
+    GrievanceListSerializer,
+    GrievanceDetailSerializer,
+    GrievanceCreateSerializer,
+    GrievanceUpdateSerializer,
+    GrievanceCommentSerializer,
+    GrievanceCommentCreateSerializer,
+    GrievanceEscalateSerializer,
+    GrievanceAttachmentUploadSerializer,
+    GrievanceAttachmentSerializer,
+)
+
+
+class GrievanceListCreateView(APIView):
+    """
+    GET: List all grievances (filtered by user role)
+    POST: Create a new grievance (students only)
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="List all grievances. Students see their own, college staff see their college's, university admin see all.",
+        manual_parameters=[
+            openapi.Parameter(
+                'status',
+                openapi.IN_QUERY,
+                description="Filter by status",
+                type=openapi.TYPE_STRING,
+                enum=['open', 'in_progress', 'resolved', 'closed', 'escalated']
+            ),
+            openapi.Parameter(
+                'category',
+                openapi.IN_QUERY,
+                description="Filter by category UID (UUID string)",
+                type=openapi.TYPE_STRING
+            ),
+            openapi.Parameter(
+                'priority',
+                openapi.IN_QUERY,
+                description="Filter by priority",
+                type=openapi.TYPE_STRING,
+                enum=['low', 'medium', 'high', 'urgent']
+            ),
+        ],
+        responses={200: GrievanceListSerializer(many=True)},
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        """List grievances based on user role"""
+        user = request.user
+        
+        # Filter based on user type
+        if user.user_type == 'student':
+            # Students see only their own grievances
+            if not hasattr(user, 'student_profile'):
+                return Response(
+                    {'error': 'Student profile not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            queryset = Grievance.objects.filter(student=user.student_profile, is_deleted=False)
+        
+        elif user.user_type == 'college_user':
+            # College staff see grievances assigned to their college
+            if not hasattr(user, 'college_profile'):
+                return Response(
+                    {'error': 'College profile not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            college = user.college_profile.college
+            queryset = Grievance.objects.filter(assigned_to_college=college, is_deleted=False)
+        
+        elif user.user_type == 'university_admin':
+            # University admin sees all grievances (excluding deleted)
+            queryset = Grievance.objects.filter(is_deleted=False)
+        
+        else:
+            return Response(
+                {'error': 'Unauthorized user type'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Apply filters
+        status_filter = request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        category_filter = request.query_params.get('category')
+        if category_filter:
+            # Filter by category UID (more secure than ID)
+            queryset = queryset.filter(category__uid=category_filter)
+        
+        priority_filter = request.query_params.get('priority')
+        if priority_filter:
+            queryset = queryset.filter(priority=priority_filter)
+        
+        queryset = queryset.order_by('-submitted_at')
+        serializer = GrievanceListSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_description="""Submit a new grievance (students only).
+        
+        **Workflow:**
+        1. Upload attachments using `/api/grievances/upload-attachment/` (optional)
+        2. Collect the attachment UIDs from upload responses
+        3. Submit grievance with attachment UIDs
+        
+        **Example:**
+        ```json
+        {
+          "contact_person_name": "John Doe",
+          "contact_person_phone_number": "9876543210",
+          "category_uid": "abc-123-def-456",
+          "subject": "Name Correction in Marksheet",
+          "description": "I need to correct my name spelling in the marksheet",
+          "attachment_uids": ["uuid-1", "uuid-2"]
+        }
+        ```
+        """,
+        request_body=GrievanceCreateSerializer,
+        responses={
+            201: GrievanceDetailSerializer,
+            400: 'Validation error',
+            403: 'Only students can submit grievances'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def post(self, request):
+        """Create a new grievance (students only)"""
+        if request.user.user_type != 'student':
+            return Response(
+                {'error': 'Only students can submit grievances'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        serializer = GrievanceCreateSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            grievance = serializer.save()
+            response_serializer = GrievanceDetailSerializer(grievance)
+            return Response(
+                {
+                    'message': 'Grievance submitted successfully',
+                    'grievance': response_serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GrievanceDetailView(APIView):
+    """
+    GET: Retrieve a single grievance
+    PATCH: Update grievance status/priority (college/university staff only)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, identifier, user):
+        """Get grievance by ID or grievance_number with permission check"""
+        try:
+            if identifier.isdigit():
+                grievance = Grievance.objects.get(id=identifier)
+            else:
+                grievance = Grievance.objects.get(grievance_number=identifier)
+        except Grievance.DoesNotExist:
+            return None
+        
+        # Check permissions
+        if user.user_type == 'student':
+            if not hasattr(user, 'student_profile') or grievance.student != user.student_profile:
+                return None
+        elif user.user_type == 'college_user':
+            if not hasattr(user, 'college_profile') or grievance.assigned_to_college != user.college_profile.college:
+                return None
+        # University admin can see all
+        
+        return grievance
+
+    @swagger_auto_schema(
+        operation_description="Get grievance details by ID or grievance number",
+        responses={200: GrievanceDetailSerializer, 404: 'Grievance not found'},
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def get(self, request, identifier):
+        """Retrieve grievance details"""
+        grievance = self.get_object(identifier, request.user)
+        if not grievance:
+            return Response(
+                {'error': 'Grievance not found or access denied'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = GrievanceDetailSerializer(grievance, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        operation_description="""Update grievance status, priority, or assign to staff member.
+        
+        **Examples:**
+        
+        Update status only:
+        ```json
+        {"status": "in_progress"}
+        ```
+        
+        Update priority only:
+        ```json
+        {"priority": "urgent"}
+        ```
+        
+        Assign to staff member:
+        ```json
+        {"handled_by_uid": "abc-123-def-456"}
+        ```
+        
+        Update multiple fields:
+        ```json
+        {
+          "status": "in_progress",
+          "priority": "high",
+          "handled_by_uid": "abc-123-def-456"
+        }
+        ```
+        """,
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'status': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Update grievance status',
+                    enum=['open', 'in_progress', 'resolved', 'closed', 'escalated']
+                ),
+                'priority': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    description='Update grievance priority',
+                    enum=['low', 'medium', 'high', 'urgent']
+                ),
+                'handled_by_uid': openapi.Schema(
+                    type=openapi.TYPE_STRING,
+                    format='uuid',
+                    description='UID of staff member to assign (use null to unassign)',
+                    nullable=True
+                ),
+            },
+            example={
+                'status': 'in_progress',
+                'priority': 'high',
+                'handled_by_uid': 'abc-123-def-456'
+            }
+        ),
+        responses={
+            200: GrievanceDetailSerializer,
+            400: 'Validation error',
+            403: 'Permission denied',
+            404: 'Grievance not found'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def patch(self, request, identifier):
+        """Update grievance (college/university staff only)"""
+        if request.user.user_type not in ['college_user', 'university_admin']:
+            return Response(
+                {'error': 'Only college/university staff can update grievances'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        grievance = self.get_object(identifier, request.user)
+        if not grievance:
+            return Response(
+                {'error': 'Grievance not found or access denied'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = GrievanceUpdateSerializer(
+            grievance,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            response_serializer = GrievanceDetailSerializer(grievance)
+            return Response(
+                {
+                    'message': 'Grievance updated successfully',
+                    'grievance': response_serializer.data
+                },
+                status=status.HTTP_200_OK
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# In grievance/views.py
+
+class GrievanceCommentView(APIView):
+    """
+    POST: Add a comment to a grievance with optional attachments
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Add a comment to a grievance with optional attachments.
+        
+        **Workflow:**
+        1. Upload attachments using `/api/grievances/upload-attachment/` (optional)
+        2. Collect the attachment UIDs from upload responses
+        3. Submit comment with attachment UIDs
+        
+        **Example:**
+        ```json
+        {
+          "comment": "Following up on this issue",
+          "is_internal": false,
+          "attachment_uids": ["uuid-1", "uuid-2"]
+        }
+        ```
+        """,
+        request_body=GrievanceCommentCreateSerializer,
+        responses={
+            201: GrievanceCommentSerializer, 
+            400: 'Validation error',
+            403: 'Permission denied'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def post(self, request, identifier):
+        """Add comment to grievance with optional attachments"""
+        # Get grievance
+        try:
+            if identifier.isdigit():
+                grievance = Grievance.objects.get(id=identifier)
+            else:
+                grievance = Grievance.objects.get(grievance_number=identifier)
+        except Grievance.DoesNotExist:
+            return Response(
+                {'error': 'Grievance not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check permissions
+        user = request.user
+        if user.user_type == 'student':
+            return Response(
+                {'error': 'Students cannot add comments. Please submit a new grievance for updates.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        elif user.user_type == 'college_user':
+            if not hasattr(user, 'college_profile') or grievance.assigned_to_college != user.college_profile.college:
+                return Response(
+                    {'error': 'You can only comment on grievances assigned to your college'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Create comment with attachments
+        serializer = GrievanceCommentCreateSerializer(
+            data=request.data,
+            context={
+                'request': request,
+                'grievance': grievance
+            }
+        )
+        
+        if serializer.is_valid():
+            comment = serializer.save(grievance=grievance)
+            response_serializer = GrievanceCommentSerializer(
+                comment,
+                context={'request': request}
+            )
+            return Response(
+                {
+                    'message': 'Comment added successfully',
+                    'comment': response_serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class GrievanceStatsView(APIView):
+    """
+    GET: Get grievance statistics
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Get grievance statistics based on user role",
+        responses={200: 'Statistics data'},
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        """Get grievance statistics"""
+        from django.db.models import Count
+        
+        user = request.user
+        
+        # Filter based on user type (exclude deleted)
+        if user.user_type == 'student':
+            if not hasattr(user, 'student_profile'):
+                return Response({'error': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
+            queryset = Grievance.objects.filter(student=user.student_profile, is_deleted=False)
+        elif user.user_type == 'college_user':
+            if not hasattr(user, 'college_profile'):
+                return Response({'error': 'College profile not found'}, status=status.HTTP_404_NOT_FOUND)
+            queryset = Grievance.objects.filter(assigned_to_college=user.college_profile.college, is_deleted=False)
+        else:
+            queryset = Grievance.objects.filter(is_deleted=False)
+        
+        # Calculate stats
+        total_grievances = queryset.count()
+        by_status = queryset.values('status').annotate(count=Count('id'))
+        by_category = queryset.values('category').annotate(count=Count('id'))
+        by_priority = queryset.values('priority').annotate(count=Count('id'))
+        
+        return Response(
+            {
+                'total_grievances': total_grievances,
+                'by_status': list(by_status),
+                'by_category': list(by_category),
+                'by_priority': list(by_priority),
+            },
+            status=status.HTTP_200_OK
+        )
+
+class GrievanceCategoryListView(APIView):
+    """
+    GET: List all active grievance categories
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="Get list of all active grievance categories for dropdown/selection",
+        responses={200: 'List of categories'},
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        """List all active categories"""
+        from .models import GrievanceCategory
+        from .serializers import GrievanceCategorySerializer
+        
+        categories = GrievanceCategory.objects.filter(is_active=True).order_by('display_order', 'name')
+        serializer = GrievanceCategorySerializer(categories, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class GrievanceAttachmentUploadView(APIView):
+    """
+    POST: Upload attachment before creating grievance
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    @swagger_auto_schema(
+        operation_description="""Upload attachment file before creating grievance.
+        
+        Returns attachment UID which can be used when creating the grievance.
+        
+        **Usage:**
+        1. Upload files using this endpoint
+        2. Collect the returned UIDs
+        3. Pass the UIDs array when creating the grievance
+        """,
+        request_body=GrievanceAttachmentUploadSerializer,
+        responses={
+            201: GrievanceAttachmentSerializer,
+            400: 'Validation error'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def post(self, request):
+        """Upload attachment"""
+        serializer = GrievanceAttachmentUploadSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        
+        if serializer.is_valid():
+            attachment = serializer.save()
+            # Return full attachment details including UID
+            response_serializer = GrievanceAttachmentSerializer(attachment, context={'request': request})
+            return Response(
+                {
+                    'message': 'Attachment uploaded successfully',
+                    'attachment': response_serializer.data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
