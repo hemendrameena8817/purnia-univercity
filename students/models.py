@@ -19,7 +19,7 @@ class Student(models.Model):
         ('Female', 'Female'),
         ('Other', 'Other'),
     ]
-
+    
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     # Link to UserAccount
@@ -53,26 +53,12 @@ class Student(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
 
     # Relationships
-    college = models.ForeignKey(
-        'colleges.College',
-        on_delete=models.CASCADE,
-        related_name='students'
-    )
-    department = models.ForeignKey(
-        'university.Department',
-        on_delete=models.CASCADE,
-        related_name='students',
-        null=True,
-        blank=True
-    )
-    program = models.ForeignKey(
-        'academics.Program',
-        on_delete=models.CASCADE,
-        related_name='students',
-        null=True,
-        blank=True
-    )
-
+    college = models.ForeignKey('colleges.College', on_delete=models.CASCADE, related_name='student_college')
+    department = models.ForeignKey('university.Department', on_delete=models.CASCADE, related_name='student_department', null=True, blank=True)
+    program = models.ForeignKey('academics.Program', on_delete=models.CASCADE, related_name='student_program', null=True, blank=True)
+    major_course = models.CharField(max_length=250, null=True, blank=True)
+    minor_course = models.CharField(max_length=250, null=True, blank=True)
+    degree = models.ForeignKey('academics.Degree', on_delete=models.CASCADE, related_name='student_degree', null=True, blank=True)
     # Documents
     profile_image = models.ImageField(upload_to='students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='students/signatures/', null=True, blank=True)

@@ -44,10 +44,12 @@ class StudentCourseAssessment(models.Model):
     using flexible labels (CIA-Theory, ESE-Practical, etc.)
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Name")
     student = models.ForeignKey(
         'students.Student',
         on_delete=models.CASCADE,
-        related_name='ug_course_assessments'
+        related_name='ug_course_assessments',
+        help_text="Student"
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
     code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
@@ -75,14 +77,16 @@ class StudentCourseAssessment(models.Model):
     exam_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status pass/fail/promoted")
 
     batch = models.CharField(max_length=10, null=True, blank=True, help_text="Batch")
-    json_data = models.JSONField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
     
     class Meta:
         verbose_name = 'Student Course Assessment'
         verbose_name_plural = 'Student Course Assessments'
-
+        ordering = ['-created_at']
+        unique_together = ('student', 'course_type', 'semester', 'label', 'exam_type')
+        
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"
 
@@ -102,9 +106,9 @@ class SemesterRegistration(models.Model):
     exam_eligible = models.BooleanField(default=False, help_text="Eligible for Exam")
     remarks = models.TextField(null=True, blank=True, help_text="Remarks")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
-    json_data = models.JSONField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
 
     class Meta:
         verbose_name = 'Semester Registration'
@@ -128,13 +132,14 @@ class ExamRegistration(models.Model):
     sem = models.IntegerField(null=True, blank=True, help_text="Semester")
     status = models.CharField(max_length=10, null=True, blank=True, help_text="Status")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
-    json_data = models.JSONField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
 
     class Meta:
         verbose_name = 'Exam Registration'
         verbose_name_plural = 'Exam Registrations'
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"{self.student}"
