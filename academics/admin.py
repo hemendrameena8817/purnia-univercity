@@ -1,62 +1,9 @@
 from django.contrib import admin
-from .models import Faculty, Department, Degree, Batch, Session, Semester, Program, CourseType, CourseSlot, Course, ProgramCourseStructure, BatchCourseStructure, Designation, Professor
-
-
-@admin.register(Faculty)
-class FacultyAdmin(admin.ModelAdmin):
-    """Admin for Academic Faculty divisions (Faculty of Science, etc.)"""
-    list_display = ('name', 'short_name', 'university')
-    search_fields = ('name', 'short_name')
-    list_filter = ('university',)
-    ordering = ('name',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('uid', 'name', 'short_name', 'description')
-        }),
-        ('University', {
-            'fields': ('university',)
-        }),
-        ('Additional Data', {
-            'fields': ('json_data',),
-            'classes': ('collapse',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
-
-
-@admin.register(Department)
-class DepartmentAdmin(admin.ModelAdmin):
-    """Admin for Departments"""
-    list_display = ('name', 'code', 'head_of_department', 'faculty')
-    search_fields = ('name', 'code')
-    list_filter = ('faculty', 'faculty__university')
-    ordering = ('name',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('uid', 'name', 'code')
-        }),
-        ('Administration', {
-            'fields': ('head_of_department', 'faculty')
-        }),
-        ('Additional Data', {
-            'fields': ('json_data',),
-            'classes': ('collapse',)
-        }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
+from .models import Degree, Batch, Session, Semester, Program, CourseType, CourseSlot, Course, ProgramCourseStructure, BatchCourseStructure, Designation, Professor
 
 
 @admin.register(Degree)
+
 class DegreeAdmin(admin.ModelAdmin):
     """Admin for Degree types (BCA, MBA, B.Tech, etc.)"""
     list_display = ('name', 'degree_level', 'total_semesters', 'total_years')

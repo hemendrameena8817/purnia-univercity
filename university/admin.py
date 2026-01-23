@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import University
+from .models import University, Faculty, Department
 
 
 @admin.register(University)
@@ -48,9 +48,6 @@ class UniversityAdmin(admin.ModelAdmin):
     )
 
     def logo_preview(self, obj):
-        """
-        Display a small preview of the university logo in the admin panel.
-        """
         if obj.logo:
             return format_html('<img src="{}" width="60" height="60" style="object-fit:contain;" />', obj.logo.url)
         return "No Logo"
@@ -58,8 +55,22 @@ class UniversityAdmin(admin.ModelAdmin):
     logo_preview.short_description = "Logo Preview"
 
     def has_add_permission(self, request):
-        """
-        Allow only one University record in the system.
-        Remove this method if you want to allow multiple universities.
-        """
         return not University.objects.exists()
+
+
+@admin.register(Faculty)
+class FacultyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'short_name', 'university')
+    search_fields = ('name', 'short_name')
+    list_filter = ('university',)
+    ordering = ('name',)
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+
+
+@admin.register(Department)
+class DepartmentAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'head_of_department', 'faculty')
+    search_fields = ('name', 'code')
+    list_filter = ('faculty',)
+    ordering = ('name',)
+    readonly_fields = ('uid', 'created_at', 'updated_at')

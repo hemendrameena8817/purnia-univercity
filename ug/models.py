@@ -9,7 +9,7 @@ class CourseStructure(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=100, null=True, blank=True, help_text="Course Name")
     department = models.ForeignKey(
-        'academics.Department',
+        'university.Department',
         on_delete=models.CASCADE,
         related_name='ug_course_structures'
     )
