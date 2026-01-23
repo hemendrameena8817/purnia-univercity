@@ -9,14 +9,14 @@ class University(models.Model):
     uid = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
     name = models.CharField(max_length=255, unique=True)
-    short_name = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    short_name = models.CharField(max_length=100,null=True, blank=True)
     logo = models.ImageField(upload_to='university_logos/', null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     vice_chancellor = models.CharField(max_length=255, null=True, blank=True)
     contact_no = models.CharField(max_length=15, blank=True, null=True)
-    email = models.EmailField(unique=True, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
     established_date = models.DateField(null=True, blank=True)
-    website = models.URLField(unique=True, blank=True, null=True)
+    website = models.URLField(blank=True, null=True)
     json_data = models.JSONField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -73,7 +73,7 @@ class Department(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     name = models.CharField(max_length=255, null=True, blank=True,help_text='e.g., History, Physics,Economics,Mathematics')
-    code = models.CharField(max_length=50, unique=True)
+    code = models.CharField(max_length=50, null=True,blank=True)
     head_of_department = models.CharField(max_length=255, blank=True, null=True)
 
     faculty = models.ForeignKey(
