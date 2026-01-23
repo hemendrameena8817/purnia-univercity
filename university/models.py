@@ -72,7 +72,7 @@ class Department(models.Model):
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, null=True, blank=True,help_text='e.g., History, Physics,Economics,Mathematics')
     code = models.CharField(max_length=50, unique=True)
     head_of_department = models.CharField(max_length=255, blank=True, null=True)
 
