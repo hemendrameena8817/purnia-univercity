@@ -28,7 +28,11 @@ class College(models.Model):
         null=True,
         blank=True,
     )
-
+    degree_offered = models.ManyToManyField(
+        'academics.Degree',
+        related_name='colleges',
+        blank=True,
+    )
     is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
 
