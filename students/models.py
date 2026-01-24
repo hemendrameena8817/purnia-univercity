@@ -42,7 +42,7 @@ class Student(models.Model):
     mobile_no = models.CharField(max_length=15,null=True,blank=True)
     migration_submitted = models.BooleanField(default=False)
     last_university = models.CharField(max_length=100, null=True, blank=True)
-    
+
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES)
     caste = models.CharField(max_length=20, null=True, blank=True)
     enrollment_date = models.DateField()
@@ -65,6 +65,7 @@ class Student(models.Model):
     program = models.ForeignKey('academics.Program', on_delete=models.CASCADE, related_name='student_program', null=True, blank=True)
     major_course = models.CharField(max_length=250, null=True, blank=True)
     minor_course = models.CharField(max_length=250, null=True, blank=True)
+    mdc_course = models.CharField(max_length=250, null=True, blank=True)
     degree = models.ForeignKey('academics.Degree', on_delete=models.CASCADE, related_name='student_degree', null=True, blank=True)
 
     # Documents
