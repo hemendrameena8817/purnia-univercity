@@ -14,8 +14,11 @@ def import_data():
         print(f"Error: XLSX file not found at {XLSX_PATH}")
         return
     
-    existing = ApplicantRegMaster.objects.count()
-    print(f"Existing records: {existing}")
+    # Delete all existing data first
+    existing_count = ApplicantRegMaster.objects.count()
+    print(f"🗑️  Deleting all {existing_count} existing records...")
+    ApplicantRegMaster.objects.all().delete()
+    print(f"✅ All existing records deleted!")
     
     wb = load_workbook(XLSX_PATH, read_only=True)
     ws = wb.active
@@ -32,11 +35,27 @@ def import_data():
     print(f"Found {len(data_rows)} records to import")
     
     imported = 0
+    skipped = 0
     errors = []
     
-    # Bulk create in chunks is faster, but let's do simple loop first for safety
+    # Track csv_ids to avoid duplicates within the same file
+    seen_csv_ids = set()
+    
     for i, row in enumerate(data_rows):
         try:
+            csv_id = str(row[9]) if row[9] is not None else None
+            
+            # Skip if csv_id is None or already seen (duplicate in file)
+            if csv_id is None:
+                skipped += 1
+                continue
+            
+            if csv_id in seen_csv_ids:
+                skipped += 1
+                continue
+            
+            seen_csv_ids.add(csv_id)
+            
             ApplicantRegMaster.objects.create(
                     applied_date=str(row[0]) if row[0] is not None else None,
                     applied_program=str(row[1]) if row[1] is not None else None,
@@ -47,7 +66,7 @@ def import_data():
                     dob1=str(row[6]) if row[6] is not None else None,
                     email_id=str(row[7]) if row[7] is not None else None,
                     first_name=str(row[8]) if row[8] is not None else None,
-                    csv_id=str(row[9]) if row[9] is not None else None,
+                    csv_id=csv_id,
                     institute_code=str(row[10]) if row[10] is not None else None,
                     last_name=str(row[11]) if row[11] is not None else None,
                     last_updated=str(row[12]) if row[12] is not None else None,
@@ -72,6 +91,7 @@ def import_data():
     
     print(f"\n✅ Import completed!")
     print(f"   Imported: {imported} records")
+    print(f"   Skipped (duplicates): {skipped} records")
     print(f"   Errors: {len(errors)}")
     if errors[:5]:
         print("   First errors:", errors[:5])

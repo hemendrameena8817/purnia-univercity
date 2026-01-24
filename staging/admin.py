@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
-    RegisteredApplicantMaster
+    RegisteredApplicantMaster, StagingApplicantQualificationDetail
 )
 
 
@@ -216,3 +216,11 @@ class RegisteredApplicantMasterAdmin(admin.ModelAdmin):
         }),
     )
 
+
+@admin.register(StagingApplicantQualificationDetail)
+class StagingApplicantQualificationDetailAdmin(admin.ModelAdmin):
+    list_display = ('applied_class', 'applied_program', 'created_by', 'created_on', 'division_distinction', 'is_migrated', 'imported_at')
+    list_filter = ('is_migrated',)
+    search_fields = ('applied_class', 'applied_program', 'created_by')
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
