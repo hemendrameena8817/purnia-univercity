@@ -34,7 +34,7 @@ def import_cbcs(clear_existing=True):
     from university.models import University, Faculty, Department
     from ug.models import CourseStructure
     
-    XLSX_PATH = '/Users/anuprash/Desktop/projects/pup-umis-backend/ug_courses_cbcs_system/CBCS REGISTRATION COURSE  2ND Semester.xlsx'
+    XLSX_PATH = '/Users/anuprash/Desktop/projects/pup-umis-backend/courses_data/ug/CBCS REGISTRATION COURSE  2ND Semester.xlsx'
     SEMESTER = 2
     BATCH = '2025-29'
     
