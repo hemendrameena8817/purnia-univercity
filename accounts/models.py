@@ -61,9 +61,10 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     username = models.CharField(max_length=150, unique=True)
-    email = models.EmailField(_("email address"), max_length=255, unique=True, blank=True, null=True)
+    email = models.EmailField(_("email address"), max_length=255, blank=True, null=True)
     first_name = models.CharField(_("first name"), max_length=100)
     last_name = models.CharField(_("last name"), max_length=100, blank=True, null=True)
+    hindi_name = models.CharField(_("Hindi name"), max_length=100, blank=True, null=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default="student")
 

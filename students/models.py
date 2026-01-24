@@ -32,12 +32,19 @@ class Student(models.Model):
     # Student-specific Information
     first_name = models.CharField(max_length=255, null=True, blank=True)
     last_name = models.CharField(max_length=255, null=True, blank=True)
-    json_data = models.JSONField(null=True, blank=True)
+    hindi_name  = models.CharField(max_length=250,null=True, blank=True)
+    
     registration_no = models.CharField(max_length=50, unique=True, db_index=True)
     address = models.TextField()
     admission_date = models.DateField()
     date_of_birth = models.DateField()
+    aadhar_no = models.CharField(max_length=12, null=True, blank=True)
+    mobile_no = models.CharField(max_length=15,null=True,blank=True)
+    migration_submitted = models.BooleanField(default=False)
+    last_university = models.CharField(max_length=100, null=True, blank=True)
+    
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES)
+    caste = models.CharField(max_length=20, null=True, blank=True)
     enrollment_date = models.DateField()
     # enrollment_no = models.CharField(max_length=50, unique=True, db_index=True)
     roll_no = models.CharField(max_length=50, unique=True, db_index=True)
@@ -59,10 +66,12 @@ class Student(models.Model):
     major_course = models.CharField(max_length=250, null=True, blank=True)
     minor_course = models.CharField(max_length=250, null=True, blank=True)
     degree = models.ForeignKey('academics.Degree', on_delete=models.CASCADE, related_name='student_degree', null=True, blank=True)
+
     # Documents
     profile_image = models.ImageField(upload_to='students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='students/signatures/', null=True, blank=True)
 
+    json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
