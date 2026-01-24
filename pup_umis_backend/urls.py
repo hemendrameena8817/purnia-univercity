@@ -52,6 +52,7 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path('api/students/', include('students.urls')),
     path('api/colleges/', include('colleges.urls')),
+    path('api/grievances/', include('grievance.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.STATIC_ROOT)
