@@ -497,3 +497,124 @@ class UGSemResultCurrent(models.Model):
         
     def __str__(self):
         return f"{self.college_roll_no} - {self.student_name} - Sem {self.semester_code}"
+
+
+class PGResultCurrent(models.Model):
+    """
+    Staging table for PG_result_current from purnea_exm_new database.
+    Contains semester-wise results for PG students.
+    All fields are CharField to match dump data exactly.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    # Original table columns (all as CharField to match dump exactly)
+    source_id = models.CharField(max_length=50, null=True, blank=True, help_text='Original id from dump')
+    user_id = models.CharField(max_length=50, null=True, blank=True)
+    college_roll_no = models.CharField(max_length=50, null=True, blank=True)
+    college_reg_no = models.CharField(max_length=50, null=True, blank=True)
+    student_name = models.CharField(max_length=100, null=True, blank=True)
+    fathers_name = models.CharField(max_length=100, null=True, blank=True)
+    mothers_name = models.CharField(max_length=100, null=True, blank=True)
+    semester_code = models.CharField(max_length=30, null=True, blank=True)
+    batch_code = models.CharField(max_length=30, null=True, blank=True)
+    session_code = models.CharField(max_length=30, null=True, blank=True)
+    course_code = models.CharField(max_length=30, null=True, blank=True)
+    discipline_code = models.CharField(max_length=30, null=True, blank=True)
+    paper_code = models.CharField(max_length=50, null=True, blank=True)
+    subject_code = models.CharField(max_length=30, null=True, blank=True)
+    subject_name = models.CharField(max_length=500, null=True, blank=True)
+    faculty = models.CharField(max_length=30, null=True, blank=True)
+    status = models.CharField(max_length=20, null=True, blank=True)
+    exam_type_his = models.CharField(max_length=30, null=True, blank=True)
+    exam_type = models.CharField(max_length=30, null=True, blank=True)
+    maximum_mark = models.CharField(max_length=20, null=True, blank=True)
+    pass_mark = models.CharField(max_length=20, null=True, blank=True)
+    mark_secured = models.CharField(max_length=20, null=True, blank=True)
+    subject_total_mark = models.CharField(max_length=20, null=True, blank=True)
+    subject_ca = models.CharField(max_length=50, null=True, blank=True)
+    subject_ng = models.CharField(max_length=50, null=True, blank=True)
+    subject_ce = models.CharField(max_length=50, null=True, blank=True)
+    subject_gp = models.CharField(max_length=50, null=True, blank=True)
+    total_ca = models.CharField(max_length=50, null=True, blank=True)
+    total_ce = models.CharField(max_length=50, null=True, blank=True)
+    subject_result = models.CharField(max_length=20, null=True, blank=True)
+    final_result = models.CharField(max_length=50, null=True, blank=True)
+    grand_total_mark = models.CharField(max_length=20, null=True, blank=True)
+    total_secured_mark = models.CharField(max_length=20, null=True, blank=True)
+    total_per = models.CharField(max_length=20, null=True, blank=True)
+    institute_code = models.CharField(max_length=20, null=True, blank=True)
+    gpa = models.CharField(max_length=50, null=True, blank=True)
+    cgpa = models.CharField(max_length=50, null=True, blank=True)
+    numrical_let_grad = models.CharField(max_length=50, null=True, blank=True)
+    let_grad_sub = models.CharField(max_length=20, null=True, blank=True)
+    let_grad = models.CharField(max_length=50, null=True, blank=True)
+    dsc_grad = models.CharField(max_length=50, null=True, blank=True)
+    agreegate = models.CharField(max_length=100, null=True, blank=True)
+    grade = models.CharField(max_length=100, null=True, blank=True)
+    record_status = models.CharField(max_length=20, null=True, blank=True)
+    final_sheet_status = models.CharField(max_length=20, null=True, blank=True)
+    student_name_hindi = models.CharField(max_length=100, null=True, blank=True)
+    max_total_mark = models.CharField(max_length=20, null=True, blank=True)
+
+    # Meta fields
+    is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'PG Result Current'
+        verbose_name_plural = 'PG Result Current'
+        indexes = [
+            models.Index(fields=['user_id']),
+            models.Index(fields=['college_roll_no']),
+            models.Index(fields=['college_reg_no']),
+            models.Index(fields=['semester_code']),
+            models.Index(fields=['batch_code']),
+            models.Index(fields=['session_code']),
+            models.Index(fields=['course_code']),
+            models.Index(fields=['institute_code']),
+        ]
+        
+    def __str__(self):
+        return f"{self.college_roll_no} - {self.student_name} - Sem {self.semester_code}"
+
+
+class DisciplineMasterDump(models.Model):
+    """
+    Staging table for discipline_master from purnea_exm_new database.
+    Contains discipline/subject information.
+    All fields are CharField to match dump data exactly.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    # Original table columns (all as CharField to match dump exactly)
+    source_id = models.CharField(max_length=50, null=True, blank=True, help_text='Original id from dump')
+    discipline_code = models.CharField(max_length=50, null=True, blank=True)
+    discipline = models.CharField(max_length=100, null=True, blank=True)
+    discipline_name = models.CharField(max_length=100, null=True, blank=True)
+    discipline_name_new = models.CharField(max_length=100, null=True, blank=True)
+    subject_name = models.CharField(max_length=50, null=True, blank=True)
+    institute_code = models.CharField(max_length=50, null=True, blank=True)
+    created_by = models.CharField(max_length=100, null=True, blank=True)
+    created_on = models.CharField(max_length=50, null=True, blank=True)
+    updated_by = models.CharField(max_length=100, null=True, blank=True)
+    updated_on = models.CharField(max_length=50, null=True, blank=True)
+    record_status = models.CharField(max_length=20, null=True, blank=True)
+    last_updated = models.CharField(max_length=50, null=True, blank=True)
+    discipline_name_hindi = models.CharField(max_length=2500, null=True, blank=True)
+
+    # Meta fields
+    is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Discipline Master Dump'
+        verbose_name_plural = 'Discipline Master Dump'
+        indexes = [
+            models.Index(fields=['discipline_code']),
+            models.Index(fields=['institute_code']),
+        ]
+        
+    def __str__(self):
+        return f"{self.discipline_code} - {self.discipline_name}"
