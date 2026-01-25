@@ -5,6 +5,9 @@ from .views import (
     VocNewRegistrationDetailView,
     VocNewRegistrationBulkCreateView,
     VocRegistrationOptionsView,
+    InitiatePaymentView,
+    PaymentResponseView,
+    VocRegistrationStatusView,
 )
 
 urlpatterns = [
@@ -23,5 +26,12 @@ urlpatterns = [
     # Retrieve, Update, Delete (by Aadhaar)
     path('<str:aadhaar_no>/', VocNewRegistrationDetailView.as_view(), name='voc-registration-detail'),
     
+    # Payment initiation
+    path('<str:aadhaar_no>/initiate-payment/', InitiatePaymentView.as_view(), name='voc-registration-payment-initiate'),
     
+    # Payment response (CC Avenue redirect)
+    path('payment-response/', PaymentResponseView.as_view(), name='voc-registration-payment-response'),
+
+    # Registration status check
+    path('<str:aadhaar_no>/status/', VocRegistrationStatusView.as_view(), name='voc-registration-status'),
 ]

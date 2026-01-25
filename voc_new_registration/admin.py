@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import VocNewRegistration
+from .models import VocNewRegistration, VocRegistrationPayment
 
 
 @admin.register(VocNewRegistration)
@@ -15,6 +15,7 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
         'mobile_no',
         'college',
         'migration_submitted',
+        'is_registration_completed',
         'created_at',
     ]
     list_filter = [
@@ -24,19 +25,15 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
         'caste',
         'migration_submitted',
         'migrated_from_other_university',
+        'is_registration_completed',
         'college',
         'created_at',
     ]
     search_fields = [
         'student_name',
-        'student_name_hindi',
-        'father_name',
-        'mother_name',
+        'aadhaar_no',
         'mobile_no',
         'email',
-        'aadhaar_no',
-        'apaar_no',
-        'old_registration_no',
     ]
     readonly_fields = ['uid', 'created_at', 'updated_at']
     
@@ -96,3 +93,30 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """Optimize queryset with select_related"""
         return super().get_queryset(request).select_related('college')
+
+
+@admin.register(VocRegistrationPayment)
+class VocRegistrationPaymentAdmin(admin.ModelAdmin):
+    list_display = [
+        'order_id',
+        'registration',
+        'amount',
+        'payment_status',
+        'payment_mode',
+        'created_at',
+    ]
+    list_filter = ['payment_status', 'payment_mode', 'created_at']
+    search_fields = ['order_id', 'tracking_id', 'registration__student_name', 'registration__aadhaar_no']
+    readonly_fields = [
+        'registration',
+        'order_id',
+        'tracking_id',
+        'bank_ref_no',
+        'amount',
+        'payment_status',
+        'payment_mode',
+        'card_name',
+        'raw_response',
+        'created_at',
+        'updated_at'
+    ]

@@ -13,6 +13,14 @@ from .serializers import (
 )
 from rest_framework.parsers import MultiPartParser, FormParser
 
+from decouple import config
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+import uuid
+from .utils.ccavenue_utils import encrypt, decrypt, parse_response
+from .models import VocNewRegistration, VocRegistrationPayment
+
 
 class VocNewRegistrationListView(generics.ListAPIView):
     """
@@ -136,6 +144,38 @@ class VocNewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
 
+class VocRegistrationStatusView(views.APIView):
+    """
+    API View to check the registration status of a student.
+    Lookup by Aadhaar Number.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Check registration status",
+        operation_description="Returns whether registration is completed, account created, and migration status."
+    )
+    def get(self, request, aadhaar_no):
+        try:
+            registration = VocNewRegistration.objects.get(aadhaar_no=aadhaar_no, is_deleted=False)
+        except VocNewRegistration.DoesNotExist:
+            return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get latest payment status if it exists
+        latest_payment = registration.payments.order_by('-created_at').first()
+        payment_status = latest_payment.payment_status if latest_payment else None
+
+        return Response({
+            "uid": registration.uid,
+            "student_name": registration.student_name,
+            "is_registration_completed": registration.is_registration_completed,
+            "is_account_created": registration.is_account_created,
+            "migrated_from_other_university": registration.migrated_from_other_university,
+            "latest_payment_status": payment_status,
+            "aadhaar_no": registration.aadhaar_no
+        }, status=status.HTTP_200_OK)
+
+
 class VocNewRegistrationBulkCreateView(views.APIView):
     """
     API View for bulk creation of registrations.
@@ -190,6 +230,117 @@ class VocNewRegistrationBulkCreateView(views.APIView):
             'failed': len(errors),
             'errors': errors
         }, status=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST)
+
+
+class InitiatePaymentView(views.APIView):
+    """
+    API View to initiate CC Avenue payment.
+    Requires migrated_from_other_university to be True.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    VOC_REGISTRATION_FEE=500.00
+
+    @swagger_auto_schema(
+        operation_summary="Initiate CC Avenue payment",
+        responses={200: "Redirect Data"}
+    )
+    def post(self, request, aadhaar_no):
+        try:
+            registration = VocNewRegistration.objects.get(aadhaar_no=aadhaar_no, is_deleted=False)
+        except VocNewRegistration.DoesNotExist:
+            return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not registration.migrated_from_other_university:
+            return Response({"error": "Payment only required for migrated students"}, status=status.HTTP_400_BAD_USER)
+
+        if registration.is_registration_completed:
+            return Response({"error": "Registration already completed"}, status=status.HTTP_400_BAD_REQUST)
+
+        # Configuration (should be in .env)
+        merchant_id = config('CCAVENUE_MERCHANT_ID', default='')
+        access_code = config('CCAVENUE_ACCESS_CODE', default='')
+        working_key = config('CCAVENUE_WORKING_KEY', default='')
+        redirect_url = config('CCAVENUE_REDIRECT_URL', default=f"{request.scheme}://{request.get_host()}/api/voc_new_registration/payment-response/")
+        cancel_url = redirect_url
+        amount = config('VOC_REGISTRATION_FEE', default=str(self.VOC_REGISTRATION_FEE))
+
+        order_id = f"REG_{uuid.uuid4().hex[:12].upper()}"
+        
+        # Create payment record
+        VocRegistrationPayment.objects.create(
+            registration=registration,
+            order_id=order_id,
+            amount=amount,
+            payment_status='PENDING'
+        )
+
+        # Prepare payload for CC Avenue
+        merchant_data = (
+            f"merchant_id={merchant_id}&order_id={order_id}&"
+            f"amount={amount}&currency=INR&"
+            f"redirect_url={redirect_url}&cancel_url={cancel_url}&"
+            f"language=EN&billing_name={registration.student_name}&"
+            f"billing_tel={registration.mobile_no or ''}&"
+            f"billing_email={registration.email or ''}"
+        )
+
+        encrypted_data = encrypt(merchant_data, working_key)
+        
+        return Response({
+            "enc_request": encrypted_data,
+            "access_code": access_code,
+            "production_url": "https://secure.ccavenue.com/transaction/transaction.do?command=initiateTransaction"
+        }, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PaymentResponseView(views.APIView):
+    """
+    API View to handle CC Avenue payment response.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        enc_response = request.data.get('encResp')
+        if not enc_response:
+            return Response({"error": "Invalid response"}, status=status.HTTP_400_BAD_REQUEST)
+
+        working_key = config('CCAVENUE_WORKING_KEY', default='')
+        decrypted_response = decrypt(enc_response, working_key)
+        response_data = parse_response(decrypted_response)
+
+        order_id = response_data.get('order_id')
+        auth_status = response_data.get('order_status')
+
+        try:
+            payment = VocRegistrationPayment.objects.get(order_id=order_id)
+        except VocRegistrationPayment.DoesNotExist:
+            return Response({"error": "Payment record not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        payment.tracking_id = response_data.get('tracking_id')
+        payment.bank_ref_no = response_data.get('bank_ref_no')
+        payment.payment_mode = response_data.get('payment_mode')
+        payment.raw_response = response_data
+        
+        if auth_status == 'Success':
+            payment.payment_status = 'SUCCESS'
+            # Complete registration
+            reg = payment.registration
+            reg.is_registration_completed = True
+            reg.save()
+        elif auth_status == 'Aborted':
+            payment.payment_status = 'ABORTED'
+        else:
+            payment.payment_status = 'FAILED'
+        
+        payment.save()
+
+        # In a real app, you might redirect to a frontend success/fail page
+        return Response({
+            "status": payment.payment_status,
+            "order_id": order_id
+        }, status=status.HTTP_200_OK)
 
 
 class VocRegistrationOptionsView(views.APIView):

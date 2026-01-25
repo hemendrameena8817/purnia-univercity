@@ -238,11 +238,29 @@ class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
             'migrated_from_other_university',
             'last_attended_university',
             'old_registration_no',
+            'is_registration_completed',
             'profile_picture',
             'signature',
             'college',
             'json_data',
         ]
+
+    def validate(self, data):
+        """
+        Validate registration completion status.
+        Only same-university students can have their status marked as completed directly.
+        """
+        migrated = data.get('migrated_from_other_university', self.instance.migrated_from_other_university if self.instance else False)
+        completed = data.get('is_registration_completed')
+
+        if completed and migrated:
+            # Check if there is already a successful payment
+            if self.instance and not self.instance.payments.filter(payment_status='SUCCESS').exists():
+                raise serializers.ValidationError({
+                    "is_registration_completed": "Cannot mark as completed for migrated students without a successful payment."
+                })
+        
+        return data
 
     def validate_aadhaar_no(self, value):
         if value and len(value) != 12:
@@ -257,3 +275,23 @@ class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
         if value and not value.isdigit():
             raise serializers.ValidationError("Apaar number must contain only digits")
         return value
+
+
+from .models import VocRegistrationPayment
+
+class VocRegistrationPaymentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for VOC Registration Payment records.
+    """
+    class Meta:
+        model = VocRegistrationPayment
+        fields = [
+            'order_id',
+            'tracking_id',
+            'amount',
+            'payment_status',
+            'payment_mode',
+            'bank_ref_no',
+            'created_at'
+        ]
+        read_only_fields = ['created_at']

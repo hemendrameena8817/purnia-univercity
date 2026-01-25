@@ -89,7 +89,7 @@ class VocNewRegistration(models.Model):
     last_attended_university = models.CharField(max_length=255, null=True, blank=True)
     old_registration_no = models.CharField(max_length=255, null=True, blank=True)
 
-    is_account_created = models--form '.BooleanField(default=False)
+    is_account_created = models.BooleanField(default=False)
     is_registration_completed = models.BooleanField(default=False)
 
     
@@ -116,5 +116,46 @@ class VocNewRegistration(models.Model):
     
     def __str__(self):
         return f"{self.student_name} - {self.course} - {self.college}"
+
+
+class VocRegistrationPayment(models.Model):
+    """
+    Model to track payments for Vocational Course registrations via CC Avenue.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('ABORTED', 'Aborted'),
+    ]
+
+    registration = models.ForeignKey(
+        VocNewRegistration,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+    order_id = models.CharField(max_length=100, unique=True, help_text="Unique order ID sent to CC Avenue")
+    tracking_id = models.CharField(max_length=100, null=True, blank=True, help_text="CC Avenue tracking ID")
+    bank_ref_no = models.CharField(max_length=100, null=True, blank=True)
+    
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    payment_mode = models.CharField(max_length=50, null=True, blank=True)
+    card_name = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Raw response from CC Avenue
+    raw_response = models.JSONField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'VOC Registration Payment'
+        verbose_name_plural = 'VOC Registration Payments'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.order_id} - {self.registration.student_name} - {self.payment_status}"
 
 
