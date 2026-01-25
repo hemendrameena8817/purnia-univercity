@@ -183,12 +183,12 @@ class UGStudentProfile(models.Model):
     first_name = models.CharField(max_length=255, null=True, blank=True)
     last_name = models.CharField(max_length=255, null=True, blank=True)
     hindi_name = models.CharField(max_length=250, null=True, blank=True)
-    
     registration_no = models.CharField(max_length=50, unique=True, db_index=True)
     address = models.TextField(null=True, blank=True)
     admission_date = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     aadhar_no = models.CharField(max_length=12, null=True, blank=True)
+    apaar_id = models.CharField(max_length=12, blank=True, null=True)
     mobile_no = models.CharField(max_length=15, null=True, blank=True)
     migration_submitted = models.BooleanField(default=False)
     last_university = models.CharField(max_length=100, null=True, blank=True)
