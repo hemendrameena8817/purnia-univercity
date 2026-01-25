@@ -2,8 +2,9 @@ from django.contrib import admin
 from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
-    RegisteredApplicantMaster, StagingApplicantQualificationDetail
+    RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent
 )
+
 
 
 @admin.register(StagingInstituteMaster)
@@ -224,3 +225,86 @@ class StagingApplicantQualificationDetailAdmin(admin.ModelAdmin):
     search_fields = ('applied_class', 'applied_program', 'created_by')
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
+
+
+@admin.register(UGSemResultCurrent)
+class UGSemResultCurrentAdmin(admin.ModelAdmin):
+    list_display = (
+        'college_roll_no', 'student_name', 'course_code', 'discipline_code',
+        'semester_code', 'subject_name', 'mark_secured', 'maximum_mark',
+        'subject_result', 'final_result', 'gpa', 'cgpa', 'is_migrated'
+    )
+    list_filter = (
+        'is_migrated', 'course_code', 'discipline_code', 'semester_code',
+        'batch_code', 'session_code', 'institute_code', 'exam_type',
+        'subject_result', 'final_result', 'final_status'
+    )
+    search_fields = (
+        'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
+        'mothers_name', 'subject_name', 'paper_code', 'user_id', 'source_id'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': (
+                'student_name', 'student_name_hindi',
+                ('fathers_name', 'mothers_name'),
+                ('college_roll_no', 'college_reg_no'),
+                ('user_id', 'source_id'),
+            )
+        }),
+        ('Academic Information', {
+            'fields': (
+                ('course_code', 'discipline_code'),
+                ('semester_code', 'batch_code'),
+                ('session_code', 'institute_code'),
+                'faculty',
+            )
+        }),
+        ('Subject & Paper Details', {
+            'fields': (
+                ('paper_code', 'subject_code'),
+                'subject_name',
+            )
+        }),
+        ('Marks & Results', {
+            'fields': (
+                ('maximum_mark', 'pass_mark'),
+                ('mark_secured', 'final_mark'),
+                ('subject_total_mark', 'subject_total_mark_grace'),
+                ('grace_given', 'is_grace', 'gpa_grace'),
+                ('subject_result', 'final_result', 'final_status'),
+                ('exam_type', 'exam_type_his'),
+            )
+        }),
+        ('Grade & GPA', {
+            'fields': (
+                ('gpa', 'cgpa'),
+                ('subject_gp', 'total_gp'),
+                ('subject_ca', 'total_ca'),
+                ('subject_ce', 'total_ce'),
+                ('subject_ng',),
+                ('let_grad', 'let_grad_sub', 'dsc_grad'),
+                'numrical_let_grad',
+            )
+        }),
+        ('Totals & Aggregates', {
+            'fields': (
+                ('grand_total_mark', 'total_secured_mark', 'total_per'),
+                ('sem_1_total_ce', 'sem_2_total_ce', 'sem_3_total_ce'),
+                'sem_1_final_result',
+                ('final_merit', 'final_sheet_status'),
+            )
+        }),
+        ('Status & Migration', {
+            'fields': (
+                'status', 'record_status',
+                ('uid', 'imported_at'),
+                'is_migrated',
+                'migration_notes',
+            )
+        }),
+    )
