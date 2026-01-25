@@ -46,10 +46,18 @@ DATABASES = {
 # CORS Settings (Development - Allow all)
 # -------------------------------------------------
 
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv())
-
 # Allow all origins in development (optional - less secure)
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Explicitly list some common ones as fallback if ALL_ORIGINS has issues with credentials
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv(), default=[])
+if not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
 
 
 # -------------------------------------------------
