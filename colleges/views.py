@@ -33,9 +33,9 @@ class CollegeListView(generics.ListAPIView):
     """
     GET: List all colleges with pagination and filtering
     """
-    queryset = College.objects.all().select_related('admin_user', 'university')
+    permission_classes = [AllowAny]
+    queryset = College.objects.all().select_related('university')
     serializer_class = CollegeSerializer
-    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -112,7 +112,7 @@ class CollegeDetailView(APIView):
     PATCH: Partially update a college
     DELETE: Delete a college
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     identifier_param = openapi.Parameter(
         'identifier',
@@ -127,9 +127,9 @@ class CollegeDetailView(APIView):
         try:
             # Try to get by ID first
             if identifier.isdigit():
-                return College.objects.select_related('admin_user', 'university').get(id=identifier)
+                return College.objects.select_related('university').get(id=identifier)
             # Otherwise try by UID
-            return College.objects.select_related('admin_user', 'university').get(uid=identifier)
+            return College.objects.select_related('university').get(uid=identifier)
         except College.DoesNotExist:
             return None
 

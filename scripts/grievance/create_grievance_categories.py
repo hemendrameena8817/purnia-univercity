@@ -1,9 +1,32 @@
 """
-Management command to create common grievance categories with student-friendly names.
-Usage: python manage.py create_grievance_categories
+Create Grievance Categories Script
+===================================
+
+Creates/updates 19 grievance categories with student-friendly names and priorities.
+
+HOW TO RUN:
+-----------
+poetry run python manage.py shell
+
+Then:
+>>> from scripts.grievance.create_grievance_categories import run_create_categories
+>>> run_create_categories()
+
+OR run directly:
+poetry run python scripts/grievance/create_grievance_categories.py
 """
 
+import sys
+import os
 from django.core.management.base import BaseCommand
+
+# Setup Django if running standalone
+if __name__ == '__main__':
+    import django
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings.development')
+    django.setup()
+
 from grievance.models import GrievanceCategory
 
 
@@ -209,3 +232,72 @@ class Command(BaseCommand):
                 f'📊 Total Categories: {GrievanceCategory.objects.count()}\n'
             )
         )
+
+
+# ============================================================================
+# HELPER FUNCTION FOR EASY USE FROM DJANGO SHELL
+# ============================================================================
+
+def run_create_categories():
+    """
+    Convenient helper function to create/update categories from Django shell.
+    
+    Usage from Django shell:
+        >>> from scripts.grievance.create_grievance_categories import run_create_categories
+        >>> run_create_categories()
+    
+    Returns:
+        dict: Summary with created and updated counts
+    """
+    cmd = Command()
+    
+    # Create a simple output handler
+    class SimpleOutput:
+        def write(self, msg):
+            print(msg)
+        
+        class style:
+            @staticmethod
+            def SUCCESS(x):
+                return f"✅ {x}"
+            
+            @staticmethod
+            def WARNING(x):
+                return f"⚠️  {x}"
+            
+            @staticmethod
+            def ERROR(x):
+                return f"❌ {x}"
+            
+            @staticmethod
+            def NOTICE(x):
+                return f"ℹ️  {x}"
+    
+    cmd.stdout = SimpleOutput()
+    
+    try:
+        cmd.handle()
+        return {
+            'status': 'completed',
+            'total': GrievanceCategory.objects.count()
+        }
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return {'status': 'failed', 'error': str(e)}
+
+
+# ============================================================================
+# STANDALONE SCRIPT EXECUTION
+# ============================================================================
+
+if __name__ == '__main__':
+    print("\n" + "="*60)
+    print("🚀 Creating Grievance Categories")
+    print("="*60 + "\n")
+    
+    cmd = Command()
+    cmd.handle()
+    
+    print("\n" + "="*60)
+    print("✅ Script completed successfully!")
+    print("="*60 + "\n")
