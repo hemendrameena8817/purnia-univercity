@@ -23,4 +23,5 @@ urlpatterns = [
     # Retrieve, Update, Delete (by Aadhaar)
     path('<str:aadhaar_no>/', VocNewRegistrationDetailView.as_view(), name='voc-registration-detail'),
     
+    
 ]

@@ -87,9 +87,11 @@ class VocNewRegistration(models.Model):
 
     migrated_from_other_university = models.BooleanField(default=False)
     last_attended_university = models.CharField(max_length=255, null=True, blank=True)
+    old_registration_no = models.CharField(max_length=255, null=True, blank=True)
 
-    is_account_created = models.BooleanField(default=False)
+    is_account_created = models--form '.BooleanField(default=False)
     is_registration_completed = models.BooleanField(default=False)
+
     
     # Soft Delete
     is_deleted = models.BooleanField(default=False)

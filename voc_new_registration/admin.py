@@ -36,6 +36,7 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
         'email',
         'aadhaar_no',
         'apaar_no',
+        'old_registration_no',
     ]
     readonly_fields = ['uid', 'created_at', 'updated_at']
     
@@ -73,6 +74,7 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
                 'migration_submitted',
                 'migrated_from_other_university',
                 'last_attended_university',
+                'old_registration_no',
                 'is_account_created',
                 'is_registration_completed',
                 'college',
