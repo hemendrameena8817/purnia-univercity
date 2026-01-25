@@ -3,7 +3,7 @@ from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
     RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent,
-    PGResultCurrent, DisciplineMasterDump, UGSemResultCurrent
+    PGResultCurrent, DisciplineMasterDump
 )
 
 
