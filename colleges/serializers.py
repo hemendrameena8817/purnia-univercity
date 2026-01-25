@@ -12,17 +12,13 @@ class CollegeSerializer(serializers.ModelSerializer):
     """
     Serializer for College model with all fields.
     """
-    admin_user_email = serializers.EmailField(source='admin_user.email', read_only=True)
     university_name = serializers.CharField(source='university.name', read_only=True)
     logo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = College
         fields = [
-            'id',
             'uid',
-            'admin_user',
-            'admin_user_email',
             'name',
             'short_name',
             'college_code',
@@ -40,7 +36,7 @@ class CollegeSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'uid', 'created_at', 'updated_at']
+        read_only_fields = ['uid', 'created_at', 'updated_at']
 
     def get_logo_url(self, obj):
         """Return full URL for logo if it exists."""
@@ -54,7 +50,6 @@ class CollegeCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = College
         fields = [
-            'admin_user',
             'name',
             'short_name',
             'college_code',
@@ -153,10 +148,6 @@ class CollegeBulkUploadSerializer(serializers.Serializer):
                     'website': row.get('website', ''),
                     'university_id': row['university_id'],
                 }
-
-                # Optional admin_user
-                if row.get('admin_user_id'):
-                    college_data['admin_user_id'] = row['admin_user_id']
 
                 college = College.objects.create(**college_data)
                 created_colleges.append(college)

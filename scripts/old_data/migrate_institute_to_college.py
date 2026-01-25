@@ -1,10 +1,30 @@
 """
-Script to migrate data from StagingInstituteMaster to College model.
-Marks staging records as migrated after successful migration.
+Migrate Institute to College Script
+===================================
 
-Usage:
-    poetry run python manage.py shell -c "exec(open('scripts/migrate_institute_to_college.py').read()); migrate()"
+Migrates data from StagingInstituteMaster table to College table.
+
+HOW TO RUN:
+-----------
+poetry run python manage.py shell
+
+Then:
+>>> from scripts.old_data.migrate_institute_to_college import migrate
+>>> migrate()
+
+OR run directly:
+poetry run python scripts/old_data/migrate_institute_to_college.py
 """
+
+import os
+import sys
+import django
+
+# Setup Django if running standalone
+if __name__ == '__main__':
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings.development')
+    django.setup()
 
 
 def migrate():
@@ -52,6 +72,7 @@ def migrate():
                     existing.address = record.institute_address or existing.address
                     existing.contact_no = record.contact_number or existing.contact_no
                     existing.website = record.website_address or existing.website
+                    
                     existing.save()
                     
                     # Mark as migrated

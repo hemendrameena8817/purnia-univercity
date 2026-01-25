@@ -14,10 +14,6 @@ class CollegeAdmin(admin.ModelAdmin):
         ('Basic Information', {
             'fields': ('uid', 'name', 'short_name', 'college_code', 'logo')
         }),
-        ('Admin User', {
-            'fields': ('admin_user',),
-            'description': 'Link a user account for college administrator login'
-        }),
         ('Contact Information', {
             'fields': ('address', 'contact_no', 'email', 'website')
         }),

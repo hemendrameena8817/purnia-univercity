@@ -1,91 +1,139 @@
 """
-Script to import institute_master.csv into StagingInstituteMaster table.
+Import Institute Master Script
+===============================
 
-Usage:
-    poetry run python manage.py shell < scripts/import_institute_master.py
-    
-Or run from Django shell:
-    exec(open('scripts/import_institute_master.py').read())
+Imports institute master data from Excel file into StagingInstituteMaster table.
+
+HOW TO RUN:
+-----------
+poetry run python manage.py shell
+
+Then:
+from scripts.old_data.import_institute_master import run_import
+run_import()
+
+OR run directly:
+poetry run python scripts/old_data/import_institute_master.py
 """
-import csv
+
+import pandas as pd
 import os
+import sys
 import django
 
 # Setup Django if running standalone
-if not os.environ.get('DJANGO_SETTINGS_MODULE'):
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
+if __name__ == '__main__':
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings.development')
     django.setup()
 
 from staging.models import StagingInstituteMaster
 
-CSV_PATH = 'old_data/institute_master.csv'
+EXCEL_PATH = 'old_data/institute_master.xlsx'
+
 
 def clean_value(value):
-    """Clean CSV value - convert \\N to None"""
+    """Clean Excel value - convert NaN, \\N, NULL to None"""
+    if pd.isna(value):
+        return None
     if value in ('\\N', '', 'NULL', 'null'):
         return None
-    return value.strip() if value else None
+    # Convert to string and strip whitespace
+    return str(value).strip() if value else None
 
-def import_institute_master():
-    """Import institute_master.csv into staging table"""
+
+def run_import(excel_path=None, sheet=0):
+    """
+    Import institute master Excel file into staging table.
     
-    if not os.path.exists(CSV_PATH):
-        print(f"Error: CSV file not found at {CSV_PATH}")
-        return
+    Args:
+        excel_path (str): Path to Excel file (default: old_data/colleges/institute_master_xml.xlsx)
+        sheet (int|str): Sheet index or name (default: 0)
+    
+    Returns:
+        dict: Summary with imported count and errors
+    """
+    file_path = excel_path or EXCEL_PATH
+    
+    if not os.path.exists(file_path):
+        print(f"❌ Error: Excel file not found at {file_path}")
+        return {'status': 'failed', 'error': 'File not found'}
+    
+    print(f"\n📂 Reading Excel file: {file_path}")
+    
+    try:
+        # Read Excel file
+        df = pd.read_excel(file_path, sheet_name=sheet)
+        print(f"✅ Found {len(df)} rows in Excel file\n")
+    except Exception as e:
+        print(f"❌ Error reading Excel file: {str(e)}")
+        return {'status': 'failed', 'error': str(e)}
     
     # Count existing records
     existing_count = StagingInstituteMaster.objects.count()
-    print(f"Existing records in staging: {existing_count}")
+    print(f"📊 Existing records in staging table: {existing_count}")
     
     imported = 0
     errors = []
     
-    with open(CSV_PATH, 'r', encoding='utf-8') as f:
-        # CSV is tab-separated based on the file
-        reader = csv.DictReader(f, delimiter='\t')
-        
-        for row in reader:
-            try:
-                StagingInstituteMaster.objects.create(
-                    institute_id=clean_value(row.get('institute_id')),
-                    institute_code=clean_value(row.get('institute_code')),
-                    institute_name=clean_value(row.get('institute_name')),
-                    institute_type=clean_value(row.get('institute_type')),
-                    website_address=clean_value(row.get('website_address')),
-                    contact_number=clean_value(row.get('contact_number')),
-                    institute_address=clean_value(row.get('institute_address')),
-                    location=clean_value(row.get('location')),
-                    logo_url=clean_value(row.get('logo_url')),
-                    image_url=clean_value(row.get('image_url')),
-                    enrollment_process=clean_value(row.get('enrollment_process')),
-                    admin_name=clean_value(row.get('admin_name')),
-                    admin_user_name=clean_value(row.get('admin_user_name')),
-                    affiliated_year=clean_value(row.get('affiliated_year')),
-                    created_by=clean_value(row.get('created_by')),
-                    created_on=clean_value(row.get('created_on')),
-                    updated_by=clean_value(row.get('updated_by')),
-                    updated_on=clean_value(row.get('updated_on')),
-                    record_status=clean_value(row.get('record_status')),
-                    last_update=clean_value(row.get('last_update')),
-                )
-                imported += 1
-            except Exception as e:
-                errors.append(f"Row {imported + 1}: {str(e)}")
+    for index, row in df.iterrows():
+        try:
+            # Create a case-insensitive lookup
+            row_data = {k.upper(): v for k, v in row.items()}
+            
+            StagingInstituteMaster.objects.create(
+                institute_id=clean_value(row_data.get('INSTITUTE_ID')),
+                institute_code=clean_value(row_data.get('INSTITUTE_CODE')),
+                institute_name=clean_value(row_data.get('INSTITUTE_NAME')),
+                principal=clean_value(row_data.get('PRINCIPLE')),
+                short_name=clean_value(row_data.get('SHORT_NAME')),
+                website_address=clean_value(row_data.get('WEBSITE_ADDRESS')),
+                contact_number=clean_value(row_data.get('CONTACT_NUMBER')),
+                institute_address=clean_value(row_data.get('INSTITUTE_ADDRESS'))
+            )
+            imported += 1
+            
+            if imported % 10 == 0:
+                print(f"⏳ Processed {imported} rows...")
+                
+        except Exception as e:
+            error_msg = f"Row {index + 2}: {str(e)}"
+            errors.append(error_msg)
+            print(f"⚠️  {error_msg}")
     
-    print(f"\n✅ Import completed!")
+    print(f"\n{'='*60}")
+    print(f"✅ Import completed!")
+    print(f"{'='*60}")
     print(f"   Imported: {imported} records")
     print(f"   Errors: {len(errors)}")
     
-    if errors:
-        print("\nErrors:")
-        for err in errors[:10]:  # Show first 10 errors
+    if errors and len(errors) <= 10:
+        print("\n⚠️  Error details:")
+        for err in errors:
             print(f"  - {err}")
-        if len(errors) > 10:
-            print(f"  ... and {len(errors) - 10} more errors")
+    elif errors:
+        print(f"\n⚠️  First 10 errors:")
+        for err in errors[:10]:
+            print(f"  - {err}")
+        print(f"  ... and {len(errors) - 10} more errors")
     
     # Show total count
     total = StagingInstituteMaster.objects.count()
-    print(f"\nTotal records in staging table: {total}")
+    print(f"\n📊 Total records in staging table: {total}")
+    print(f"   New records added: {total - existing_count}\n")
+    
+    return {
+        'status': 'completed',
+        'imported': imported,
+        'errors': len(errors),
+        'total': total
+    }
+
 
 if __name__ == '__main__':
-    import_institute_master()
+    print("\n" + "="*60)
+    print("🚀 Importing Institute Master Data")
+    print("="*60 + "\n")
+    
+    run_import()
+

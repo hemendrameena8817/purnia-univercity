@@ -12,6 +12,8 @@ __pycache__/
 *.log
 poetry.lock
 *.lock
+old_data/
+new_data/
 # Virtual environments
 env/
 venv/

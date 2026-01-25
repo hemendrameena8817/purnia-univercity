@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "pg",
     "grievance",
     "staging",
+    "voc_new_registration"
 ]
 
 
