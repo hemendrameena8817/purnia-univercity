@@ -194,8 +194,8 @@ class PGStudentProfile(models.Model):
 
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
     caste = models.CharField(max_length=20, null=True, blank=True)
-    enrollment_date = models.DateField(null=True, blank=True)
-    roll_no = models.CharField(max_length=50, unique=True, db_index=True, null=True, blank=True)
+    # enrollment_date = models.DateField(null=True, blank=True)
+    roll_no = models.CharField(max_length=50, null=True, blank=True)
     batch = models.CharField(max_length=50, null=True, blank=True)
 
     # Family Information
