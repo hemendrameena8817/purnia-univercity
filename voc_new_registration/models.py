@@ -79,7 +79,7 @@ class VocNewRegistration(models.Model):
     # Contact Information
     mobile_no = models.CharField(max_length=15, null=True, blank=True)
     aadhaar_no = models.CharField(max_length=12, null=True, blank=True, help_text="12-digit Aadhaar number")
-    apaar_no = models.CharField(max_length=12, null=True, blank=True, help_text="12-digit Aadhaar number")
+    apaar_no = models.CharField(max_length=12, null=True, blank=True, help_text="12-digit Apaar number")
     email = models.EmailField(null=True, blank=True)
     
     # Admission Details

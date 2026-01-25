@@ -9,7 +9,9 @@ from .serializers import (
     VocNewRegistrationGetSerializer,
     VocNewRegistrationListSerializer,
     VocNewRegistrationCreateSerializer,
+    VocNewRegistrationUpdateSerializer,
 )
+from rest_framework.parsers import MultiPartParser, FormParser
 
 
 class VocNewRegistrationListView(generics.ListAPIView):
@@ -18,7 +20,6 @@ class VocNewRegistrationListView(generics.ListAPIView):
     Supports search and filtering.
     """
     serializer_class = VocNewRegistrationListSerializer
-    permission_classes = [permissions.AllowAny]
     
     def get_queryset(self):
         # Only list records that are not soft-deleted
@@ -87,27 +88,41 @@ class VocNewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     API View to retrieve, update or delete a specific registration.
     Lookup by Aadhaar Number.
+    Supports multipart/form-data for image updates.
     """
-    serializer_class = VocNewRegistrationGetSerializer
+    permission_classes = [permissions.AllowAny]
+    parser_classes = (MultiPartParser, FormParser)
     lookup_field = 'aadhaar_no'
     lookup_url_kwarg = 'aadhaar_no'
-    permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
         # Prevent accessing soft-deleted records via detail view
         return VocNewRegistration.objects.filter(is_deleted=False).select_related('college')
 
-    @swagger_auto_schema(operation_summary="Retrieve a specific VOC registration by Aadhaar")
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return VocNewRegistrationUpdateSerializer
+        return VocNewRegistrationGetSerializer
+
+    @swagger_auto_schema(
+        operation_summary="Retrieve a specific VOC registration",
+        operation_description="Lookup by Aadhaar number."
+    )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
 
-    @swagger_auto_schema(operation_summary="Update a VOC registration (full)")
-    def put(self, request, *args, **kwargs):
-        return super().put(request, *args, **kwargs)
-
-    @swagger_auto_schema(operation_summary="Partially update a VOC registration")
+    @swagger_auto_schema(
+        operation_summary="Update a VOC registration",
+        operation_description="Updates registration data. Supports multipart/form-data for image uploads."
+    )
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
+
+    @swagger_auto_schema(
+        operation_summary="Full update a VOC registration",
+    )
+    def put(self, request, *args, **kwargs):
+        return super().put(request, *args, **kwargs)
 
     @swagger_auto_schema(operation_summary="Soft delete a VOC registration")
     def delete(self, request, *args, **kwargs):
@@ -175,3 +190,55 @@ class VocNewRegistrationBulkCreateView(views.APIView):
             'failed': len(errors),
             'errors': errors
         }, status=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST)
+
+
+class VocRegistrationOptionsView(views.APIView):
+    """
+    API View to fetch gender and caste choices for VocNewRegistration.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Fetch gender and caste options",
+        responses={
+            200: openapi.Response(
+                description="List of choices for gender and caste",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'gender': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'value': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'label': openapi.Schema(type=openapi.TYPE_STRING),
+                                }
+                            )
+                        ),
+                        'caste': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'value': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'label': openapi.Schema(type=openapi.TYPE_STRING),
+                                }
+                            )
+                        ),
+                    }
+                )
+            )
+        }
+    )
+    def get(self, request):
+        gender_choices = [
+            {'value': code, 'label': label} for code, label in VocNewRegistration.GENDER_CHOICES
+        ]
+        caste_choices = [
+            {'value': code, 'label': label} for code, label in VocNewRegistration.CASTE_CHOICES
+        ]
+        return Response({
+            'gender': gender_choices,
+            'caste': caste_choices
+        }, status=status.HTTP_200_OK)

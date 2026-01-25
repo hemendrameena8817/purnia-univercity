@@ -56,7 +56,7 @@ urlpatterns = [
     path('api/voc_new_registration/', include('voc_new_registration.urls')),
 ]
 if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 if settings.DEBUG or os.getenv("DEBUG", "False") == "True":
     urlpatterns += [

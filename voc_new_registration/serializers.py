@@ -79,6 +79,14 @@ class VocNewRegistrationGetSerializer(serializers.ModelSerializer):
         if value and not value.isdigit():
             raise serializers.ValidationError("Aadhaar number must contain only digits")
         return value
+
+    def validate_apaar_no(self, value):
+        """Validate Apaar number format"""
+        if value and len(value) != 12:
+            raise serializers.ValidationError("Apaar number must be exactly 12 digits")
+        if value and not value.isdigit():
+            raise serializers.ValidationError("Apaar number must contain only digits")
+        return value
     
     def validate_mobile_no(self, value):
         """Validate mobile number format"""
@@ -109,6 +117,7 @@ class VocNewRegistrationListSerializer(serializers.ModelSerializer):
             'email',
             'college_name',
             'migration_submitted',
+            'apaar_no',
             'created_at',
         ]
         read_only_fields = ['uid', 'created_at', 'college_name']
@@ -146,6 +155,7 @@ class VocNewRegistrationCreateSerializer(serializers.ModelSerializer):
             'college',
             'college_code',
             'college_name',
+            'apaar_no',
             'json_data',
         ]
     
@@ -175,3 +185,72 @@ class VocNewRegistrationCreateSerializer(serializers.ModelSerializer):
             # Note: college is optional now, so None is fine if not required by API logic
         
         return super().create(validated_data)
+
+
+class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating VOC New Registration entries.
+    Handles college, course, batch, and session lookup by UUID (uid).
+    Support for profile images and other fields.
+    """
+    college = serializers.SlugRelatedField(
+        slug_field='uid',
+        queryset=College.objects.all(),
+        required=False
+    )
+    course = serializers.SlugRelatedField(
+        slug_field='uid',
+        queryset=Course.objects.all(),
+        required=False
+    )
+    batch = serializers.SlugRelatedField(
+        slug_field='uid',
+        queryset=Batch.objects.all(),
+        required=False
+    )
+    session = serializers.SlugRelatedField(
+        slug_field='uid',
+        queryset=Session.objects.all(),
+        required=False
+    )
+
+    class Meta:
+        model = VocNewRegistration
+        fields = [
+            'student_name',
+            'student_name_hindi',
+            'father_name',
+            'mother_name',
+            'course',
+            'batch',
+            'session',
+            'gender',
+            'caste',
+            'dob',
+            'mobile_no',
+            'aadhaar_no',
+            'apaar_no',
+            
+            'email',
+            'migration_submitted',
+            'migrated_from_other_university',
+            'last_attended_university',
+            'profile_picture',
+            'signature',
+            'college',
+            'json_data',
+        ]
+
+    def validate_aadhaar_no(self, value):
+        if value and len(value) != 12:
+            raise serializers.ValidationError("Aadhaar number must be exactly 12 digits")
+        if value and not value.isdigit():
+            raise serializers.ValidationError("Aadhaar number must contain only digits")
+        return value
+
+    def validate_apaar_no(self, value):
+        if value and len(value) != 12:
+            raise serializers.ValidationError("Apaar number must be exactly 12 digits")
+        if value and not value.isdigit():
+            raise serializers.ValidationError("Apaar number must contain only digits")
+        return value

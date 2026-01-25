@@ -35,6 +35,7 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
         'mobile_no',
         'email',
         'aadhaar_no',
+        'apaar_no',
     ]
     readonly_fields = ['uid', 'created_at', 'updated_at']
     
@@ -42,6 +43,8 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
         ('Student Information', {
             'fields': (
                 'uid',
+                'profile_picture',
+                'signature',
                 'student_name',
                 'student_name_hindi',
                 'father_name',
@@ -62,6 +65,7 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
                 'mobile_no',
                 'email',
                 'aadhaar_no',
+                'apaar_no',
             )
         }),
         ('Admission Details', {
