@@ -126,6 +126,31 @@ class PGProgram(models.Model):
         return self.degree.total_years
 
 
+class PGBatch(models.Model):
+    """
+    Represents a batch of students in a program.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255, help_text='Batch name e.g., 2023-2025')
+    program = models.ForeignKey(
+        PGProgram,
+        on_delete=models.CASCADE,
+        related_name='batches',
+        null=True,
+        blank=True
+    )
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'PG Batch'
+        verbose_name_plural = 'PG Batches'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
 class PGStudentProfile(models.Model):
     """
     PG Student profile linked to a UserAccount.
@@ -257,9 +282,16 @@ class PGCourseStructure(models.Model):
     min_credit = models.IntegerField(null=True, blank=True, help_text="Min Credit")
 
     description = models.TextField(null=True, blank=True, help_text="Course Description")
-    label = models.CharField(max_length=100, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
+    label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
    
     semester = models.IntegerField(null=True, blank=True, help_text="Semester")
+    batch = models.ForeignKey(
+        PGBatch,
+        on_delete=models.CASCADE,
+        related_name='course_structures',
+        null=True,
+        blank=True
+    )
     json_data = models.JSONField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -297,7 +329,7 @@ class PGStudentCourseAssessment(models.Model):
     min_credit = models.IntegerField(null=True, blank=True, help_text="Min Credit")
 
     description = models.TextField(null=True, blank=True, help_text="Course Description")
-    label = models.CharField(max_length=100, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
+    label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
 
     marks_obtained = models.IntegerField(null=True, blank=True, help_text="Marks Obtained")
     credit_obtained = models.IntegerField(null=True, blank=True, help_text="Credit Obtained")

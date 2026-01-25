@@ -1,17 +1,20 @@
 """
 Script to import UG Faculty, Department, Degree, Program, and CourseStructure data.
 Reads all semester files from courses_data/ug/all_sem_courses/ folder.
+IMPORTANT: Reads exact data from files - does NOT generate any data automatically.
 
 Usage:
     poetry run python manage.py shell -c "exec(open('scripts/ug/import_ug_master_data.py').read()); import_ug_master_data()"
 """
 import os
+import re
 from openpyxl import load_workbook
 
 
 # Common typo fixes for names
 TYPO_FIXES = {
     'Hstory': 'History',
+    'Histoy': 'History',
     'Phychology': 'Psychology',
     'Develovent': 'Development',
     'Oceanogaphy': 'Oceanography',
@@ -29,7 +32,7 @@ def clean_name(name):
     name = str(name).strip()
     for typo, fix in TYPO_FIXES.items():
         name = name.replace(typo, fix)
-    return name
+    return name if name else None
 
 
 def extract_faculty_name(row_text):
@@ -40,39 +43,65 @@ def extract_faculty_name(row_text):
     return faculty_name
 
 
-def extract_semester_from_filename(filename):
-    """Extract semester number from filename."""
-    filename_lower = filename.lower()
-    if '1st' in filename_lower:
-        return 1
-    elif '2nd' in filename_lower:
-        return 2
-    elif '3rd' in filename_lower:
-        return 3
-    elif '4th' in filename_lower:
-        return 4
-    elif '5th' in filename_lower:
-        return 5
-    elif '6th' in filename_lower:
-        return 6
-    elif '7th' in filename_lower:
-        return 7
-    elif '8th' in filename_lower:
-        return 8
+def extract_semester_from_text(text):
+    """Extract semester number from text."""
+    if not text:
+        return None
+    text = str(text).upper()
+    # Match patterns like "Semester-III", "Semester-I", "Semester-VIII"
+    roman_numerals = {'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8}
+    match = re.search(r'SEMESTER[-\s]*([IVX]+)', text)
+    if match:
+        roman = match.group(1)
+        return roman_numerals.get(roman)
     return None
 
 
-def import_ug_master_data(clear_existing=False):
+def parse_header_column(header_text):
+    """
+    Parse header column to extract course type and code.
+    Examples:
+        'MJC-I (Major Core Course)' -> ('MJC', 'MJC-I', 'Major Core Course')
+        'MJC-3 (Major Core Course)' -> ('MJC', 'MJC-3', 'Major Core Course')
+        'SEC-3 (Skill Enhancement Course)' -> ('SEC', 'SEC-3', 'Skill Enhancement Course')
+    """
+    if not header_text:
+        return None, None, None
+    
+    text = str(header_text).strip()
+    
+    # Extract course code like MJC-I, MJC-3, SEC-3, etc.
+    code_match = re.match(r'^([A-Z]+)-?(\d+|[IVX]+)', text)
+    if not code_match:
+        return None, None, None
+    
+    course_type = code_match.group(1)  # MJC, MIC, SEC, VAC, MDC, AEC, INT, RP
+    full_code = code_match.group(0)    # MJC-I, MJC-3, etc.
+    
+    # Extract description in parentheses
+    desc_match = re.search(r'\(([^)]+)\)', text)
+    description = desc_match.group(1).strip() if desc_match else None
+    
+    return course_type, full_code, description
+
+
+def import_ug_master_data(clear_existing=False, courses_dir=None):
     """Import UG Faculty, Department, Degree, Program, and CourseStructure."""
     from university.models import University
-    from ug.models import UGFaculty, UGDepartment, UGDegree, UGProgram, CourseStructure
+    from ug.models import UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, CourseStructure
     
-    UG_COURSES_DIR = '/Users/anuprash/Desktop/projects/pup-umis-backend/courses_data/ug/all_sem_courses'
+    # Prompt for file path if not provided
+    default_path = '/Users/anuprash/Desktop/projects/pup-umis-backend/courses_data/ug/all_sem_courses'
+    if courses_dir is None:
+        courses_dir = input(f"Enter UG courses folder path [{default_path}]: ").strip()
+        if not courses_dir:
+            courses_dir = default_path
     
     print("="*70)
     print("IMPORTING UG MASTER DATA")
-    print("(Faculty, Department, Degree, Program, CourseStructure)")
+    print("(Faculty, Department, Degree, Program, Batch, CourseStructure)")
     print("="*70)
+    print(f"Courses folder: {courses_dir}")
     
     # Get university
     university = University.objects.first()
@@ -85,6 +114,7 @@ def import_ug_master_data(clear_existing=False):
     if clear_existing:
         print("\n🗑️  Clearing existing UG master data...")
         CourseStructure.objects.all().delete()
+        UGBatch.objects.all().delete()
         UGProgram.objects.all().delete()
         UGDepartment.objects.all().delete()
         UGDegree.objects.all().delete()
@@ -92,263 +122,203 @@ def import_ug_master_data(clear_existing=False):
         print("   Cleared all UG master data tables")
     
     # Track created records
-    faculties_created = 0
-    departments_created = 0
+    faculties_created = set()
+    departments_created = set()
+    batches_created = set()
     courses_created = 0
     
     # Get all xlsx files
-    xlsx_files = sorted([f for f in os.listdir(UG_COURSES_DIR) if f.endswith('.xlsx')])
+    xlsx_files = sorted([f for f in os.listdir(courses_dir) if f.endswith('.xlsx')])
     print(f"\nFound {len(xlsx_files)} xlsx files to process")
     
     for xlsx_file in xlsx_files:
-        xlsx_path = os.path.join(UG_COURSES_DIR, xlsx_file)
-        semester = extract_semester_from_filename(xlsx_file)
-        print(f"\n📄 Processing: {xlsx_file} (Semester {semester})")
-        
-        if semester is None:
-            print(f"   ⚠️  Could not determine semester, skipping...")
-            continue
+        xlsx_path = os.path.join(courses_dir, xlsx_file)
+        print(f"\n📄 Processing: {xlsx_file}")
         
         wb = load_workbook(xlsx_path, read_only=True)
         ws = wb.active
         rows = list(ws.iter_rows(values_only=True))
         
         current_faculty = None
+        current_semester = None
+        current_batch = None  # Track batch for this file
+        header_columns = []  # List of (col_index, course_type, course_code, description)
+        file_courses = 0
         
         for i, row in enumerate(rows):
             # Skip empty rows
             if not any(row):
                 continue
             
-            # Check for Faculty header
-            if row[0] and 'Faculty of' in str(row[0]):
-                faculty_name = extract_faculty_name(row[0])
+            first_cell = str(row[0]).strip() if row[0] else ''
+            
+            # Check for title row with batch info (e.g., "Four Year Under Graduate course 2025-29")
+            if 'List of subjects' in first_cell or 'Under Graduate course' in first_cell:
+                # Extract batch from title like "2025-29"
+                batch_match = re.search(r'(\d{4}-\d{2,4})', first_cell)
+                if batch_match:
+                    batch_name = batch_match.group(1)
+                    if batch_name not in batches_created:
+                        current_batch, created = UGBatch.objects.get_or_create(
+                            name=batch_name
+                        )
+                        if created:
+                            batches_created.add(batch_name)
+                            print(f"   📦 Created Batch: {batch_name}")
+                    else:
+                        current_batch = UGBatch.objects.filter(name=batch_name).first()
+                continue
+            
+            # Check for Faculty header (also contains semester info)
+            if 'Faculty of' in first_cell:
+                faculty_name = extract_faculty_name(first_cell)
+                semester = extract_semester_from_text(first_cell)
+                
                 if faculty_name:
                     # Create or get Faculty
                     faculty, created = UGFaculty.objects.get_or_create(
                         name=faculty_name,
                         defaults={
                             'university': university,
-                            'short_name': ''.join([w[0] for w in faculty_name.split() if w[0].isupper()])
                         }
                     )
                     if created:
-                        faculties_created += 1
+                        faculties_created.add(faculty_name)
                         print(f"   ✅ Created Faculty: {faculty_name}")
                     current_faculty = faculty
-                continue
-            
-            # Skip header rows
-            if row[0] and 'Department & Subject Name' in str(row[0]):
-                continue
-            
-            # Skip note rows, title rows
-            if row[0] and ('Note' in str(row[0]) or 'List of subjects' in str(row[0])):
-                continue
-            if len(row) > 3 and row[3] and 'MJC' in str(row[3]) and 'में' in str(row[3]):
-                continue
-            
-            if not current_faculty:
-                continue
-            
-            # Column structure (varies by file but generally):
-            # 0: Department/Subject Name (for MJC)
-            # 1: MJC course name
-            # 2: MIC Subject Name (optional) or MIC course name
-            # 3: MIC course name (optional)
-            # 4: SEC course name
-            # 5: VAC course name
-            # 6: MDC Subject Name (optional)
-            # 7: MDC course name
-            # 8: AEC course name
-            
-            # --- Process MJC (Major Core Course) ---
-            if row[0] and row[1]:
-                dept_name = clean_name(row[0])
-                course_name = clean_name(row[1])
                 
-                if dept_name and course_name and len(dept_name) < 100:
-                    # Create department
-                    dept, created = UGDepartment.objects.get_or_create(
-                        name=dept_name,
-                        faculty=current_faculty
-                    )
-                    if created:
-                        departments_created += 1
-                    
-                    # Create course structure
-                    cs, created = CourseStructure.objects.get_or_create(
-                        name=course_name,
-                        department=dept,
-                        course_type='MJC',
-                        code=f'MJC-{semester}',
-                        semester=semester,
-                        defaults={
-                            'label': 'Major Core Course',
-                            'description': f'Major Core Course for Semester {semester}',
-                        }
-                    )
-                    if created:
-                        courses_created += 1
+                if semester:
+                    current_semester = semester
+                    print(f"   📅 Semester: {current_semester}")
+                continue
             
-            # --- Process MIC (Minor Core Course) ---
-            # Check columns 2 and 3 for MIC data
-            mic_dept_name = None
-            mic_course_name = None
+            # Check for header row (contains course type columns)
+            if 'Department' in first_cell or 'Subject Name' in first_cell:
+                header_columns = []
+                for col_idx, cell in enumerate(row):
+                    if col_idx == 0:
+                        continue  # Skip first column (Department name)
+                    if cell:
+                        course_type, course_code, description = parse_header_column(cell)
+                        if course_type and course_code:
+                            header_columns.append({
+                                'col_idx': col_idx,
+                                'course_type': course_type,
+                                'course_code': course_code,
+                                'description': description
+                            })
+                print(f"   📋 Found {len(header_columns)} course columns: {[h['course_code'] for h in header_columns]}")
+                continue
             
-            if len(row) > 2 and row[2]:
-                val = clean_name(row[2])
-                # Determine if it's a department name or course name
-                if val and 'MJC' not in str(val) and len(val) < 100:
-                    if len(row) > 3 and row[3]:
-                        mic_dept_name = val
-                        mic_course_name = clean_name(row[3])
-                    else:
-                        mic_course_name = val
+            # Skip note rows
+            if 'Note' in first_cell:
+                continue
             
-            if mic_course_name and current_faculty:
-                # Use MJC department if MIC department not specified
-                if mic_dept_name:
-                    dept, created = UGDepartment.objects.get_or_create(
-                        name=mic_dept_name,
-                        faculty=current_faculty
-                    )
-                    if created:
-                        departments_created += 1
-                elif row[0]:
-                    dept = UGDepartment.objects.filter(name=clean_name(row[0]), faculty=current_faculty).first()
-                else:
-                    dept = None
+            if not current_faculty or not current_semester or not header_columns:
+                continue
+            
+            # Process data row
+            dept_name = clean_name(row[0])
+            if not dept_name or len(dept_name) < 2 or len(dept_name) > 100:
+                continue
+            
+            # Create department
+            dept_key = (dept_name, current_faculty.name)
+            if dept_key not in departments_created:
+                dept, created = UGDepartment.objects.get_or_create(
+                    name=dept_name,
+                    faculty=current_faculty
+                )
+                if created:
+                    departments_created.add(dept_key)
+            else:
+                dept = UGDepartment.objects.filter(name=dept_name, faculty=current_faculty).first()
+            
+            if not dept:
+                continue
+            
+            # Process each course column
+            for header in header_columns:
+                col_idx = header['col_idx']
+                if col_idx >= len(row) or not row[col_idx]:
+                    continue
                 
-                if dept and 'MJC' not in str(mic_course_name) and 'में' not in str(mic_course_name):
-                    cs, created = CourseStructure.objects.get_or_create(
-                        name=mic_course_name,
-                        department=dept,
-                        course_type='MIC',
-                        code=f'MIC-{semester}',
-                        semester=semester,
-                        defaults={
-                            'label': 'Minor Core Course',
-                            'description': f'Minor Core Course for Semester {semester}',
-                        }
-                    )
-                    if created:
-                        courses_created += 1
-            
-            # --- Process SEC (Skill Enhancement Course) ---
-            sec_col = 4 if len(row) > 4 else None
-            if sec_col and row[sec_col]:
-                course_name = clean_name(row[sec_col])
-                if course_name:
-                    # Get first department for this faculty
-                    dept = UGDepartment.objects.filter(faculty=current_faculty).first()
-                    if dept:
-                        cs, created = CourseStructure.objects.get_or_create(
-                            name=course_name,
-                            department=dept,
-                            course_type='SEC',
-                            code=f'SEC-{semester}',
-                            semester=semester,
-                            defaults={
-                                'label': 'Skill Enhancement Course',
-                                'description': f'Skill Enhancement Course for Semester {semester}',
-                            }
-                        )
-                        if created:
-                            courses_created += 1
-            
-            # --- Process VAC (Value Added Course) ---
-            vac_col = 5 if len(row) > 5 else None
-            if vac_col and row[vac_col]:
-                course_name = clean_name(row[vac_col])
-                if course_name and 'MDC' not in str(row[vac_col]):
-                    dept = UGDepartment.objects.filter(faculty=current_faculty).first()
-                    if dept:
-                        cs, created = CourseStructure.objects.get_or_create(
-                            name=course_name,
-                            department=dept,
-                            course_type='VAC',
-                            code=f'VAC-{semester}',
-                            semester=semester,
-                            defaults={
-                                'label': 'Value Added Course',
-                                'description': f'Value Added Course for Semester {semester}',
-                            }
-                        )
-                        if created:
-                            courses_created += 1
-            
-            # --- Process MDC (Multi-Disciplinary Course) ---
-            # Usually in columns 5/6 (subject) and 6/7 (course name)
-            mdc_dept_col = None
-            mdc_course_col = None
-            
-            for idx in [5, 6]:
-                if len(row) > idx and row[idx]:
-                    val = str(row[idx])
-                    if 'MDC' in val or len(val) < 50:  # Likely department name
-                        mdc_dept_col = idx
-                        mdc_course_col = idx + 1 if len(row) > idx + 1 else None
-                        break
-            
-            if mdc_dept_col and mdc_course_col and row[mdc_dept_col] and len(row) > mdc_course_col and row[mdc_course_col]:
-                dept_name = clean_name(row[mdc_dept_col])
-                course_name = clean_name(row[mdc_course_col])
+                course_name = clean_name(row[col_idx])
+                if not course_name or len(course_name) < 3:
+                    continue
                 
-                if dept_name and course_name and 'Note' not in str(dept_name):
-                    dept, created = UGDepartment.objects.get_or_create(
-                        name=dept_name,
-                        faculty=current_faculty
-                    )
-                    if created:
-                        departments_created += 1
-                    
-                    cs, created = CourseStructure.objects.get_or_create(
-                        name=course_name,
-                        department=dept,
-                        course_type='MDC',
-                        code=f'MDC-{semester}',
-                        semester=semester,
-                        defaults={
-                            'label': 'Multi-Disciplinary Course',
-                            'description': f'Multi-Disciplinary Course for Semester {semester}',
-                        }
-                    )
-                    if created:
-                        courses_created += 1
-            
-            # --- Process AEC (Ability Enhancement Course) ---
-            aec_col = 7 if len(row) > 7 else (8 if len(row) > 8 else None)
-            if aec_col and row[aec_col]:
-                course_name = clean_name(row[aec_col])
-                if course_name:
-                    dept = UGDepartment.objects.filter(faculty=current_faculty).first()
-                    if dept:
-                        cs, created = CourseStructure.objects.get_or_create(
-                            name=course_name,
-                            department=dept,
-                            course_type='AEC',
-                            code=f'AEC-{semester}',
-                            semester=semester,
-                            defaults={
-                                'label': 'Ability Enhancement Course - MIL',
-                                'description': f'Ability Enhancement Course for Semester {semester}',
-                            }
-                        )
-                        if created:
-                            courses_created += 1
+                # Skip if it looks like a department name in MDC column
+                if header['course_type'] == 'MDC' and len(course_name) < 30:
+                    # Check if next column has the actual course name
+                    next_col = col_idx + 1
+                    if next_col < len(row) and row[next_col]:
+                        # This is MDC subject name, use it as department for MDC course
+                        mdc_dept_name = course_name
+                        mdc_course_name = clean_name(row[next_col])
+                        
+                        if mdc_course_name:
+                            # Create MDC department if needed
+                            mdc_dept_key = (mdc_dept_name, current_faculty.name)
+                            if mdc_dept_key not in departments_created:
+                                mdc_dept, created = UGDepartment.objects.get_or_create(
+                                    name=mdc_dept_name,
+                                    faculty=current_faculty
+                                )
+                                if created:
+                                    departments_created.add(mdc_dept_key)
+                            else:
+                                mdc_dept = UGDepartment.objects.filter(name=mdc_dept_name, faculty=current_faculty).first()
+                            
+                            if mdc_dept:
+                                # Find the MDC course header (next column)
+                                for h in header_columns:
+                                    if h['col_idx'] == next_col and h['course_type'] == 'MDC':
+                                        cs, created = CourseStructure.objects.get_or_create(
+                                            name=mdc_course_name,
+                                            department=mdc_dept,
+                                            code=h['course_code'],  # From file header
+                                            semester=current_semester,
+                                            defaults={
+                                                'course_type': h['course_type'],
+                                                # label will be set by another script (CIA Theory, ESE Practical, etc.)
+                                                'batch': current_batch,
+                                            }
+                                        )
+                                        if created:
+                                            courses_created += 1
+                                            file_courses += 1
+                                        break
+                        continue
+                
+                # Create course structure
+                cs, created = CourseStructure.objects.get_or_create(
+                    name=course_name,
+                    department=dept,
+                    code=header['course_code'],  # From file header
+                    semester=current_semester,
+                    defaults={
+                        'course_type': header['course_type'],
+                        # label will be set by another script (CIA Theory, ESE Practical, etc.)
+                        'batch': current_batch,
+                    }
+                )
+                if created:
+                    courses_created += 1
+                    file_courses += 1
         
+        print(f"   📊 Courses created from this file: {file_courses}")
         wb.close()
     
-    # Create default UG Degrees
+    # Create UG Degrees (not in xlsx file, using standard values)
     print("\n📚 Creating UG Degrees...")
-    degrees_data = [
+    ug_degrees_data = [
         {'name': 'Bachelor of Arts (Honours)', 'short_name': 'B.A. (Hons)', 'total_semesters': 8, 'total_years': 4},
         {'name': 'Bachelor of Science (Honours)', 'short_name': 'B.Sc. (Hons)', 'total_semesters': 8, 'total_years': 4},
         {'name': 'Bachelor of Commerce (Honours)', 'short_name': 'B.Com. (Hons)', 'total_semesters': 8, 'total_years': 4},
     ]
     
-    for deg_data in degrees_data:
+    degrees_created = 0
+    for deg_data in ug_degrees_data:
         degree, created = UGDegree.objects.get_or_create(
             name=deg_data['name'],
             defaults={
@@ -358,16 +328,20 @@ def import_ug_master_data(clear_existing=False):
             }
         )
         if created:
-            print(f"   ✅ Created Degree: {deg_data['name']}")
+            degrees_created += 1
+            print(f"   ✅ Created Degree: {deg_data['name']} ({deg_data['short_name']})")
     
     print("\n" + "="*70)
     print("IMPORT SUMMARY")
     print("="*70)
-    print(f"   Faculties created: {faculties_created}")
-    print(f"   Departments created: {departments_created}")
+    print(f"   Faculties created: {len(faculties_created)}")
+    print(f"   Departments created: {len(departments_created)}")
+    print(f"   Batches created: {len(batches_created)}")
+    print(f"   Degrees created: {degrees_created}")
     print(f"   CourseStructures created: {courses_created}")
     print(f"\n   Total UGFaculty: {UGFaculty.objects.count()}")
     print(f"   Total UGDepartment: {UGDepartment.objects.count()}")
+    print(f"   Total UGBatch: {UGBatch.objects.count()}")
     print(f"   Total UGDegree: {UGDegree.objects.count()}")
     print(f"   Total UGProgram: {UGProgram.objects.count()}")
     print(f"   Total CourseStructure: {CourseStructure.objects.count()}")

@@ -345,3 +345,50 @@ class RegisteredApplicantMaster(models.Model):
         
     def __str__(self):
         return f"{self.reg_no} - {self.student_name}"
+
+class StagingApplicantQualificationDetail(models.Model):
+    """
+    Staging table for ApplicantQualificationDetail XLSX data.
+    All fields are nullable strings to accept raw data.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    applied_class = models.TextField(null=True, blank=True, help_text='APPLIED_CLASS')
+    applied_program = models.TextField(null=True, blank=True, help_text='APPLIED_PROGRAM')
+    created_by = models.TextField(null=True, blank=True, help_text='CREATED_BY')
+    created_on = models.TextField(null=True, blank=True, help_text='CREATED_ON')
+    division_distinction = models.TextField(null=True, blank=True, help_text='DIVISION_DISTINCTION')
+    exam_code = models.TextField(null=True, blank=True, help_text='EXAM_CODE')
+    full_mark = models.TextField(null=True, blank=True, help_text='FULL_MARK')
+    grade = models.TextField(null=True, blank=True, help_text='GRADE')
+    grade_mark_flag = models.TextField(null=True, blank=True, help_text='GRADE_MARK_FLAG')
+    csv_id = models.TextField(null=True, blank=True, help_text='ID')
+    institute_code = models.TextField(null=True, blank=True, help_text='INSTITUTE_CODE')
+    institute_name = models.TextField(null=True, blank=True, help_text='INSTITUTE_NAME')
+    last_updated = models.TextField(null=True, blank=True, help_text='LAST_UPDATED')
+    mark_secured = models.TextField(null=True, blank=True, help_text='MARK_SECURED')
+    math_grade = models.TextField(null=True, blank=True, help_text='MATH_GRADE')
+    math_mark = models.TextField(null=True, blank=True, help_text='MATH_MARK')
+    percentage_mark = models.TextField(null=True, blank=True, help_text='PERCENTAGE_MARK')
+    qual_desc_1 = models.TextField(null=True, blank=True, help_text='QUAL_DESC_1')
+    qual_desc_2 = models.TextField(null=True, blank=True, help_text='QUAL_DESC_2')
+    reg_user_id = models.TextField(null=True, blank=True, help_text='REG_USER_ID')
+    roll_no = models.TextField(null=True, blank=True, help_text='ROLL_NO')
+    status = models.TextField(null=True, blank=True, help_text='STATUS')
+    subjects_offered = models.TextField(null=True, blank=True, help_text='SUBJECTS_OFFERED')
+    university_board = models.TextField(null=True, blank=True, help_text='UNIVERSITY_BOARD')
+    updated_by = models.TextField(null=True, blank=True, help_text='UPDATED_BY')
+    updated_on = models.TextField(null=True, blank=True, help_text='UPDATED_ON')
+    year_of_passing = models.TextField(null=True, blank=True, help_text='YEAR_OF_PASSING')
+
+    # Meta fields
+    is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Staging - ApplicantQualificationDetail'
+        verbose_name_plural = 'Staging - ApplicantQualificationDetail'
+        
+    def __str__(self):
+        return f"{self.uid}"

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    UGFaculty, UGDepartment, UGDegree, UGProgram, UGStudentProfile,
+    UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration
 )
 
@@ -33,6 +33,14 @@ class UGProgramAdmin(admin.ModelAdmin):
     list_display = ('name', 'short_name', 'degree', 'department', 'created_at')
     list_filter = ('degree', 'department__faculty')
     search_fields = ('name', 'short_name', 'degree__name', 'department__name')
+    ordering = ('name',)
+
+
+@admin.register(UGBatch)
+class UGBatchAdmin(admin.ModelAdmin):
+    list_display = ('name', 'program', 'created_at')
+    list_filter = ('program',)
+    search_fields = ('name', 'program__name')
     ordering = ('name',)
 
 

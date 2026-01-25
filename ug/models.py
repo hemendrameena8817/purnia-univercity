@@ -127,6 +127,31 @@ class UGProgram(models.Model):
         return self.degree.total_years
 
 
+class UGBatch(models.Model):
+    """
+    Represents a batch of students in a program.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255, help_text='Batch name e.g., 2022-2026')
+    program = models.ForeignKey(
+        UGProgram,
+        on_delete=models.CASCADE,
+        related_name='batches',
+        null=True,
+        blank=True
+    )
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'UG Batch'
+        verbose_name_plural = 'UG Batches'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
 class UGStudentProfile(models.Model):
     """
     UG Student profile linked to a UserAccount.
@@ -257,9 +282,16 @@ class CourseStructure(models.Model):
     min_credit = models.IntegerField(null=True, blank=True, help_text="Min Credit")
 
     description = models.TextField(null=True, blank=True, help_text="Course Description")
-    label = models.CharField(max_length=100, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
+    label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
    
     semester = models.IntegerField(null=True, blank=True, help_text="Semester")
+    batch = models.ForeignKey(
+        UGBatch,
+        on_delete=models.CASCADE,
+        related_name='course_structures',
+        null=True,
+        blank=True
+    )
     json_data = models.JSONField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
