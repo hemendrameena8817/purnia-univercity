@@ -374,7 +374,7 @@ class StudentCourseAssessment(models.Model):
         verbose_name = 'Student Course Assessment'
         verbose_name_plural = 'Student Course Assessments'
         ordering = ['-created_at']
-        unique_together = ('student', 'course_type', 'semester', 'label', 'exam_type')
+        # unique_together = ('student', 'code', 'semester', 'label', 'exam_type', 'session')
         
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"
