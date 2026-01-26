@@ -44,13 +44,6 @@ class GrievanceListCreateView(APIView):
                 description="Filter by category UID (UUID string)",
                 type=openapi.TYPE_STRING
             ),
-            openapi.Parameter(
-                'priority',
-                openapi.IN_QUERY,
-                description="Filter by priority",
-                type=openapi.TYPE_STRING,
-                enum=['low', 'medium', 'high', 'urgent']
-            ),
         ],
         responses={200: GrievanceListSerializer(many=True)},
         tags=['Grievances'],
@@ -63,21 +56,16 @@ class GrievanceListCreateView(APIView):
         # Filter based on user type
         if user.user_type == 'student':
             # Students see only their own grievances
-            if not hasattr(user, 'student_profile'):
-                return Response(
-                    {'error': 'Student profile not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            queryset = Grievance.objects.filter(student=user.student_profile, is_deleted=False)
+            queryset = Grievance.objects.filter(user=user, is_deleted=False)
         
         elif user.user_type == 'college_user':
             # College staff see grievances assigned to their college
-            if not hasattr(user, 'college_profile'):
+            college = user.get_college()
+            if not college:
                 return Response(
-                    {'error': 'College profile not found'},
+                    {'error': 'College association not found'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            college = user.college_profile.college
             queryset = Grievance.objects.filter(assigned_to_college=college, is_deleted=False)
         
         elif user.user_type == 'university_admin':
@@ -99,10 +87,6 @@ class GrievanceListCreateView(APIView):
         if category_filter:
             # Filter by category UID (more secure than ID)
             queryset = queryset.filter(category__uid=category_filter)
-        
-        priority_filter = request.query_params.get('priority')
-        if priority_filter:
-            queryset = queryset.filter(priority=priority_filter)
         
         queryset = queryset.order_by('-submitted_at')
         serializer = GrievanceListSerializer(queryset, many=True)
@@ -178,10 +162,11 @@ class GrievanceDetailView(APIView):
         
         # Check permissions
         if user.user_type == 'student':
-            if not hasattr(user, 'student_profile') or grievance.student != user.student_profile:
+            if grievance.user != user:
                 return None
         elif user.user_type == 'college_user':
-            if not hasattr(user, 'college_profile') or grievance.assigned_to_college != user.college_profile.college:
+            college = user.get_college()
+            if not college or grievance.assigned_to_college != college:
                 return None
         # University admin can see all
         
@@ -206,18 +191,13 @@ class GrievanceDetailView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
-        operation_description="""Update grievance status, priority, or assign to staff member.
+        operation_description="""Update grievance status or assign to staff member.
         
         **Examples:**
         
         Update status only:
         ```json
         {"status": "in_progress"}
-        ```
-        
-        Update priority only:
-        ```json
-        {"priority": "urgent"}
         ```
         
         Assign to staff member:
@@ -229,7 +209,6 @@ class GrievanceDetailView(APIView):
         ```json
         {
           "status": "in_progress",
-          "priority": "high",
           "handled_by_uid": "abc-123-def-456"
         }
         ```
@@ -242,11 +221,6 @@ class GrievanceDetailView(APIView):
                     description='Update grievance status',
                     enum=['open', 'in_progress', 'resolved', 'closed', 'escalated']
                 ),
-                'priority': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='Update grievance priority',
-                    enum=['low', 'medium', 'high', 'urgent']
-                ),
                 'handled_by_uid': openapi.Schema(
                     type=openapi.TYPE_STRING,
                     format='uuid',
@@ -256,7 +230,6 @@ class GrievanceDetailView(APIView):
             },
             example={
                 'status': 'in_progress',
-                'priority': 'high',
                 'handled_by_uid': 'abc-123-def-456'
             }
         ),
@@ -360,7 +333,8 @@ class GrievanceCommentView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         elif user.user_type == 'college_user':
-            if not hasattr(user, 'college_profile') or grievance.assigned_to_college != user.college_profile.college:
+            college = user.get_college()
+            if not college or grievance.assigned_to_college != college:
                 return Response(
                     {'error': 'You can only comment on grievances assigned to your college'},
                     status=status.HTTP_403_FORBIDDEN
@@ -410,13 +384,12 @@ class GrievanceStatsView(APIView):
         
         # Filter based on user type (exclude deleted)
         if user.user_type == 'student':
-            if not hasattr(user, 'student_profile'):
-                return Response({'error': 'Student profile not found'}, status=status.HTTP_404_NOT_FOUND)
-            queryset = Grievance.objects.filter(student=user.student_profile, is_deleted=False)
+            queryset = Grievance.objects.filter(user=user, is_deleted=False)
         elif user.user_type == 'college_user':
-            if not hasattr(user, 'college_profile'):
-                return Response({'error': 'College profile not found'}, status=status.HTTP_404_NOT_FOUND)
-            queryset = Grievance.objects.filter(assigned_to_college=user.college_profile.college, is_deleted=False)
+            college = user.get_college()
+            if not college:
+                return Response({'error': 'College association not found'}, status=status.HTTP_404_NOT_FOUND)
+            queryset = Grievance.objects.filter(assigned_to_college=college, is_deleted=False)
         else:
             queryset = Grievance.objects.filter(is_deleted=False)
         
@@ -424,14 +397,12 @@ class GrievanceStatsView(APIView):
         total_grievances = queryset.count()
         by_status = queryset.values('status').annotate(count=Count('id'))
         by_category = queryset.values('category').annotate(count=Count('id'))
-        by_priority = queryset.values('priority').annotate(count=Count('id'))
         
         return Response(
             {
                 'total_grievances': total_grievances,
                 'by_status': list(by_status),
                 'by_category': list(by_category),
-                'by_priority': list(by_priority),
             },
             status=status.HTTP_200_OK
         )
