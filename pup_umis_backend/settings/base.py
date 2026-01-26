@@ -235,7 +235,9 @@ CORS_ALLOW_METHODS = [
     "PUT",
 ]
 
-CORS_ALLOW_HEADERS = [
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
     "accept",
     "accept-encoding",
     "authorization",
@@ -245,4 +247,5 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
+    "ngrok-skip-browser-warning",
 ]

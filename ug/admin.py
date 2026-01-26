@@ -98,9 +98,9 @@ class CourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'code', 'semester', 'label', 'marks_obtained', 'grade', 'exam_result')
-    list_filter = ('semester', 'exam_type', 'exam_result', 'is_absent')
-    search_fields = ('student__registration_no', 'student__first_name', 'code')
+    list_display = ('student', 'name', 'course_type', 'semester', 'label', 'marks_obtained', 'grade', 'exam_result')
+    list_filter = ('course_type', 'semester', 'exam_type', 'exam_result', 'is_absent')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'name', 'code', 'course_type')
     ordering = ('student', 'semester', 'code')
 
 
