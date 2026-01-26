@@ -44,6 +44,6 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
             'mobile_no', 'aadhar_no', 'address',
             'college_name', 'college_code',
             'department', 'degree', 'program',
-            'status', 'session', 'batch'
+            'status', 'session', 'batch','is_active'
         ]
         read_only_fields = ['uid']

@@ -87,60 +87,16 @@ class ProfileSerializer(serializers.ModelSerializer):
     college_profile = CollegeUserProfileSerializer(read_only=True)
     ug_profile = serializers.SerializerMethodField()
     pg_profile = serializers.SerializerMethodField()
-    current_course = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'uid', 'email', 'username', 'first_name', 'last_name',
             'phone', 'user_type', 'is_verified', 'is_active', 
-            'created_at', 'college_profile', 'ug_profile', 'pg_profile', 'current_course'
+            'created_at', 'college_profile', 'ug_profile', 'pg_profile'
         ]
         read_only_fields = ['uid', 'email', 'created_at']
 
-    def get_current_course(self, obj):
-        """
-        Determine the current course based on status:
-        - If PG profile has status='Active' -> 'PG' (currently pursuing PG)
-        - If UG profile has status='Active' -> 'UG' (currently pursuing UG)
-        - If both are Alumni/Suspended -> 'Alumni'
-        - If no profile -> None
-        """
-        if obj.user_type != 'student':
-            return None
-        
-        ug_status = None
-        pg_status = None
-        
-        # Check UG profile status
-        try:
-            from ug.models import UGStudentProfile
-            ug_profile = UGStudentProfile.objects.filter(user=obj).first()
-            if ug_profile:
-                ug_status = ug_profile.status
-        except Exception:
-            pass
-        
-        # Check PG profile status
-        try:
-            from pg.models import PGStudentProfile
-            pg_profile = PGStudentProfile.objects.filter(user=obj).first()
-            if pg_profile:
-                pg_status = pg_profile.status
-        except Exception:
-            pass
-        
-        # Priority: PG Active > UG Active > Alumni
-        if pg_status == 'Active':
-            return 'PG'
-        if ug_status == 'Active':
-            return 'UG'
-        if pg_status == 'Alumni' or ug_status == 'Alumni':
-            return 'Alumni'
-        if pg_status or ug_status:
-            return 'Inactive'
-        
-        return None
 
     def get_ug_profile(self, obj):
         """Get UG student profile if exists."""
