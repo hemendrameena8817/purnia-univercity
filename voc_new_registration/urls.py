@@ -1,37 +1,41 @@
 from django.urls import path
 from .views import (
-    VocNewRegistrationListView,
-    VocNewRegistrationCreateView,
-    VocNewRegistrationDetailView,
-    VocNewRegistrationBulkCreateView,
-    VocRegistrationOptionsView,
+    NewRegistrationListView,
+    NewRegistrationCreateView,
+    NewRegistrationDetailView,
+    NewRegistrationBulkCreateView,
+    RegistrationOptionsView,
     InitiatePaymentView,
     PaymentResponseView,
-    VocRegistrationStatusView,
+    RegistrationStatusView,
+    CaptchaView,
 )
 
 urlpatterns = [
-    # List all registrations
-    path('', VocNewRegistrationListView.as_view(), name='voc-registration-list'),
+    # Captcha generation
+    path('captcha/', CaptchaView.as_view(), name='registration-captcha'),
     
-    # Registration options (gender, caste)
-    path('options/', VocRegistrationOptionsView.as_view(), name='voc-registration-options'),
+    # List all registrations
+    path('', NewRegistrationListView.as_view(), name='registration-list'),
+    
+    # Registration options (gender, caste, lookups)
+    path('options/', RegistrationOptionsView.as_view(), name='registration-options'),
     
     # Create a new registration
-    path('create/', VocNewRegistrationCreateView.as_view(), name='voc-registration-create'),
+    path('create/', NewRegistrationCreateView.as_view(), name='registration-create'),
     
     # Bulk create
-    path('bulk-create/', VocNewRegistrationBulkCreateView.as_view(), name='voc-registration-bulk-create'),
+    path('bulk-create/', NewRegistrationBulkCreateView.as_view(), name='registration-bulk-create'),
     
     # Retrieve, Update, Delete (by Aadhaar)
-    path('<str:aadhaar_no>/', VocNewRegistrationDetailView.as_view(), name='voc-registration-detail'),
+    path('<str:aadhaar_no>/', NewRegistrationDetailView.as_view(), name='registration-detail'),
     
     # Payment initiation
-    path('<str:aadhaar_no>/initiate-payment/', InitiatePaymentView.as_view(), name='voc-registration-payment-initiate'),
+    path('<str:aadhaar_no>/initiate-payment/', InitiatePaymentView.as_view(), name='registration-payment-initiate'),
     
     # Payment response (CC Avenue redirect)
-    path('payment-response/', PaymentResponseView.as_view(), name='voc-registration-payment-response'),
+    path('payment-response/', PaymentResponseView.as_view(), name='registration-payment-response'),
 
     # Registration status check
-    path('<uuid:uid>/status/', VocRegistrationStatusView.as_view(), name='voc-registration-status'),
+    path('<uuid:uid>/status/', RegistrationStatusView.as_view(), name='registration-status'),
 ]
