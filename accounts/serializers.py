@@ -33,6 +33,36 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
+class LoginUserSerializer(serializers.ModelSerializer):
+    """
+    Simple user serializer for login response - NO profiles.
+    """
+    class Meta:
+        model = User
+        fields = [
+            'uid', 'email', 'username', 'first_name', 'last_name',
+            'phone', 'user_type', 'is_verified', 'is_active', 'created_at'
+        ]
+        read_only_fields = ['uid', 'email', 'created_at']
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    """
+    User profile serializer with UG, PG student profiles and college profile.
+    Optimized for login response with minimal queries.
+    """
+
+    
+    class Meta:
+        model = User
+        fields = [
+            'uid', 'email', 'username', 'first_name', 'last_name',
+            'phone', 'user_type', 'is_verified', 'is_active', 
+            'created_at'
+        ]
+        read_only_fields = ['uid', 'email', 'created_at']
+
+
 class CollegeUserProfileSerializer(serializers.ModelSerializer):
     user_email = serializers.EmailField(source='user.email', read_only=True)
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
@@ -49,11 +79,10 @@ class CollegeUserProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['uid', 'created_at']
 
-
-class UserProfileSerializer(serializers.ModelSerializer):
+class ProfileSerializer(serializers.ModelSerializer):
     """
-    User profile serializer with UG and PG student profiles.
-    Optimized for login response with minimal queries.
+    Profile serializer with UG, PG student profiles and college profile.
+    Used for /profile/ endpoint.
     """
     college_profile = CollegeUserProfileSerializer(read_only=True)
     ug_profile = serializers.SerializerMethodField()
