@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment
 from pup_umis_backend.utils.file_utils import get_absolute_url, format_file_size
+from .utils.profile_utils import verify_student_college_profile
+from .utils.format_error import format_django_validation_error
 
 
 class GrievanceAttachmentSerializer(serializers.ModelSerializer):
@@ -229,6 +231,8 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of attachment UIDs to link to this grievance"
     )
+    college_uid = serializers.UUIDField(write_only=True, help_text="College UID where grievance is to be submitted")
+    active_profile = serializers.CharField(write_only=True, help_text="Active profile Type to verify the college")
     
     class Meta:
         model = Grievance
@@ -236,6 +240,8 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
             'contact_person_name',
             'contact_person_phone_number',
             'category_uid',
+            'college_uid',
+            'active_profile',
             'subject',
             'description',
             'attachment_uids',
@@ -256,13 +262,18 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
             category = GrievanceCategory.objects.get(uid=category_uid, is_active=True)
             validated_data['category'] = category
         except GrievanceCategory.DoesNotExist:
-            raise serializers.ValidationError({"category_uid": "Invalid or inactive category"})
+            raise serializers.ValidationError({"error": "Invalid or inactive category"})
         
-        # Auto-assign to user's college
-        if hasattr(user, 'get_college'):
-            validated_data['assigned_to_college'] = user.get_college()
         
-        # Extract attachment UIDs
+        college_uid = validated_data.pop('college_uid')
+        active_profile = validated_data.pop('active_profile')
+        try:
+            college = verify_student_college_profile(user, college_uid, active_profile)
+            validated_data['assigned_to_college'] = college
+        except Exception as e:
+            message = format_django_validation_error(e)
+            raise serializers.ValidationError({"error": message})
+        
         attachment_uids = validated_data.pop('attachment_uids', [])
         
         # Create grievance
@@ -290,6 +301,9 @@ class GrievanceUpdateSerializer(serializers.ModelSerializer):
         model = Grievance
         fields = [
             'status',
+            'is_assigned_to_college',
+            'is_assigned_to_university',
+            'final_remark',
         ]
         extra_kwargs = {
             'status': {'required': False, 'help_text': 'Update grievance status'},

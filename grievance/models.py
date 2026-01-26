@@ -3,12 +3,11 @@ from django.db import models
 from django.utils import timezone
 import random
 
-STATUS_CHOICES = [
+ACTIVITY_STATUS_CHOICES = [
     ('open', 'Open'),
     ('in_progress', 'In Progress'),
     ('resolved', 'Resolved'),
-    ('closed', 'Closed'),
-    ('escalated', 'Escalated to University'),
+    ('canceled', 'Canceled'),
 ]
 
 class GrievanceCategory(models.Model):
@@ -21,6 +20,8 @@ class GrievanceCategory(models.Model):
     code = models.CharField(max_length=50, unique=True, help_text="Unique code for the category (e.g., 'academic', 'hostel')")
     description = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    is_assigned_to_college = models.BooleanField(default=True, help_text="Default to college level handling")
+    is_assigned_to_university = models.BooleanField(default=False, help_text="Default to university level handling")
     display_order = models.PositiveIntegerField(default=0, help_text="Order in which to display categories")
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -54,7 +55,12 @@ class Grievance(models.Model):
     )
     contact_person_name = models.CharField(max_length=255, null=True, blank=True)  # Cached for quick access
     contact_person_phone_number = models.CharField(max_length=15, null=True, blank=True)
+    is_assigned_to_college = models.BooleanField(default=True)
+    is_assigned_to_university = models.BooleanField(default=False)
     
+    is_grievance_resolved = models.BooleanField(default=False)
+    final_remark = models.TextField(null=True, blank=True)
+
     # Grievance Details
     category = models.ForeignKey(
         GrievanceCategory,
@@ -67,7 +73,7 @@ class Grievance(models.Model):
     # Note: Attachments are now in separate GrievanceAttachment model
     
     # Status and Assignment
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    status = models.CharField(max_length=20, choices=ACTIVITY_STATUS_CHOICES, default='open')
     
     # Auto-assigned to student's college
     assigned_to_college = models.ForeignKey(
@@ -140,29 +146,32 @@ class Grievance(models.Model):
         if not self.grievance_number:
             self.grievance_number = self.generate_grievance_number()
         
-        # Auto-assign to user's college
+        # Initial routing based on Category flags
+        if self._state.adding:
+            self.is_assigned_to_college = self.category.is_assigned_to_college
+            self.is_assigned_to_university = self.category.is_assigned_to_university
+            
+        # Standard Resolution Logic
+        if self.status in ['resolved', 'canceled']:
+            self.is_grievance_resolved = True
+            if self.status == 'resolved' and not self.resolved_at:
+                self.resolved_at = timezone.now()
+        else:
+            self.is_grievance_resolved = False
+
+        # Auto-assign to user's college for tracking
         if not self.assigned_to_college and self.user:
-            # Try to get college from user profile if available
             if hasattr(self.user, 'get_college'):
                 self.assigned_to_college = self.user.get_college()
-        
-        
-        # Update resolved_at when status changes to resolved
-        if self.status == 'resolved' and not self.resolved_at:
-            self.resolved_at = timezone.now()
-        
-        # Update closed_at when status changes to closed
-        if self.status == 'closed' and not self.closed_at:
-            self.closed_at = timezone.now()
         
         super().save(*args, **kwargs)
     
     def generate_grievance_number(self):
-        """Generate unique grievance number in format GRVXXXXXXXXXX"""
+        """Generate unique grievance number in format XXXXXXXXXX"""
         while True:
             # Generate 10-digit random number
             unique_number = ''.join([str(random.randint(0, 9)) for _ in range(10)])
-            grievance_number = f"GRV{unique_number}"
+            grievance_number = f"{unique_number}"
             
             # Check if it already exists
             if not Grievance.objects.filter(grievance_number=grievance_number).exists():

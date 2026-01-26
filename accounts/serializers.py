@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.utils.translation import gettext_lazy as _
 from .models import CollegeUserProfile
+from .utils.user_profile import get_ug_profile_data, get_pg_profile_data, get_current_profile as get_user_current_profile
 
 User = get_user_model()
 
@@ -87,48 +88,29 @@ class ProfileSerializer(serializers.ModelSerializer):
     college_profile = CollegeUserProfileSerializer(read_only=True)
     ug_profile = serializers.SerializerMethodField()
     pg_profile = serializers.SerializerMethodField()
+    current_profile = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'uid', 'email', 'username', 'first_name', 'last_name',
             'phone', 'user_type', 'is_verified', 'is_active', 
-            'created_at', 'college_profile', 'ug_profile', 'pg_profile'
+            'created_at', 'college_profile', 'ug_profile', 'pg_profile', 'current_profile'
         ]
         read_only_fields = ['uid', 'email', 'created_at']
 
 
     def get_ug_profile(self, obj):
-        """Get UG student profile if exists."""
-        if obj.user_type != 'student':
-            return None
-        try:
-            from ug.models import UGStudentProfile
-            from ug.serializers import UGStudentProfileSerializer
-            profile = UGStudentProfile.objects.select_related(
-                'college', 'department', 'degree', 'program'
-            ).filter(user=obj).first()
-            if profile:
-                return UGStudentProfileSerializer(profile).data
-        except Exception:
-            pass
-        return None
+        """Get UG student profile data."""
+        return get_ug_profile_data(obj)
 
     def get_pg_profile(self, obj):
-        """Get PG student profile if exists."""
-        if obj.user_type != 'student':
-            return None
-        try:
-            from pg.models import PGStudentProfile
-            from pg.serializers import PGStudentProfileSerializer
-            profile = PGStudentProfile.objects.select_related(
-                'college', 'department', 'degree', 'program'
-            ).filter(user=obj).first()
-            if profile:
-                return PGStudentProfileSerializer(profile).data
-        except Exception:
-            pass
-        return None
+        """Get PG student profile data."""
+        return get_pg_profile_data(obj)
+
+    def get_current_profile(self, obj):
+        """Get current course name (UG/PG)."""
+        return get_user_current_profile(obj)
 
 
 class CollegeUserCreateSerializer(serializers.Serializer):
