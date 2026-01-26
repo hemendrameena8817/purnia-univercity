@@ -5,16 +5,16 @@ from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAtt
 
 @admin.register(GrievanceCategory)
 class GrievanceCategoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'code', 'default_priority', 'is_active', 'display_order', 'color']
-    list_filter = ['is_active', 'default_priority']
+    list_display = ['name', 'code', 'is_active', 'display_order']
+    list_filter = ['is_active']
     search_fields = ['name', 'code', 'description']
     readonly_fields = ['uid', 'created_at', 'updated_at']
     fieldsets = (
         ('Category Information', {
-            'fields': ('uid', 'name', 'code', 'description', 'is_active', 'default_priority')
+            'fields': ('uid', 'name', 'code', 'description', 'is_active')
         }),
         ('Display Settings', {
-            'fields': ('color', 'display_order')
+            'fields': ('display_order',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at')
@@ -50,7 +50,6 @@ class GrievanceAdmin(admin.ModelAdmin):
         'category',
         'subject',
         'status',
-        'priority',
         'assigned_to_college',
         'escalated_to_university',
         'is_deleted',
@@ -59,7 +58,6 @@ class GrievanceAdmin(admin.ModelAdmin):
     list_filter = [
         'status',
         'category',
-        'priority',
         'escalated_to_university',
         'is_deleted',
         'assigned_to_college',
@@ -70,8 +68,10 @@ class GrievanceAdmin(admin.ModelAdmin):
         'contact_person_name',
         'subject',
         'description',
-        'student__registration_no',
-        'student__user__username',
+        'user__username',
+        'user__first_name',
+        'user__last_name',
+        'user__email',
     ]
     readonly_fields = [
         'uid',
@@ -84,7 +84,7 @@ class GrievanceAdmin(admin.ModelAdmin):
     ]
     fieldsets = (
         ('Grievance Information', {
-            'fields': ('uid', 'grievance_number', 'student', 'contact_person_name', 'contact_person_phone_number')
+            'fields': ('uid', 'grievance_number', 'user', 'contact_person_name', 'contact_person_phone_number')
         }),
         ('Details', {
             'fields': ('category', 'subject', 'description')
@@ -92,7 +92,6 @@ class GrievanceAdmin(admin.ModelAdmin):
         ('Status & Assignment', {
             'fields': (
                 'status',
-                'priority',
                 'assigned_to_college',
                 'escalated_to_university',
                 'assigned_to_university',

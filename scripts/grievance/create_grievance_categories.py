@@ -39,156 +39,106 @@ class Command(BaseCommand):
         # Define categories with student-friendly names and descriptions
         categories = [
             {
-                'name': 'Marksheet & Certificate Issues',
-                'code': 'marksheet_certificate',
-                'description': 'Issues related to marksheet corrections, name changes, certificate issuance, duplicate certificates, migration certificates, etc.',
-                'color': '#3B82F6',
+                'name': 'Admission',
+                'code': 'admission',
+                'description': 'Issues related to new admissions, entry requirements, seat allotment, and admission process.',
                 'display_order': 1,
-                'default_priority': 'high',  # Important documents
             },
             {
-                'name': 'Exam Related Issues',
-                'code': 'examination',
-                'description': 'Issues with exam schedules, admit cards, exam center problems, answer sheet evaluation, re-evaluation, grace marks, etc.',
-                'color': '#EF4444',
+                'name': 'Registration & Migration',
+                'code': 'registration_migration',
+                'description': 'Problems with university registration, enrollment numbers, and migration certificate requests.',
                 'display_order': 2,
-                'default_priority': 'urgent',  # Time-sensitive
             },
             {
-                'name': 'Fee & Payment Issues',
-                'code': 'fee_payment',
-                'description': 'Fee payment problems, refund issues, scholarship queries, fee receipt not received, wrong fee charged, etc.',
-                'color': '#10B981',
+                'name': 'Payment & Fee Refunds',
+                'code': 'payment_fee_refunds',
+                'description': 'Issues with online payments, fee receipts, refund of excess fees, or payment failures.',
                 'display_order': 3,
-                'default_priority': 'high',  # Financial matters
-            },
-            {
-                'name': 'Admission & Registration',
-                'code': 'admission_registration',
-                'description': 'Admission process issues, registration problems, course enrollment, subject selection, branch change requests, etc.',
-                'color': '#8B5CF6',
-                'display_order': 4,
-                'default_priority': 'high',  # Critical for students
-            },
-            {
-                'name': 'Attendance & Leave',
-                'code': 'attendance_leave',
-                'description': 'Attendance marking errors, leave approval issues, medical leave, attendance shortage problems, etc.',
-                'color': '#F59E0B',
-                'display_order': 5,
-                'default_priority': 'medium',  # Regular issue
-            },
-            {
-                'name': 'Library Issues',
-                'code': 'library',
-                'description': 'Library card issues, book availability, fine disputes, book return problems, library access issues, etc.',
-                'color': '#06B6D4',
-                'display_order': 6,
-                'default_priority': 'low',  # Non-urgent
-            },
-            {
-                'name': 'Hostel & Accommodation',
-                'code': 'hostel',
-                'description': 'Hostel room allotment, room change requests, hostel facilities, mess food quality, hostel fees, etc.',
-                'color': '#EC4899',
-                'display_order': 7,
-                'default_priority': 'medium',  # Living conditions
-            },
-            {
-                'name': 'Infrastructure & Facilities',
-                'code': 'infrastructure',
-                'description': 'Classroom facilities, lab equipment issues, washroom problems, drinking water, electricity, internet/WiFi issues, etc.',
-                'color': '#14B8A6',
-                'display_order': 8,
-                'default_priority': 'medium',  # Facility issues
-            },
-            {
-                'name': 'Faculty & Teaching',
-                'code': 'faculty_teaching',
-                'description': 'Issues with teaching quality, faculty behavior, class cancellations, syllabus coverage, practical sessions, etc.',
-                'color': '#6366F1',
-                'display_order': 9,
-                'default_priority': 'high',  # Academic quality
-            },
-            {
-                'name': 'ID Card & Documents',
-                'code': 'id_documents',
-                'description': 'Student ID card issues, bonafide certificate, character certificate, NOC, recommendation letters, etc.',
-                'color': '#A855F7',
-                'display_order': 10,
-                'default_priority': 'medium',  # Document requests
             },
             {
                 'name': 'Scholarship & Financial Aid',
-                'code': 'scholarship',
-                'description': 'Scholarship application issues, scholarship disbursement delays, financial aid queries, loan certificate, etc.',
-                'color': '#22C55E',
+                'code': 'scholarship_financial_aid',
+                'description': 'Inquiries and issues regarding scholarships, stipends, and financial assistance programs.',
+                'display_order': 4,
+            },
+            {
+                'name': 'Examination & Admit Cards',
+                'code': 'examination_admit_cards',
+                'description': 'Issues with exam schedules, admit card generation, exam center issues, or hall tickets.',
+                'display_order': 5,
+            },
+            {
+                'name': 'Results & Marksheet Correction',
+                'code': 'results_marksheet_correction',
+                'description': 'Correction of errors in marksheets, result delays, re-evaluation, and mark verification.',
+                'display_order': 6,
+            },
+            {
+                'name': 'Certificates: Pending and Correction',
+                'code': 'certificates_pending_correction',
+                'description': 'Queries regarding pending degree/provisional certificates and correction of personal details in certificates.',
+                'display_order': 7,
+            },
+            {
+                'name': 'Degree & Convocation',
+                'code': 'degree_convocation',
+                'description': 'Applications for degrees, convocation ceremony details, and degree distribution issues.',
+                'display_order': 8,
+            },
+            {
+                'name': 'Syllabus & Academic Classes',
+                'code': 'syllabus_academic_classes',
+                'description': 'Issues regarding class schedules, course syllabus, completion of syllabus, and academic calendar.',
+                'display_order': 9,
+            },
+            {
+                'name': 'Faculty & Teaching Staff',
+                'code': 'faculty_teaching_staff',
+                'description': 'Grievances related to faculty behavior, teaching methodology, or unavailability of teachers.',
+                'display_order': 10,
+            },
+            {
+                'name': 'Hostel & Mess Facilities',
+                'code': 'hostel_mess_facilities',
+                'description': 'Issues related to hostel room allotment, maintenance, food quality in mess, and hygiene.',
                 'display_order': 11,
-                'default_priority': 'high',  # Financial support
             },
             {
-                'name': 'Placement & Training',
-                'code': 'placement_training',
-                'description': 'Placement cell issues, internship problems, training program queries, campus recruitment, etc.',
-                'color': '#F97316',
+                'name': 'Library & Digital Resources',
+                'code': 'library_digital_resources',
+                'description': 'Inaccessibility of books, digital journals, e-library issues, and library management.',
                 'display_order': 12,
-                'default_priority': 'medium',  # Career related
             },
             {
-                'name': 'Ragging & Harassment',
-                'code': 'ragging_harassment',
-                'description': 'Ragging complaints, harassment issues, bullying, discrimination, safety concerns, etc. (Urgent)',
-                'color': '#DC2626',
+                'name': 'College Infrastructure & Sanitation',
+                'code': 'infrastructure_sanitation',
+                'description': 'Grievances regarding classroom maintenance, washroom hygiene, drinking water, and campus cleanliness.',
                 'display_order': 13,
-                'default_priority': 'urgent',  # CRITICAL - Safety issue
             },
             {
-                'name': 'Sports & Extra-curricular',
-                'code': 'sports_extracurricular',
-                'description': 'Sports facilities, sports equipment, cultural activities, club activities, event participation, etc.',
-                'color': '#84CC16',
+                'name': 'Technical Portal & Login Issues',
+                'code': 'technical_portal_login',
+                'description': 'Technical glitches in the UMIS portal, login errors, password reset, and website maintenance.',
                 'display_order': 14,
-                'default_priority': 'low',  # Extra-curricular
             },
             {
-                'name': 'Transport & Commute',
-                'code': 'transport',
-                'description': 'College bus issues, bus pass problems, parking issues, transport schedule, route changes, etc.',
-                'color': '#0EA5E9',
+                'name': 'Anti-Ragging & Discipline',
+                'code': 'anti_ragging_discipline',
+                'description': 'Reporting of ragging incidents, bullying, or disciplinary issues. (High Priority)',
                 'display_order': 15,
-                'default_priority': 'medium',  # Daily commute
             },
             {
-                'name': 'Medical & Health',
-                'code': 'medical_health',
-                'description': 'Medical room facilities, health issues, medical emergency, first aid, health insurance, etc.',
-                'color': '#EF4444',
+                'name': 'Student Welfare & Sports',
+                'code': 'student_welfare_sports',
+                'description': 'Issues related to extra-curricular activities, sports facilities, and general student welfare.',
                 'display_order': 16,
-                'default_priority': 'urgent',  # Health emergency
             },
             {
-                'name': 'Administrative Issues',
-                'code': 'administrative',
-                'description': 'General administrative problems, office staff behavior, document processing delays, etc.',
-                'color': '#64748B',
-                'display_order': 17,
-                'default_priority': 'medium',  # Admin issues
-            },
-            {
-                'name': 'Online Portal & Website',
-                'code': 'online_portal',
-                'description': 'Student portal login issues, website problems, online form submission, password reset, etc.',
-                'color': '#7C3AED',
-                'display_order': 18,
-                'default_priority': 'medium',  # Technical issues
-            },
-            {
-                'name': 'Other Issues',
-                'code': 'other',
-                'description': 'Any other issues not covered in the above categories',
-                'color': '#9CA3AF',
+                'name': 'General / Others',
+                'code': 'general_others',
+                'description': 'Any other grievances not falling under the above specified categories.',
                 'display_order': 99,
-                'default_priority': 'medium',  # General issues
             },
         ]
 
@@ -197,7 +147,9 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS('\n🚀 Creating Grievance Categories...\n'))
         
+        active_codes = []
         for category_data in categories:
+            active_codes.append(category_data['code'])
             category, created = GrievanceCategory.objects.get_or_create(
                 code=category_data['code'],
                 defaults=category_data
@@ -211,14 +163,38 @@ class Command(BaseCommand):
                     )
                 )
             else:
-                # Update existing category
+                # Update existing category and ensure it's active
+                category_data['is_active'] = True
                 for key, value in category_data.items():
                     setattr(category, key, value)
                 category.save()
                 updated_count += 1
                 self.stdout.write(
                     self.style.WARNING(
-                        f'🔄 Updated: {category.name} ({category.code})'
+                        f'� Updated: {category.name} ({category.code})'
+                    )
+                )
+
+        # Handle extra categories (remove or deactivate)
+        extra_categories = GrievanceCategory.objects.exclude(code__in=active_codes)
+        for extra in extra_categories:
+            if extra.grievances.exists():
+                # If there are grievances, just deactivate it
+                extra.is_active = False
+                extra.save()
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f'🔕 Deactivated (has dependencies): {extra.name} ({extra.code})'
+                    )
+                )
+            else:
+                # If no grievances, we can safely delete it
+                extra_name = extra.name
+                extra_code = extra.code
+                extra.delete()
+                self.stdout.write(
+                    self.style.NOTICE(
+                        f'�️ Removed (no dependencies): {extra_name} ({extra_code})'
                     )
                 )
         
@@ -229,7 +205,7 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f'📊 Total Categories: {GrievanceCategory.objects.count()}\n'
+                f'📊 Total Active Categories: {GrievanceCategory.objects.filter(is_active=True).count()}\n'
             )
         )
 

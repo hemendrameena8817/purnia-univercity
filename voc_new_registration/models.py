@@ -2,7 +2,68 @@ import uuid
 from django.db import models
 
 
-class VocNewRegistration(models.Model):
+class NewRegistrationCourse(models.Model):
+    """
+    Local course model for Vocational registrations.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Course'
+        verbose_name_plural = 'Courses'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+class NewRegistrationBatch(models.Model):
+    """
+    Local batch model for Vocational registrations.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Batch'
+        verbose_name_plural = 'Batches'
+        ordering = ['-name']
+
+    def __str__(self):
+        return self.name
+
+
+class NewRegistrationSession(models.Model):
+    """
+    Local session model for Vocational registrations.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Session'
+        verbose_name_plural = 'Sessions'
+        ordering = ['-name']
+
+    def __str__(self):
+        return self.name
+
+
+class NewRegistration(models.Model):
     """
     Model to store Vocational Course new registration data imported from Excel.
     """
@@ -44,28 +105,28 @@ class VocNewRegistration(models.Model):
     dob = models.DateField(null=True, blank=True, help_text="Date of Birth")
     
     course = models.ForeignKey(
-        'academics.Course',
+        NewRegistrationCourse,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='voc_registrations_course',
-        help_text="Linked to Academics Course"
+        related_name='registrations',
+        help_text="Vocational Course"
     )
     batch = models.ForeignKey(
-        'academics.Batch',
+        NewRegistrationBatch,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='voc_registrations_batch',
-        help_text="Linked to Academics Batch"
+        related_name='registrations',
+        help_text="Vocational Batch"
     )
     session = models.ForeignKey(
-        'academics.Session',
+        NewRegistrationSession,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='voc_registrations_session',
-        help_text="Linked to Academics Session"
+        related_name='registrations',
+        help_text="Vocational Session"
     )
     college = models.ForeignKey(
         'colleges.College',
@@ -118,7 +179,7 @@ class VocNewRegistration(models.Model):
         return f"{self.student_name} - {self.course} - {self.college}"
 
 
-class VocRegistrationPayment(models.Model):
+class RegistrationPayment(models.Model):
     """
     Model to track payments for Vocational Course registrations via CC Avenue.
     """
@@ -130,7 +191,7 @@ class VocRegistrationPayment(models.Model):
     ]
 
     registration = models.ForeignKey(
-        VocNewRegistration,
+        NewRegistration,
         on_delete=models.CASCADE,
         related_name='payments'
     )

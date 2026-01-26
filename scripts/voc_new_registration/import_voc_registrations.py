@@ -36,8 +36,12 @@ if __name__ == '__main__':
     django.setup()
 
 from colleges.models import College
-from voc_new_registration.models import VocNewRegistration
-from academics.models import Course, Batch, Session
+from voc_new_registration.models import (
+    NewRegistration,
+    NewRegistrationCourse,
+    NewRegistrationBatch,
+    NewRegistrationSession
+)
 
 
 class Command(BaseCommand):
@@ -107,14 +111,14 @@ class Command(BaseCommand):
                     if batch_name:
                         batch_name = str(batch_name).strip()
                         if batch_name.upper() not in ['NULL', 'NAN', 'NONE', '']:
-                            batch_obj = Batch.objects.filter(name__iexact=batch_name).first()
+                            batch_obj = NewRegistrationBatch.objects.filter(name__iexact=batch_name).first()
                             if batch_obj:
                                 data['batch'] = batch_obj
                             else:
-                                if not skip_errors:
-                                    # Warning only as requested to be optional
-                                    pass 
-                                self.stdout.write(self.style.WARNING(f"Warning: Batch '{batch_name}' not found for row {index+2}"))
+                                # Create if not exists during import
+                                batch_obj = NewRegistrationBatch.objects.create(name=batch_name)
+                                data['batch'] = batch_obj
+                                self.stdout.write(self.style.NOTICE(f"Note: Created new Batch '{batch_name}' for row {index+2}"))
 
                     # Handle Session Lookup
                     session_name = data.pop('session', None)
@@ -123,27 +127,33 @@ class Command(BaseCommand):
                     if session_name:
                         session_name = str(session_name).strip()
                         if session_name.upper() not in ['NULL', 'NAN', 'NONE', '']:
-                            session_obj = Session.objects.filter(name__iexact=session_name).first()
+                            session_obj = NewRegistrationSession.objects.filter(name__iexact=session_name).first()
                             if session_obj:
                                 data['session'] = session_obj
                             else:
-                                self.stdout.write(self.style.WARNING(f"Warning: Session '{session_name}' not found for row {index+2}"))
+                                # Create if not exists
+                                session_obj = NewRegistrationSession.objects.create(name=session_name)
+                                data['session'] = session_obj
+                                self.stdout.write(self.style.NOTICE(f"Note: Created new Session '{session_name}' for row {index+2}"))
 
                     # Handle Course Lookup
                     course_name = data.pop('course', None)
                     if course_name:
                         # Try to find course by code or name
-                        course_obj = Course.objects.filter(code__iexact=course_name).first()
+                        course_obj = NewRegistrationCourse.objects.filter(code__iexact=course_name).first()
                         if not course_obj:
-                            course_obj = Course.objects.filter(name__iexact=course_name).first()
+                            course_obj = NewRegistrationCourse.objects.filter(name__iexact=course_name).first()
                         
                         if course_obj:
                             data['course'] = course_obj
                         else:
-                            if not skip_errors:
-                                raise ValueError(f"Course '{course_name}' not found")
-                            data['course'] = None
-                            self.stdout.write(self.style.WARNING(f"Warning: Course '{course_name}' not found for row {index+2}"))
+                            # Create course if not exists
+                            course_obj = NewRegistrationCourse.objects.create(
+                                name=course_name,
+                                code=course_name.upper().replace(' ', '_')
+                            )
+                            data['course'] = course_obj
+                            self.stdout.write(self.style.NOTICE(f"Note: Created new Course '{course_name}' for row {index+2}"))
 
                     # Handle College Lookup (Name, Short Name, or Code)
                     college_name = data.pop('college_name', None)
@@ -278,7 +288,7 @@ class Command(BaseCommand):
                     
                     if not dry_run:
                         # Check for duplicate by Aadhaar
-                        if VocNewRegistration.objects.filter(aadhaar_no=data['aadhaar_no']).exists():
+                        if NewRegistration.objects.filter(aadhaar_no=data['aadhaar_no']).exists():
                             self.stdout.write(self.style.WARNING(f"Skipping duplicate: Aadhaar {data['aadhaar_no']} already exists (Row {index+2})"))
                             # We count this as skipped, but maybe not an error?
                             # For summary, let's just proceed without incrementing success_count if we want strict 'imported' count.
@@ -286,7 +296,7 @@ class Command(BaseCommand):
                             continue
                             
                         # Create registration entry
-                        VocNewRegistration.objects.create(**data)
+                        NewRegistration.objects.create(**data)
                     
                     success_count += 1
                     

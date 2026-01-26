@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment
-from students.models import Student
 from pup_umis_backend.utils.file_utils import get_absolute_url, format_file_size
 
 
@@ -45,8 +44,6 @@ class GrievanceCategorySerializer(serializers.ModelSerializer):
             'code',
             'description',
             'is_active',
-            'default_priority',
-            'color',
             'display_order',
         ]
         read_only_fields = ['uid']
@@ -76,10 +73,10 @@ class GrievanceCommentSerializer(serializers.ModelSerializer):
 
 class GrievanceListSerializer(serializers.ModelSerializer):
     """Serializer for listing grievances (minimal fields)"""
-    student_registration_no = serializers.CharField(source='student.registration_no', read_only=True)
+    user_username = serializers.CharField(source='user.username', read_only=True)
     college_name = serializers.CharField(source='assigned_to_college.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    category_display = serializers.CharField(source='category.name', read_only=True)
     
     class Meta:
         model = Grievance
@@ -88,12 +85,11 @@ class GrievanceListSerializer(serializers.ModelSerializer):
             'grievance_number',
             'contact_person_name',
             'contact_person_phone_number',
-            'student_registration_no',
+            'user_username',
             'category_display',
             'subject',
             'status',
             'status_display',
-            'priority',
             'college_name',
             'escalated_to_university',
             'submitted_at',
@@ -106,7 +102,7 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
     """Serializer for detailed grievance view with nested objects"""
 
     # Nested serializers
-    student_details = serializers.SerializerMethodField()
+    user_details = serializers.SerializerMethodField()
     category_details = GrievanceCategorySerializer(source='category', read_only=True)
     college_details = serializers.SerializerMethodField()
     university_details = serializers.SerializerMethodField()
@@ -114,7 +110,6 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
 
     # Display values
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
 
     # Related data
     comments = GrievanceCommentSerializer(many=True, read_only=True)
@@ -132,16 +127,16 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
             context=self.context  # ✅ request passed correctly
         ).data
 
-    def get_student_details(self, obj):
-        if not obj.student:
+    def get_user_details(self, obj):
+        user = obj.user
+        if not user:
             return None
 
-        user = obj.student.user
         return {
-            'uid': str(obj.student.uid),
-            'registration_no': obj.student.registration_no,
-            'name': user.get_full_name() if user else None,
-            'email': user.email if user else None,
+            'uid': str(user.uid),
+            'username': user.username,
+            'name': user.get_full_name(),
+            'email': user.email,
         }
 
     def get_college_details(self, obj):
@@ -188,7 +183,7 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
             'uid',
             'grievance_number',
 
-            'student_details',
+            'user_details',
             'contact_person_name',
             'contact_person_phone_number',
 
@@ -200,8 +195,6 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
 
             'status',
             'status_display',
-            'priority',
-            'priority_display',
 
             'college_details',
             'escalated_to_university',
@@ -249,13 +242,13 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         ]
     
     def create(self, validated_data):
-        # Get student from request context
+        # Get user from request context
         request = self.context.get('request')
-        if not request or not hasattr(request.user, 'student_profile'):
-            raise serializers.ValidationError("Only students can submit grievances")
+        if not request:
+            raise serializers.ValidationError("Request context required")
         
-        student = request.user.student_profile
-        validated_data['student'] = student
+        user = request.user
+        validated_data['user'] = user
         
         # Get category by UID (more secure than using ID)
         category_uid = validated_data.pop('category_uid')
@@ -265,8 +258,9 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         except GrievanceCategory.DoesNotExist:
             raise serializers.ValidationError({"category_uid": "Invalid or inactive category"})
         
-        # Auto-assign to student's college
-        validated_data['assigned_to_college'] = student.college
+        # Auto-assign to user's college
+        if hasattr(user, 'get_college'):
+            validated_data['assigned_to_college'] = user.get_college()
         
         # Extract attachment UIDs
         attachment_uids = validated_data.pop('attachment_uids', [])
@@ -296,11 +290,9 @@ class GrievanceUpdateSerializer(serializers.ModelSerializer):
         model = Grievance
         fields = [
             'status',
-            'priority',
         ]
         extra_kwargs = {
             'status': {'required': False, 'help_text': 'Update grievance status'},
-            'priority': {'required': False, 'help_text': 'Update grievance priority'},
         }
     
     def validate_status(self, value):

@@ -55,6 +55,7 @@ urlpatterns = [
     path('api/grievances/', include('grievance.urls')),
     path('api/voc_new_registration/', include('voc_new_registration.urls')),
     path('api/academics/', include('academics.urls')),
+    path('api/captcha/', include('captcha.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

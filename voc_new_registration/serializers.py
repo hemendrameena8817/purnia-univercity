@@ -1,26 +1,29 @@
 from rest_framework import serializers
-from .models import VocNewRegistration
 from colleges.models import College
-
-
-from academics.models import Course, Batch, Session
+from .models import (
+    NewRegistration, 
+    RegistrationPayment, 
+    NewRegistrationCourse, 
+    NewRegistrationBatch, 
+    NewRegistrationSession
+)
 
 
 class SessionMinimalSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Session
-        fields = ['uid', 'name', 'is_current']
+        model = NewRegistrationSession
+        fields = ['uid', 'name', 'is_active']
 
 
 class BatchMinimalSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Batch
+        model = NewRegistrationBatch
         fields = ['uid', 'name', 'is_active']
 
 
 class CourseMinimalSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Course
+        model = NewRegistrationCourse
         fields = ['uid', 'name', 'code']
 
 
@@ -30,9 +33,9 @@ class CollegeMinimalSerializer(serializers.ModelSerializer):
         fields = ['uid', 'name', 'short_name', 'college_code']
 
 
-class VocNewRegistrationGetSerializer(serializers.ModelSerializer):
+class NewRegistrationGetSerializer(serializers.ModelSerializer):
     """
-    Serializer for VOC New Registration model.
+    Serializer for New Registration model.
     """
     # Use nested serializers for detail view (READ)
     college_details = CollegeMinimalSerializer(source='college', read_only=True)
@@ -41,7 +44,7 @@ class VocNewRegistrationGetSerializer(serializers.ModelSerializer):
     course_details = CourseMinimalSerializer(source='course', read_only=True)
     
     class Meta:
-        model = VocNewRegistration
+        model = NewRegistration
         fields = [
             'uid',
             'student_name',
@@ -98,14 +101,14 @@ class VocNewRegistrationGetSerializer(serializers.ModelSerializer):
         return value
 
 
-class VocNewRegistrationListSerializer(serializers.ModelSerializer):
+class NewRegistrationListSerializer(serializers.ModelSerializer):
     """
-    Serializer for listing VOC New Registrations (minimal fields).
+    Serializer for listing New Registrations (minimal fields).
     """
     college_name = serializers.CharField(source='college.name', read_only=True)
     
     class Meta:
-        model = VocNewRegistration
+        model = NewRegistration
         fields = [
             'uid',
             'student_name',
@@ -124,16 +127,16 @@ class VocNewRegistrationListSerializer(serializers.ModelSerializer):
         read_only_fields = ['uid', 'created_at', 'college_name']
 
 
-class VocNewRegistrationCreateSerializer(serializers.ModelSerializer):
+class NewRegistrationCreateSerializer(serializers.ModelSerializer):
     """
-    Serializer for creating VOC New Registration entries.
+    Serializer for creating New Registration entries.
     Used for bulk import from Excel.
     """
     college_code = serializers.CharField(write_only=True, required=False)
     college_name = serializers.CharField(write_only=True, required=False)
     
     class Meta:
-        model = VocNewRegistration
+        model = NewRegistration
         fields = [
             'student_name',
             'student_name_hindi',
@@ -189,9 +192,9 @@ class VocNewRegistrationCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
-class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
+class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
     """
-    Serializer for updating VOC New Registration entries.
+    Serializer for updating New Registration entries.
     Handles college, course, batch, and session lookup by UUID (uid).
     Support for profile images and other fields.
     """
@@ -202,22 +205,23 @@ class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
     )
     course = serializers.SlugRelatedField(
         slug_field='uid',
-        queryset=Course.objects.all(),
+        queryset=NewRegistrationCourse.objects.all(),
         required=False
     )
     batch = serializers.SlugRelatedField(
         slug_field='uid',
-        queryset=Batch.objects.all(),
+        queryset=NewRegistrationBatch.objects.all(),
         required=False
     )
     session = serializers.SlugRelatedField(
         slug_field='uid',
-        queryset=Session.objects.all(),
+        queryset=NewRegistrationSession.objects.all(),
         required=False
     )
+    dob = serializers.DateField(input_formats=['%Y-%m-%d', 'iso-8601'], required=False, allow_null=True)
 
     class Meta:
-        model = VocNewRegistration
+        model = NewRegistration
         fields = [
             'student_name',
             'student_name_hindi',
@@ -232,7 +236,6 @@ class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
             'mobile_no',
             'aadhaar_no',
             'apaar_no',
-            
             'email',
             'migration_submitted',
             'migrated_from_other_university',
@@ -244,6 +247,12 @@ class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
             'college',
             'json_data',
         ]
+
+    def validate_dob(self, value):
+        """Handle empty string dob sending from frontend as null"""
+        if value == "" or value == "null":
+            return None
+        return value
 
     def validate(self, data):
         """
@@ -277,14 +286,12 @@ class VocNewRegistrationUpdateSerializer(serializers.ModelSerializer):
         return value
 
 
-from .models import VocRegistrationPayment
-
-class VocRegistrationPaymentSerializer(serializers.ModelSerializer):
+class RegistrationPaymentSerializer(serializers.ModelSerializer):
     """
-    Serializer for VOC Registration Payment records.
+    Serializer for Registration Payment records.
     """
     class Meta:
-        model = VocRegistrationPayment
+        model = RegistrationPayment
         fields = [
             'order_id',
             'tracking_id',

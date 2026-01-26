@@ -3,32 +3,24 @@ from django.db import models
 from django.utils import timezone
 import random
 
+STATUS_CHOICES = [
+    ('open', 'Open'),
+    ('in_progress', 'In Progress'),
+    ('resolved', 'Resolved'),
+    ('closed', 'Closed'),
+    ('escalated', 'Escalated to University'),
+]
 
 class GrievanceCategory(models.Model):
     """
     Dynamic categories for grievances.
     Allows admin to add/edit/remove categories without code changes.
     """
-    
-    PRIORITY_CHOICES = [
-        ('low', 'Low'),
-        ('medium', 'Medium'),
-        ('high', 'High'),
-        ('urgent', 'Urgent'),
-    ]
-    
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=50, unique=True, help_text="Unique code for the category (e.g., 'academic', 'hostel')")
     description = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
-    default_priority = models.CharField(
-        max_length=20,
-        choices=PRIORITY_CHOICES,
-        default='medium',
-        help_text="Default priority for grievances in this category"
-    )
-    color = models.CharField(max_length=20, blank=True, null=True, help_text="Color code for UI (e.g., '#FF5733')")
     display_order = models.PositiveIntegerField(default=0, help_text="Order in which to display categories")
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -45,35 +37,20 @@ class GrievanceCategory(models.Model):
 
 class Grievance(models.Model):
     """
-    Grievance/Complaint system for students.
+    Grievance/Complaint system for users.
     Auto-generates unique grievance number in format: GRVXXXXXXXXXX
     """
-    
-    STATUS_CHOICES = [
-        ('open', 'Open'),
-        ('in_progress', 'In Progress'),
-        ('resolved', 'Resolved'),
-        ('closed', 'Closed'),
-        ('escalated', 'Escalated to University'),
-    ]
-    
-    # Removed hardcoded CATEGORY_CHOICES - now using GrievanceCategory model
-    
-    PRIORITY_CHOICES = [
-        ('low', 'Low'),
-        ('medium', 'Medium'),
-        ('high', 'High'),
-        ('urgent', 'Urgent'),
-    ]
     
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     grievance_number = models.CharField(max_length=20, unique=True, editable=False, db_index=True)
     
-    # Student Information
-    student = models.ForeignKey(
-        'students.Student',
+    # User Information
+    user = models.ForeignKey(
+        'accounts.UserAccount',
         on_delete=models.CASCADE,
-        related_name='grievances'
+        related_name='grievances',
+        null=True,
+        blank=True
     )
     contact_person_name = models.CharField(max_length=255, null=True, blank=True)  # Cached for quick access
     contact_person_phone_number = models.CharField(max_length=15, null=True, blank=True)
@@ -91,7 +68,6 @@ class Grievance(models.Model):
     
     # Status and Assignment
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
-    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
     
     # Auto-assigned to student's college
     assigned_to_college = models.ForeignKey(
@@ -123,7 +99,7 @@ class Grievance(models.Model):
     
     # Timestamps
     submitted_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)  # Auto-updated on every save
+    updated_at = models.DateTimeField(auto_now=True)  
     modified_by = models.ForeignKey(
         'accounts.UserAccount',
         on_delete=models.SET_NULL,
@@ -164,13 +140,12 @@ class Grievance(models.Model):
         if not self.grievance_number:
             self.grievance_number = self.generate_grievance_number()
         
-        # Auto-assign to student's college
-        if not self.assigned_to_college and self.student:
-            self.assigned_to_college = self.student.college
+        # Auto-assign to user's college
+        if not self.assigned_to_college and self.user:
+            # Try to get college from user profile if available
+            if hasattr(self.user, 'get_college'):
+                self.assigned_to_college = self.user.get_college()
         
-        # Auto-set priority from category's default_priority if not explicitly set
-        if not self.pk and self.category and self.priority == 'medium':  # Only on creation and if default
-            self.priority = self.category.default_priority
         
         # Update resolved_at when status changes to resolved
         if self.status == 'resolved' and not self.resolved_at:
@@ -197,8 +172,10 @@ class Grievance(models.Model):
         """Escalate grievance to university level"""
         self.escalated_to_university = True
         self.status = 'escalated'
-        if self.student and self.student.college:
-            self.assigned_to_university = self.student.college.university
+        if self.user and hasattr(self.user, 'get_college'):
+            college = self.user.get_college()
+            if college:
+                self.assigned_to_university = college.university
         self.save()
     
     def delete(self, using=None, keep_parents=False, soft=True, deleted_by=None):
@@ -266,7 +243,7 @@ class GrievanceComment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     # Metadata
-    is_internal = models.BooleanField(default=False)  # Internal notes not visible to student
+    is_internal = models.BooleanField(default=True) 
     json_data = models.JSONField(null=True, blank=True)
     
     class Meta:

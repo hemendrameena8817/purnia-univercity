@@ -4,14 +4,24 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db.models import Q, Count
 
-from .models import VocNewRegistration
-from .serializers import (
-    VocNewRegistrationGetSerializer,
-    VocNewRegistrationListSerializer,
-    VocNewRegistrationCreateSerializer,
-    VocNewRegistrationUpdateSerializer,
+from .models import (
+    NewRegistration, 
+    RegistrationPayment,
+    NewRegistrationCourse,
+    NewRegistrationBatch,
+    NewRegistrationSession
 )
-from rest_framework.parsers import MultiPartParser, FormParser
+from .serializers import (
+    CourseMinimalSerializer,
+    BatchMinimalSerializer,
+    SessionMinimalSerializer,
+    NewRegistrationGetSerializer,
+    NewRegistrationListSerializer,
+    NewRegistrationCreateSerializer,
+    NewRegistrationUpdateSerializer,
+    RegistrationPaymentSerializer,
+)
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from decouple import config
 from django.conf import settings
@@ -19,19 +29,19 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import uuid
 from .utils.ccavenue_utils import encrypt, decrypt, parse_response
-from .models import VocNewRegistration, VocRegistrationPayment
+from .utils.ccavenue_utils import encrypt, decrypt, parse_response
 
 
-class VocNewRegistrationListView(generics.ListAPIView):
+class NewRegistrationListView(generics.ListAPIView):
     """
-    API View to list all VOC new registrations.
+    API View to list all new registrations.
     Supports search and filtering.
     """
-    serializer_class = VocNewRegistrationListSerializer
+    serializer_class = NewRegistrationListSerializer
     
     def get_queryset(self):
         # Only list records that are not soft-deleted
-        queryset = VocNewRegistration.objects.filter(is_deleted=False).select_related('college')
+        queryset = NewRegistration.objects.filter(is_deleted=False).select_related('college', 'course', 'batch', 'session')
         
         # Search functionality
         search = self.request.query_params.get('search', None)
@@ -45,7 +55,15 @@ class VocNewRegistrationListView(generics.ListAPIView):
         # Filtering
         course = self.request.query_params.get('course', None)
         if course:
-            queryset = queryset.filter(course__iexact=course)
+            queryset = queryset.filter(course__uid=course)
+        
+        batch = self.request.query_params.get('batch', None)
+        if batch:
+            queryset = queryset.filter(batch__uid=batch)
+            
+        session = self.request.query_params.get('session', None)
+        if session:
+            queryset = queryset.filter(session__uid=session)
         
         gender = self.request.query_params.get('gender', None)
         if gender:
@@ -62,11 +80,13 @@ class VocNewRegistrationListView(generics.ListAPIView):
         return queryset
 
     @swagger_auto_schema(
-        operation_summary="List all VOC new registrations",
-        operation_description="Retrieve a list of all VOC new registration entries with pagination support",
+        operation_summary="List all new registrations",
+        operation_description="Retrieve a list of all new registration entries with pagination support",
         manual_parameters=[
             openapi.Parameter('search', openapi.IN_QUERY, description="Search by name", type=openapi.TYPE_STRING),
-            openapi.Parameter('course', openapi.IN_QUERY, description="Filter by course", type=openapi.TYPE_STRING),
+            openapi.Parameter('course', openapi.IN_QUERY, description="Filter by course UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('batch', openapi.IN_QUERY, description="Filter by batch UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('session', openapi.IN_QUERY, description="Filter by session UID", type=openapi.TYPE_STRING),
             openapi.Parameter('gender', openapi.IN_QUERY, description="Filter by gender", type=openapi.TYPE_STRING),
             openapi.Parameter('caste', openapi.IN_QUERY, description="Filter by caste", type=openapi.TYPE_STRING),
             openapi.Parameter('college', openapi.IN_QUERY, description="Filter by college UID", type=openapi.TYPE_STRING),
@@ -76,65 +96,99 @@ class VocNewRegistrationListView(generics.ListAPIView):
         return super().get(request, *args, **kwargs)
 
 
-class VocNewRegistrationCreateView(generics.CreateAPIView):
+class NewRegistrationCreateView(generics.CreateAPIView):
     """
-    API View to create a new VOC registration.
+    API View to create a new registration.
     """
-    queryset = VocNewRegistration.objects.all()
-    serializer_class = VocNewRegistrationCreateSerializer
+    queryset = NewRegistration.objects.all()
+    serializer_class = NewRegistrationCreateSerializer
     permission_classes = [permissions.AllowAny]
     
     @swagger_auto_schema(
-        operation_summary="Create a new VOC registration",
-        operation_description="Create a new VOC registration entry."
+        operation_summary="Create a new registration",
+        operation_description="Create a new registration entry."
     )
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
 
 
-class VocNewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
+class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
     """
     API View to retrieve, update or delete a specific registration.
     Lookup by Aadhaar Number.
     Supports multipart/form-data for image updates.
     """
     permission_classes = [permissions.AllowAny]
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
     lookup_field = 'aadhaar_no'
     lookup_url_kwarg = 'aadhaar_no'
 
     def get_queryset(self):
         # Prevent accessing soft-deleted records via detail view
-        return VocNewRegistration.objects.filter(is_deleted=False).select_related('college')
+        return NewRegistration.objects.filter(is_deleted=False).select_related('college', 'course', 'batch', 'session')
 
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
-            return VocNewRegistrationUpdateSerializer
-        return VocNewRegistrationGetSerializer
+            return NewRegistrationUpdateSerializer
+        return NewRegistrationGetSerializer
 
     @swagger_auto_schema(
-        operation_summary="Retrieve a specific VOC registration",
-        operation_description="Lookup by Aadhaar number."
+        operation_summary="Retrieve a specific registration",
+        operation_description="Lookup by Aadhaar number. Requires captcha validation.",
+        manual_parameters=[
+            openapi.Parameter('captcha_key', openapi.IN_QUERY, description="Captcha Hash Key", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('captcha_value', openapi.IN_QUERY, description="Solved Captcha Text", type=openapi.TYPE_STRING, required=True),
+        ]
     )
     def get(self, request, *args, **kwargs):
+        captcha_key = request.query_params.get('captcha_key')
+        captcha_value = request.query_params.get('captcha_value')
+        
+        if not captcha_key or not captcha_value:
+            return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from captcha.models import CaptchaStore
+        try:
+            CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+        except CaptchaStore.DoesNotExist:
+            return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+        
         return super().get(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_summary="Update a VOC registration",
+        operation_summary="Update a registration",
         operation_description="Updates registration data. Supports multipart/form-data for image uploads."
     )
     def patch(self, request, *args, **kwargs):
         return super().patch(request, *args, **kwargs)
 
     @swagger_auto_schema(
-        operation_summary="Full update a VOC registration",
+        operation_summary="Full update a registration",
     )
     def put(self, request, *args, **kwargs):
         return super().put(request, *args, **kwargs)
 
-    @swagger_auto_schema(operation_summary="Soft delete a VOC registration")
+    @swagger_auto_schema(
+        operation_summary="Soft delete a registration",
+        manual_parameters=[
+            openapi.Parameter('captcha_key', openapi.IN_QUERY, description="Captcha Hash Key", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('captcha_value', openapi.IN_QUERY, description="Solved Captcha Text", type=openapi.TYPE_STRING, required=True),
+        ]
+    )
     def delete(self, request, *args, **kwargs):
-        """Perform soft delete by setting is_deleted=True"""
+        """Perform soft delete by setting is_deleted=True. Requires captcha."""
+        captcha_key = request.query_params.get('captcha_key')
+        captcha_value = request.query_params.get('captcha_value')
+        
+        if not captcha_key or not captcha_value:
+            return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from captcha.models import CaptchaStore
+        try:
+            CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+        except CaptchaStore.DoesNotExist:
+            return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+
         instance = self.get_object()
         instance.is_deleted = True
         instance.save()
@@ -144,7 +198,7 @@ class VocNewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
 
-class VocRegistrationStatusView(views.APIView):
+class RegistrationStatusView(views.APIView):
     """
     API View to check the registration status of a student.
     Lookup by UID.
@@ -157,8 +211,8 @@ class VocRegistrationStatusView(views.APIView):
     )
     def get(self, request, uid):
         try:
-            registration = VocNewRegistration.objects.get(uid=uid, is_deleted=False)
-        except (VocNewRegistration.DoesNotExist, ValueError):
+            registration = NewRegistration.objects.get(uid=uid, is_deleted=False)
+        except (NewRegistration.DoesNotExist, ValueError):
             return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Get latest payment status if it exists
@@ -176,13 +230,13 @@ class VocRegistrationStatusView(views.APIView):
         }, status=status.HTTP_200_OK)
 
 
-class VocNewRegistrationBulkCreateView(views.APIView):
+class NewRegistrationBulkCreateView(views.APIView):
     """
     API View for bulk creation of registrations.
     """
     permission_classes = [permissions.AllowAny]
     @swagger_auto_schema(
-        operation_summary="Bulk create VOC registrations",
+        operation_summary="Bulk create registrations",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
@@ -207,7 +261,7 @@ class VocNewRegistrationBulkCreateView(views.APIView):
         errors = []
         
         for idx, registration_data in enumerate(registrations_data):
-            serializer = VocNewRegistrationCreateSerializer(data=registration_data)
+            serializer = NewRegistrationCreateSerializer(data=registration_data)
             if serializer.is_valid():
                 try:
                     instance = serializer.save()
@@ -247,8 +301,8 @@ class InitiatePaymentView(views.APIView):
     )
     def post(self, request, aadhaar_no):
         try:
-            registration = VocNewRegistration.objects.get(aadhaar_no=aadhaar_no, is_deleted=False)
-        except VocNewRegistration.DoesNotExist:
+            registration = NewRegistration.objects.get(aadhaar_no=aadhaar_no, is_deleted=False)
+        except NewRegistration.DoesNotExist:
             return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
 
         if not registration.migrated_from_other_university:
@@ -268,7 +322,7 @@ class InitiatePaymentView(views.APIView):
         order_id = f"REG_{uuid.uuid4().hex[:12].upper()}"
         
         # Create payment record
-        VocRegistrationPayment.objects.create(
+        RegistrationPayment.objects.create(
             registration=registration,
             order_id=order_id,
             amount=amount,
@@ -314,8 +368,8 @@ class PaymentResponseView(views.APIView):
         auth_status = response_data.get('order_status')
 
         try:
-            payment = VocRegistrationPayment.objects.get(order_id=order_id)
-        except VocRegistrationPayment.DoesNotExist:
+            payment = RegistrationPayment.objects.get(order_id=order_id)
+        except RegistrationPayment.DoesNotExist:
             return Response({"error": "Payment record not found"}, status=status.HTTP_404_NOT_FOUND)
 
         payment.tracking_id = response_data.get('tracking_id')
@@ -343,9 +397,9 @@ class PaymentResponseView(views.APIView):
         }, status=status.HTTP_200_OK)
 
 
-class VocRegistrationOptionsView(views.APIView):
+class RegistrationOptionsView(views.APIView):
     """
-    API View to fetch gender and caste choices for VocNewRegistration.
+    API View to fetch gender and caste choices for NewRegistration.
     """
     permission_classes = [permissions.AllowAny]
 
@@ -384,12 +438,44 @@ class VocRegistrationOptionsView(views.APIView):
     )
     def get(self, request):
         gender_choices = [
-            {'value': code, 'label': label} for code, label in VocNewRegistration.GENDER_CHOICES
+            {'value': code, 'label': label} for code, label in NewRegistration.GENDER_CHOICES
         ]
         caste_choices = [
-            {'value': code, 'label': label} for code, label in VocNewRegistration.CASTE_CHOICES
+            {'value': code, 'label': label} for code, label in NewRegistration.CASTE_CHOICES
         ]
+        
+        # Add academic lookup options
+        courses = NewRegistrationCourse.objects.filter(is_active=True)
+        batches = NewRegistrationBatch.objects.filter(is_active=True)
+        sessions = NewRegistrationSession.objects.filter(is_active=True)
+        
         return Response({
             'gender': gender_choices,
-            'caste': caste_choices
+            'caste': caste_choices,
+            'courses': CourseMinimalSerializer(courses, many=True).data,
+            'batches': BatchMinimalSerializer(batches, many=True).data,
+            'sessions': SessionMinimalSerializer(sessions, many=True).data,
+        }, status=status.HTTP_200_OK)
+
+class CaptchaView(views.APIView):
+    """
+    API View to generate a new captcha.
+    Returns a hashkey and an image URL.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Generate new captcha",
+        responses={200: "Captcha identity and image link"}
+    )
+    def get(self, request):
+        from captcha.models import CaptchaStore
+        from captcha.helpers import captcha_image_url
+        
+        hashkey = CaptchaStore.generate_key()
+        image_url = f"{request.scheme}://{request.get_host()}{captcha_image_url(hashkey)}"
+        
+        return Response({
+            "captcha_key": hashkey,
+            "captcha_image": image_url
         }, status=status.HTTP_200_OK)

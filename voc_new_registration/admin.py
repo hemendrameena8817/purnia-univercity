@@ -1,9 +1,33 @@
 from django.contrib import admin
-from .models import VocNewRegistration, VocRegistrationPayment
+from .models import (
+    NewRegistrationCourse, 
+    NewRegistrationBatch, 
+    NewRegistrationSession, 
+    NewRegistration, 
+    RegistrationPayment
+)
 
 
-@admin.register(VocNewRegistration)
-class VocNewRegistrationAdmin(admin.ModelAdmin):
+@admin.register(NewRegistrationCourse)
+class NewRegistrationCourseAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'is_active']
+    search_fields = ['name', 'code']
+
+
+@admin.register(NewRegistrationBatch)
+class NewRegistrationBatchAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active']
+    search_fields = ['name']
+
+
+@admin.register(NewRegistrationSession)
+class NewRegistrationSessionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'is_active']
+    search_fields = ['name']
+
+
+@admin.register(NewRegistration)
+class NewRegistrationAdmin(admin.ModelAdmin):
     """
     Admin interface for VOC New Registration model.
     """
@@ -95,8 +119,8 @@ class VocNewRegistrationAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('college')
 
 
-@admin.register(VocRegistrationPayment)
-class VocRegistrationPaymentAdmin(admin.ModelAdmin):
+@admin.register(RegistrationPayment)
+class RegistrationPaymentAdmin(admin.ModelAdmin):
     list_display = [
         'order_id',
         'registration',
