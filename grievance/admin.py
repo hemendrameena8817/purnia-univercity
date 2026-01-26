@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.contrib import admin
 from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment
 
 
@@ -11,7 +10,7 @@ class GrievanceCategoryAdmin(admin.ModelAdmin):
     readonly_fields = ['uid', 'created_at', 'updated_at']
     fieldsets = (
         ('Category Information', {
-            'fields': ('uid', 'name', 'code', 'description', 'is_active')
+            'fields': ('uid', 'name', 'code', 'description', 'is_active', 'is_assigned_to_college', 'is_assigned_to_university')
         }),
         ('Display Settings', {
             'fields': ('display_order',)
@@ -50,9 +49,9 @@ class GrievanceAdmin(admin.ModelAdmin):
         'category',
         'subject',
         'status',
-        'assigned_to_college',
-        'escalated_to_university',
-        'is_deleted',
+        'is_assigned_to_college',
+        'is_assigned_to_university',
+        'is_grievance_resolved',
         'submitted_date',
     ]
     list_filter = [
@@ -92,10 +91,14 @@ class GrievanceAdmin(admin.ModelAdmin):
         ('Status & Assignment', {
             'fields': (
                 'status',
+                'is_assigned_to_college',
+                'is_assigned_to_university',
                 'assigned_to_college',
-                'escalated_to_university',
                 'assigned_to_university',
             )
+        }),
+        ('Resolution', {
+            'fields': ('is_grievance_resolved', 'final_remark')
         }),
         ('Timestamps', {
             'fields': ('submitted_at', 'updated_at', 'modified_by', 'resolved_at', 'closed_at')

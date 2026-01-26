@@ -19,6 +19,7 @@ from .serializers import (
     GrievanceAttachmentUploadSerializer,
     GrievanceAttachmentSerializer,
 )
+from .utils.format_error import get_first_serializer_error
 
 
 class GrievanceListCreateView(APIView):
@@ -44,6 +45,13 @@ class GrievanceListCreateView(APIView):
                 description="Filter by category UID (UUID string)",
                 type=openapi.TYPE_STRING
             ),
+            openapi.Parameter(
+                'scope',
+                openapi.IN_QUERY,
+                description="Filter by scope: 'college' or 'university'. Only relevant for University Admin to see specific buckets.",
+                type=openapi.TYPE_STRING,
+                enum=['college', 'university']
+            ),
         ],
         responses={200: GrievanceListSerializer(many=True)},
         tags=['Grievances'],
@@ -59,18 +67,29 @@ class GrievanceListCreateView(APIView):
             queryset = Grievance.objects.filter(user=user, is_deleted=False)
         
         elif user.user_type == 'college_user':
-            # College staff see grievances assigned to their college
+            # College staff see grievances assigned to their college AND currently at college level
             college = user.get_college()
             if not college:
                 return Response(
                     {'error': 'College association not found'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            queryset = Grievance.objects.filter(assigned_to_college=college, is_deleted=False)
+            queryset = Grievance.objects.filter(
+                assigned_to_college=college, 
+                is_assigned_to_college=True,
+                is_deleted=False
+            )
         
         elif user.user_type == 'university_admin':
-            # University admin sees all grievances (excluding deleted)
+            # University admin sees all (excluding deleted)
             queryset = Grievance.objects.filter(is_deleted=False)
+            
+            # Allow University to filter by scope
+            scope = request.query_params.get('scope')
+            if scope == 'university':
+                queryset = queryset.filter(is_assigned_to_university=True)
+            elif scope == 'college':
+                queryset = queryset.filter(is_assigned_to_college=True)
         
         else:
             return Response(
@@ -105,7 +124,9 @@ class GrievanceListCreateView(APIView):
         {
           "contact_person_name": "John Doe",
           "contact_person_phone_number": "9876543210",
-          "category_uid": "abc-123-def-456",
+          "category_uid": "category-uuid-here",
+          "college_uid": "college-uuid-here",
+          "active_profile": "ug_profile",
           "subject": "Name Correction in Marksheet",
           "description": "I need to correct my name spelling in the marksheet",
           "attachment_uids": ["uuid-1", "uuid-2"]
@@ -140,7 +161,10 @@ class GrievanceListCreateView(APIView):
                 },
                 status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use utility to format errors to {error: "message"}
+        error_msg = get_first_serializer_error(serializer.errors)
+        return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class GrievanceDetailView(APIView):
@@ -274,7 +298,10 @@ class GrievanceDetailView(APIView):
                 },
                 status=status.HTTP_200_OK
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use utility to format errors to {error: "message"}
+        error_msg = get_first_serializer_error(serializer.errors)
+        return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # In grievance/views.py
@@ -362,7 +389,10 @@ class GrievanceCommentView(APIView):
                 },
                 status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use utility to format errors to {error: "message"}
+        error_msg = get_first_serializer_error(serializer.errors)
+        return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
 class GrievanceStatsView(APIView):
     """
@@ -472,4 +502,7 @@ class GrievanceAttachmentUploadView(APIView):
                 },
                 status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Use utility to format errors to {error: "message"}
+        error_msg = get_first_serializer_error(serializer.errors)
+        return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
