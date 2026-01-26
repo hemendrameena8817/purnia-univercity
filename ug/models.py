@@ -246,7 +246,7 @@ class UGStudentProfile(models.Model):
     # Documents
     profile_image = models.ImageField(upload_to='ug_students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='ug_students/signatures/', null=True, blank=True)
-
+    is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -268,6 +268,7 @@ class CourseStructure(models.Model):
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=500, null=True, blank=True, help_text="Course Name")
+    short_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Short Name (e.g., 'IM' for 'Introductory Microeconomics').")
     department = models.ForeignKey(
         UGDepartment,
         on_delete=models.CASCADE,
@@ -276,7 +277,7 @@ class CourseStructure(models.Model):
         blank=True
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
-    code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
     max_marks = models.IntegerField(null=True, blank=True, help_text="Course Marks")
@@ -315,6 +316,7 @@ class StudentCourseAssessment(models.Model):
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Name")
+    short_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Short Name (e.g., 'IM' for 'Introductory Microeconomics').")
     student = models.ForeignKey(
         'ug.UGStudentProfile',
         on_delete=models.CASCADE,
@@ -322,7 +324,7 @@ class StudentCourseAssessment(models.Model):
         help_text="Student"
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
-    code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
 
     semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
@@ -342,7 +344,7 @@ class StudentCourseAssessment(models.Model):
     grade = models.CharField(max_length=10, null=True, blank=True, help_text="Grade")
     numeric_grade = models.IntegerField(null=True, blank=True, help_text="Numeric Grade")
 
-    is_absent = models.BooleanField(default=False, help_text="Is Absent")
+    is_absent = models.BooleanField(default=True, help_text="Is Absent")
     exam_type = models.CharField(max_length=10, null=True, blank=True, help_text="Type Regular/Back")
 
     exam_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status pass/fail/promoted")
@@ -432,3 +434,27 @@ class ExamRegistration(models.Model):
 
     def __str__(self):
         return f"{self.student}"
+
+class CommonCourseStructure(models.Model):
+    """
+    Represents the common course structure for a semester (CBCS).
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    semester = models.CharField(max_length=50, help_text="e.g., Semester-I")
+    course_name = models.CharField(max_length=255, help_text="e.g., Major Course 1")
+    course_type = models.CharField(max_length=50, help_text="e.g., MJC-1")
+    ltp = models.CharField(max_length=20, null=True, blank=True, help_text="L-T-P e.g., 6-1-0")
+    credit = models.PositiveIntegerField(default=0)
+    marks = models.PositiveIntegerField(default=100)
+    code  = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Common Course Structure'
+        verbose_name_plural = 'Common Course Structures'
+        ordering = ['semester', 'course_name']
+
+    def __str__(self):
+        return f"{self.semester} - {self.course_type} ({self.course_name})"

@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
-    CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration
+    CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
+    CommonCourseStructure
 )
 
 
@@ -90,18 +91,18 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(CourseStructure)
 class CourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'department', 'course_type', 'code', 'semester', 'max_marks', 'max_credit')
-    list_filter = ('department__faculty', 'department', 'course_type', 'semester')
-    search_fields = ('name', 'code', 'department__name')
-    ordering = ('department', 'semester', 'code')
+    list_display = ('name', 'short_name', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
+    list_filter = ('course_type', 'semester', 'course_code', 'department__faculty', 'department', )
+    search_fields = ('name', 'short_name', 'course_code', 'department__name')
+    ordering = ('department', 'semester', 'course_code')
 
 
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'name', 'course_type', 'semester', 'label', 'marks_obtained', 'grade', 'exam_result')
+    list_display = ('student', 'name', 'short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label', 'marks_obtained', 'grade', 'exam_result')
     list_filter = ('course_type', 'semester', 'exam_type', 'exam_result', 'is_absent')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'name', 'code', 'course_type')
-    ordering = ('student', 'semester', 'code')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'name', 'short_name', 'course_code', 'course_type')
+    ordering = ('student', 'semester', 'course_code')
 
 
 @admin.register(SemesterRegistration)
@@ -118,3 +119,10 @@ class ExamRegistrationAdmin(admin.ModelAdmin):
     list_filter = ('sem', 'status', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name')
     ordering = ('student', 'sem')
+
+@admin.register(CommonCourseStructure)
+class CommonCourseStructureAdmin(admin.ModelAdmin):
+    list_display = ('semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
+    list_filter = ('semester', 'course_type')
+    search_fields = ('semester', 'course_name', 'course_type')
+    ordering = ('semester', 'course_type')

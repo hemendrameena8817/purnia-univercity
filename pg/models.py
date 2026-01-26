@@ -208,6 +208,7 @@ class PGStudentProfile(models.Model):
     current_semester = models.PositiveIntegerField(null=True, blank=True)
     session = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+    
 
     # Relationships
     college = models.ForeignKey(
@@ -248,6 +249,7 @@ class PGStudentProfile(models.Model):
     profile_image = models.ImageField(upload_to='pg_students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='pg_students/signatures/', null=True, blank=True)
 
+    is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
