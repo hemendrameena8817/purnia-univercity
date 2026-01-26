@@ -33,17 +33,17 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
-class LoginUserSerializer(serializers.ModelSerializer):
-    """
-    Simple user serializer for login response - NO profiles.
-    """
-    class Meta:
-        model = User
-        fields = [
-            'uid', 'email', 'username', 'first_name', 'last_name',
-            'phone', 'user_type', 'is_verified', 'is_active', 'created_at'
-        ]
-        read_only_fields = ['uid', 'email', 'created_at']
+# class LoginUserSerializer(serializers.ModelSerializer):
+#     """
+#     Simple user serializer for login response - NO profiles.
+#     """
+#     class Meta:
+#         model = User
+#         fields = [
+#             'uid', 'email', 'username', 'first_name', 'last_name',
+#             'phone', 'user_type', 'is_verified', 'is_active', 'created_at'
+#         ]
+#         read_only_fields = ['uid', 'email', 'created_at']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
