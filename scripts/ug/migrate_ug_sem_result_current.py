@@ -184,6 +184,13 @@ def migrate_data(limit=None, clear_existing=False):
                     staging_ids_to_mark = []
                 continue
             
+            # Determine if absent
+            marks = staging.mark_secured
+            is_absent = True if (marks is None or marks == '' or str(marks).strip().lower() in ['abs', 'absent']) else False
+            
+            grace_mark = safe_int(staging.grace_given, 0)
+            is_grace = True if grace_mark > 0 else False
+
             # Create object
             batch_assessments.append(StudentCourseAssessment(
                 student_id=student_id,
@@ -201,12 +208,21 @@ def migrate_data(limit=None, clear_existing=False):
                 numeric_grade=safe_int(staging.numrical_let_grad),
                 exam_type=staging.exam_type,
                 exam_result=staging.subject_result,
+                final_result=staging.final_result,
+                grace_mark=grace_mark,
+                is_grace=is_grace,
+                is_absent=is_absent,
                 session=staging.session_code,
                 batch_id=batches_cache.get(str(staging.batch_code).strip()) if staging.batch_code else None,
                 department_id=departments_cache.get(staging.discipline_code),
+                college_code=staging.institute_code,
                 degree=staging.course_code,
                 label=label,
-                json_data={'source_id': staging.source_id, 'user_id': staging.user_id}
+                json_data={
+                    k: (v.isoformat() if isinstance(v, datetime) else v)
+                    for k, v in staging.__dict__.items() 
+                    if not k.startswith('_') and k != 'uid' and k != 'id'
+                }
             ))
             
             existing_keys.add(key)

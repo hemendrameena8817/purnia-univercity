@@ -347,8 +347,12 @@ class StudentCourseAssessment(models.Model):
     is_absent = models.BooleanField(default=True, help_text="Is Absent")
     exam_type = models.CharField(max_length=10, null=True, blank=True, help_text="Type Regular/Back")
 
-    exam_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status pass/fail/promoted")
+    exam_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status P/F")
+    final_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status pass/fail/promoted")
 
+    grace_mark = models.IntegerField(null=True, blank=True, help_text="Grace Mark")
+    is_grace = models.BooleanField(default=False, help_text="Is Grace")
+    
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
     batch = models.ForeignKey(
         UGBatch,
@@ -357,7 +361,7 @@ class StudentCourseAssessment(models.Model):
         null=True,
         blank=True
     )
-
+    college_code = models.CharField(max_length=10, null=True, blank=True, help_text="College Code")
     department = models.ForeignKey(
         UGDepartment,
         on_delete=models.CASCADE,
