@@ -33,5 +33,5 @@ urlpatterns = [
     path('payment-response/', PaymentResponseView.as_view(), name='voc-registration-payment-response'),
 
     # Registration status check
-    path('<str:aadhaar_no>/status/', VocRegistrationStatusView.as_view(), name='voc-registration-status'),
+    path('<uuid:uid>/status/', VocRegistrationStatusView.as_view(), name='voc-registration-status'),
 ]
