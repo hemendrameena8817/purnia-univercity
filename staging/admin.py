@@ -2,8 +2,10 @@ from django.contrib import admin
 from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
-    RegisteredApplicantMaster, StagingApplicantQualificationDetail
+    RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent,
+    PGResultCurrent, DisciplineMasterDump
 )
+
 
 
 @admin.register(StagingInstituteMaster)
@@ -224,3 +226,61 @@ class StagingApplicantQualificationDetailAdmin(admin.ModelAdmin):
     search_fields = ('applied_class', 'applied_program', 'created_by')
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
+
+
+@admin.register(UGSemResultCurrent)
+class UGSemResultCurrentAdmin(admin.ModelAdmin):
+    list_display = (
+        'source_id', 'college_roll_no', 'student_name', 'semester_code', 
+        'course_code', 'discipline_code', 'subject_result', 'final_result', 
+        'institute_code', 'is_migrated'
+    )
+    list_filter = (
+        'is_migrated', 'semester_code', 'course_code', 'discipline_code',
+        'batch_code', 'session_code', 'institute_code', 'subject_result', 
+        'final_result', 'exam_type'
+    )
+    search_fields = (
+        'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
+        'mothers_name', 'user_id', 'source_id'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50
+
+
+@admin.register(PGResultCurrent)
+class PGResultCurrentAdmin(admin.ModelAdmin):
+    list_display = (
+        'source_id', 'college_roll_no', 'student_name', 'semester_code', 
+        'course_code', 'discipline_code', 'subject_result', 'final_result', 
+        'institute_code', 'is_migrated'
+    )
+    list_filter = (
+        'is_migrated', 'semester_code', 'course_code', 'discipline_code',
+        'batch_code', 'session_code', 'institute_code', 'subject_result', 
+        'final_result', 'exam_type'
+    )
+    search_fields = (
+        'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
+        'mothers_name', 'user_id', 'source_id'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50
+
+
+@admin.register(DisciplineMasterDump)
+class DisciplineMasterDumpAdmin(admin.ModelAdmin):
+    list_display = (
+        'source_id', 'discipline_code', 'discipline', 'discipline_name', 
+        'discipline_name_new', 'institute_code', 'is_migrated'
+    )
+    list_filter = ('is_migrated', 'institute_code', 'record_status')
+    search_fields = (
+        'discipline_code', 'discipline', 'discipline_name', 
+        'discipline_name_new', 'discipline_name_hindi', 'source_id'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50

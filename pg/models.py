@@ -188,14 +188,15 @@ class PGStudentProfile(models.Model):
     admission_date = models.DateField(null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     aadhar_no = models.CharField(max_length=12, null=True, blank=True)
+    apaar_id = models.CharField(max_length=12, blank=True, null=True)
     mobile_no = models.CharField(max_length=15, null=True, blank=True)
     migration_submitted = models.BooleanField(default=False)
     last_university = models.CharField(max_length=100, null=True, blank=True)
 
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
     caste = models.CharField(max_length=20, null=True, blank=True)
-    enrollment_date = models.DateField(null=True, blank=True)
-    roll_no = models.CharField(max_length=50, unique=True, db_index=True, null=True, blank=True)
+    # enrollment_date = models.DateField(null=True, blank=True)
+    roll_no = models.CharField(max_length=50, null=True, blank=True)
     batch = models.CharField(max_length=50, null=True, blank=True)
 
     # Family Information
@@ -271,10 +272,13 @@ class PGCourseStructure(models.Model):
     department = models.ForeignKey(
         PGDepartment,
         on_delete=models.CASCADE,
-        related_name='course_structures'
+        related_name='course_structures',
+        null=True,
+        blank=True
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
     code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
     max_marks = models.IntegerField(null=True, blank=True, help_text="Course Marks")
 
@@ -284,7 +288,7 @@ class PGCourseStructure(models.Model):
     description = models.TextField(null=True, blank=True, help_text="Course Description")
     label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
    
-    semester = models.IntegerField(null=True, blank=True, help_text="Semester")
+    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
     batch = models.ForeignKey(
         PGBatch,
         on_delete=models.CASCADE,
@@ -320,7 +324,8 @@ class PGStudentCourseAssessment(models.Model):
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
     code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
-    semester = models.IntegerField(null=True, blank=True, help_text="Semester")
+    paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
+    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
 
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
     max_marks = models.IntegerField(null=True, blank=True, help_text="Course Marks")
@@ -342,8 +347,24 @@ class PGStudentCourseAssessment(models.Model):
 
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
     exam_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status pass/fail/promoted")
+    batch = models.ForeignKey(
+        PGBatch,
+        on_delete=models.CASCADE,
+        related_name='pg_student_assessments',
+        null=True,
+        blank=True
+    )
 
-    batch = models.CharField(max_length=10, null=True, blank=True, help_text="Batch")
+    department = models.ForeignKey(
+        PGDepartment,
+        on_delete=models.CASCADE,
+        related_name='pg_student_assessments',
+        null=True,
+        blank=True
+    )
+
+    degree = models.CharField(max_length=20, null=True, blank=True)
+    attendance = models.CharField(max_length=10, null=True, blank=True, help_text="Attendance")
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
