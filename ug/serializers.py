@@ -33,12 +33,11 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
     program = UGProgramSerializer(read_only=True)
     college_name = serializers.CharField(source='college.name', read_only=True, allow_null=True)
     college_code = serializers.CharField(source='college.college_code', read_only=True, allow_null=True)
-    full_name = serializers.SerializerMethodField()
 
     class Meta:
         model = UGStudentProfile
         fields = [
-            'uid', 'first_name', 'last_name', 'full_name',
+            'uid',
             'registration_no', 'roll_no',
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
@@ -48,6 +47,3 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
             'status', 'session', 'batch'
         ]
         read_only_fields = ['uid']
-
-    def get_full_name(self, obj):
-        return obj.get_full_name() if hasattr(obj, 'get_full_name') else f"{obj.first_name or ''} {obj.last_name or ''}".strip()
