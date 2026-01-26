@@ -147,7 +147,7 @@ class VocNewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
 class VocRegistrationStatusView(views.APIView):
     """
     API View to check the registration status of a student.
-    Lookup by Aadhaar Number.
+    Lookup by UID.
     """
     permission_classes = [permissions.AllowAny]
 
@@ -155,10 +155,10 @@ class VocRegistrationStatusView(views.APIView):
         operation_summary="Check registration status",
         operation_description="Returns whether registration is completed, account created, and migration status."
     )
-    def get(self, request, aadhaar_no):
+    def get(self, request, uid):
         try:
-            registration = VocNewRegistration.objects.get(aadhaar_no=aadhaar_no, is_deleted=False)
-        except VocNewRegistration.DoesNotExist:
+            registration = VocNewRegistration.objects.get(uid=uid, is_deleted=False)
+        except (VocNewRegistration.DoesNotExist, ValueError):
             return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Get latest payment status if it exists
