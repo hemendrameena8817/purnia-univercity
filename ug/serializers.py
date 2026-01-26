@@ -1,0 +1,53 @@
+from rest_framework import serializers
+from .models import UGStudentProfile, UGDepartment, UGDegree, UGProgram
+
+
+class UGDepartmentSerializer(serializers.ModelSerializer):
+    """Lightweight Department serializer for nested use."""
+    class Meta:
+        model = UGDepartment
+        fields = ['uid', 'name', 'code']
+
+
+class UGDegreeSerializer(serializers.ModelSerializer):
+    """Lightweight Degree serializer for nested use."""
+    class Meta:
+        model = UGDegree
+        fields = ['uid', 'name', 'short_name', 'total_semesters', 'total_years']
+
+
+class UGProgramSerializer(serializers.ModelSerializer):
+    """Lightweight Program serializer for nested use."""
+    class Meta:
+        model = UGProgram
+        fields = ['uid', 'name', 'short_name']
+
+
+class UGStudentProfileSerializer(serializers.ModelSerializer):
+    """
+    UG Student Profile serializer for login response.
+    Optimized with nested serializers for related objects.
+    """
+    department = UGDepartmentSerializer(read_only=True)
+    degree = UGDegreeSerializer(read_only=True)
+    program = UGProgramSerializer(read_only=True)
+    college_name = serializers.CharField(source='college.name', read_only=True, allow_null=True)
+    college_code = serializers.CharField(source='college.college_code', read_only=True, allow_null=True)
+    full_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UGStudentProfile
+        fields = [
+            'uid', 'first_name', 'last_name', 'full_name',
+            'registration_no', 'roll_no',
+            'father_name', 'mother_name',
+            'date_of_birth', 'gender', 'caste',
+            'mobile_no', 'aadhar_no', 'address',
+            'college_name', 'college_code',
+            'department', 'degree', 'program',
+            'status', 'session', 'batch'
+        ]
+        read_only_fields = ['uid']
+
+    def get_full_name(self, obj):
+        return obj.get_full_name() if hasattr(obj, 'get_full_name') else f"{obj.first_name or ''} {obj.last_name or ''}".strip()
