@@ -8,6 +8,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .serializers import (
     LoginSerializer, 
     UserProfileSerializer,
+    ProfileSerializer,
     CollegeUserCreateSerializer
 )
 from .permissions import IsUniversityAdmin, IsCollegeUser
@@ -42,14 +43,14 @@ class LoginView(DjRestAuthLoginView):
 
 class ProfileView(APIView):
     """
-    Get current user's profile.
+    Get current user's profile with UG, PG and college profiles.
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-        serializer = UserProfileSerializer(user)
+        serializer = ProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
