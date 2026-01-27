@@ -91,17 +91,17 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(CourseStructure)
 class CourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'short_name', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
+    list_display = ('course_name', 'course_short_name', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
     list_filter = ('course_type', 'semester', 'course_code', 'department__faculty', 'department', )
-    search_fields = ('name', 'short_name', 'course_code', 'department__name')
+    search_fields = ('course_name', 'course_short_name', 'course_code', 'department__name')
     ordering = ('department', 'semester', 'course_code')
 
 
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'name', 'short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label', 'marks_obtained', 'grade', 'exam_result')
-    list_filter = ('course_type', 'semester', 'exam_type', 'exam_result', 'is_absent')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'name', 'short_name', 'course_code', 'course_type')
+    list_display = ('student', 'course_name', 'course_short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label', 'ind_marks_obtained', 'comb_letter_grade', 'sem_result')
+    list_filter = ('course_type', 'semester', 'exam_type', 'sem_result', 'ind_is_absent')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'course_name', 'course_short_name', 'course_code', 'course_type')
     ordering = ('student', 'semester', 'course_code')
 
 
