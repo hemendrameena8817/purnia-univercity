@@ -322,12 +322,12 @@ class StudentCourseAssessment(models.Model):
         related_name='course_assessments',
         help_text="Student"
     )
-    course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
+    course_type = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Course Type")
     course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
-    paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
+    paper_code = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Paper Code")
 
-    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
-    label = models.CharField(max_length=100, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
+    semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester")
+    label = models.CharField(max_length=100, db_index=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
     department = models.ForeignKey(
         UGDepartment,
         on_delete=models.CASCADE,
@@ -336,7 +336,7 @@ class StudentCourseAssessment(models.Model):
         blank=True
     )
     degree = models.CharField(max_length=20, null=True, blank=True)
-    session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
+    session = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Session")
     batch = models.ForeignKey(
         UGBatch,
         on_delete=models.CASCADE,
@@ -345,7 +345,7 @@ class StudentCourseAssessment(models.Model):
         blank=True
     )
     college_code = models.CharField(max_length=10, null=True, blank=True, help_text="College Code")
-    exam_type = models.CharField(max_length=10, null=True, blank=True, help_text="Type Regular/Back")
+    exam_type = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Type Regular/Back")
 
     ###attendance###
     attendance = models.CharField(max_length=10, null=True, blank=True, help_text="Attendance")
@@ -354,7 +354,7 @@ class StudentCourseAssessment(models.Model):
     ####Individual####
     ind_max_marks = models.IntegerField(null=True, blank=True, help_text="Individual MAX MARKS")
     ind_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual PASS MARKS")
-    ind_is_absent = models.BooleanField(default=True, help_text="Is Absent")
+    ind_is_absent = models.BooleanField(default=True, db_index=True, help_text="Is Absent")
     ind_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual MARKS OBTAINED")
     ####Individual####
 
@@ -366,6 +366,7 @@ class StudentCourseAssessment(models.Model):
     comb_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRACE MARKS OBTAINED")
     comb_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total FINAL MARKS OBTAINED")
     comb_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total CREDIT OBTAINED")
+    comb_numeric_grade = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total NUMERIC GRADE")
     comb_letter_grade = models.CharField(max_length=10, null=True, blank=True, help_text="Total LETTER GRADE")
     ####combined####
 
@@ -388,7 +389,11 @@ class StudentCourseAssessment(models.Model):
     next_sem_status = models.CharField(max_length=10, null=True, blank=True, help_text="Next Semester Status eg: eligible/not eligible")
     sem_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRACE MARKS OBTAINED")
     ####semester####
-    
+
+    #####temp#####
+    temp_total_gp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
+    #####temp#####
+
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
@@ -398,6 +403,24 @@ class StudentCourseAssessment(models.Model):
         verbose_name_plural = 'Student Course Assessments'
         ordering = ['-created_at']
         # unique_together = ('student', 'code', 'semester', 'label', 'exam_type', 'session')
+        
+        # Composite indexes for common query patterns
+        indexes = [
+            # Student-based queries
+            models.Index(fields=['student', 'semester'], name='idx_student_sem'),
+            models.Index(fields=['student', 'semester', 'label'], name='idx_stud_sem_label'),
+            
+            # Department-based queries (for faculty reports via department FK)
+            models.Index(fields=['department', 'semester'], name='idx_dept_sem'),
+            models.Index(fields=['department', 'semester', 'label'], name='idx_dept_sem_label'),
+            
+            # Batch-based queries
+            models.Index(fields=['batch', 'semester'], name='idx_batch_sem'),
+            
+            # Course-based queries
+            models.Index(fields=['paper_code', 'semester'], name='idx_paper_sem'),
+            models.Index(fields=['semester', 'label'], name='idx_sem_label'),
+        ]
         
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"

@@ -56,6 +56,12 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
+    # Performance optimizations for large datasets
+    list_select_related = ('department', 'program', 'degree', 'batch', 'college')
+    show_full_result_count = False
+    list_per_page = 50
+    raw_id_fields = ('user', 'department', 'program', 'degree', 'batch', 'college')
+    
     fieldsets = (
         ('Personal Information', {
             'fields': ('uid', 'user', 'first_name', 'last_name', 'hindi_name',
@@ -99,10 +105,18 @@ class CourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'course_name', 'course_short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label', 'ind_marks_obtained', 'comb_letter_grade', 'sem_result')
-    list_filter = ('course_type', 'semester', 'exam_type', 'sem_result', 'ind_is_absent')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'course_name', 'course_short_name', 'course_code', 'course_type')
-    ordering = ('student', 'semester', 'course_code')
+    list_display = ('student', 'semester', 'label', 'course_type', 'paper_code', 'ind_marks_obtained', 'comb_letter_grade')
+    list_filter = ('semester', 'label', 'course_type', 'exam_type', 'ind_is_absent')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'paper_code')
+    ordering = ('-created_at',)
+    
+    # Performance optimizations for large datasets
+    list_select_related = ('student', 'department', 'batch')  # Reduce DB queries for ForeignKeys
+    show_full_result_count = False  # Disable expensive COUNT(*) query
+    list_per_page = 50  # Reduce records per page (default is 100)
+    
+    # Optional: Add raw_id_fields for faster FK selection in forms
+    raw_id_fields = ('student', 'department', 'batch')
 
 
 @admin.register(SemesterRegistration)

@@ -81,12 +81,30 @@ common_course_structure_data = [
     {"semester": "Semester-VIII", "course_name": "Research Project/Dissertation", "course_type": "RP-1", "ltp": "-", "credit": 12, "marks": 100, "code":"8003"},
 ]
 
-def safe_int(value, default=None):
+def safe_int(value, default=0):
+    """Convert to int, handling None, empty strings, and 'AB'/'absent' cases."""
     if value is None or value == '':
         return default
     try:
-        return int(float(str(value).strip()))
+        # Handle 'AB', 'abs', 'absent' cases
+        val_str = str(value).strip().upper()
+        if val_str in ['AB', 'ABS', 'ABSENT']:
+            return 0
+        return int(float(val_str))
     except (ValueError, TypeError):
+        return default
+
+def safe_decimal(value, default=None):
+    """Convert to Decimal for precise numeric fields."""
+    from decimal import Decimal, InvalidOperation
+    if value is None or value == '':
+        return default
+    try:
+        val_str = str(value).strip().upper()
+        if val_str in ['AB', 'ABS', 'ABSENT']:
+            return Decimal('0.00') if default is None else default
+        return Decimal(str(value).strip())
+    except (ValueError, TypeError, InvalidOperation):
         return default
 
 def build_caches():
@@ -133,10 +151,25 @@ def migrate_data(limit=None, clear_existing=False):
     print(f"{'='*80}\n")
     
     if clear_existing:
-        print("🗑️  Clearing target table...")
+        existing_count = StudentCourseAssessment.objects.count()
+        print(f"🗑️  Clearing target table... ({existing_count:,} existing records)")
         StudentCourseAssessment.objects.all().delete()
+        print(f"✅ Table cleared successfully")
     
     students_cache, departments_cache, batches_cache, common_lookup, existing_keys = build_caches()
+    
+    # Check if migration is complete before processing
+    unmigrated_count = UGSemResultCurrent.objects.filter(is_migrated=False).count()
+    if unmigrated_count == 0:
+        print(f"🎉 {'='*80}")
+        print(f"🎉 MIGRATION COMPLETE! All records have been migrated.")
+        print(f"🎉 {'='*80}")
+        print(f"\n📊 Final Statistics:")
+        total_migrated = StudentCourseAssessment.objects.count()
+        print(f"   Total records in StudentCourseAssessment: {total_migrated:,}")
+        print(f"   Total staging records marked as migrated: {UGSemResultCurrent.objects.filter(is_migrated=True).count():,}")
+        print(f"\n✅ No more records to migrate!\n")
+        return
     
     queryset = UGSemResultCurrent.objects.filter(is_migrated=False)
     if limit:
@@ -184,40 +217,68 @@ def migrate_data(limit=None, clear_existing=False):
                     staging_ids_to_mark = []
                 continue
             
-            # Determine if absent
-            marks = staging.mark_secured
-            is_absent = True if (marks is None or marks == '' or str(marks).strip().lower() in ['abs', 'absent']) else False
+            # Determine if absent - check mark_secured field
+            mark_secured_str = str(staging.mark_secured or '').strip().upper()
+            is_absent = mark_secured_str in ['', 'AB', 'ABS', 'ABSENT'] or staging.mark_secured is None
             
+            # Individual marks - convert AB to 0
+            ind_marks = safe_int(staging.mark_secured, 0)
+            
+            # Combined and course level marks
             grace_mark = safe_int(staging.grace_given, 0)
-            is_grace = True if grace_mark > 0 else False
 
-            # Create object
+            # Create object with new field structure
             batch_assessments.append(StudentCourseAssessment(
                 student_id=student_id,
-                name=staging.subject_name,
-                short_name=staging.subject_code,
+                course_name=staging.subject_name,
+                course_short_name=staging.subject_code,
                 course_type=c_type,
                 course_code=c_code,
                 paper_code=staging.paper_code,
                 semester=staging.semester_code,
-                max_marks=safe_int(staging.maximum_mark),
-                min_mark=safe_int(staging.pass_mark),
-                marks_obtained=safe_int(staging.mark_secured),
-                credit_obtained=safe_int(staging.subject_ce),
-                grade=staging.let_grad_sub,
-                numeric_grade=safe_int(staging.numrical_let_grad),
-                exam_type=staging.exam_type,
-                exam_result=staging.subject_result,
-                final_result=staging.final_result,
-                grace_mark=grace_mark,
-                is_grace=is_grace,
-                is_absent=is_absent,
+                label=label,
+                department_id=departments_cache.get(staging.discipline_code),
+                degree=staging.course_code,
                 session=staging.session_code,
                 batch_id=batches_cache.get(str(staging.batch_code).strip()) if staging.batch_code else None,
-                department_id=departments_cache.get(staging.discipline_code),
                 college_code=staging.institute_code,
-                degree=staging.course_code,
-                label=label,
+                exam_type=staging.exam_type,
+                
+                # Individual assessment fields (NEW)
+                ind_max_marks=safe_int(staging.maximum_mark),
+                ind_pass_marks=safe_decimal(staging.pass_mark),
+                ind_is_absent=is_absent,
+                ind_marks_obtained=safe_decimal(ind_marks),
+                
+                # Combined assessment fields (NEW)
+                comb_max_marks=safe_int(staging.maximum_mark),
+                comb_pass_marks=safe_decimal(staging.pass_mark),
+                comb_marks_obtained=safe_decimal(staging.subject_total_mark),
+                comb_grace_obtained=safe_decimal(grace_mark),
+                comb_final_marks_obtained=safe_decimal(staging.final_mark),
+                comb_credit_obtained=safe_decimal(staging.subject_ce),
+                comb_letter_grade=staging.let_grad_sub,
+                comb_numeric_grade=safe_decimal(staging.subject_ng),
+                
+                # Course-level fields (NEW)
+                course_max_marks=safe_int(staging.maximum_mark),
+                course_pass_marks=safe_decimal(staging.pass_mark),
+                course_marks_obtained=safe_decimal(staging.subject_total_mark),
+                course_grace_obtained=safe_decimal(grace_mark),
+                course_final_marks_obtained=safe_decimal(staging.final_mark),
+                course_credit_obtained=safe_decimal(staging.subject_ce),
+                course_grade_point=safe_decimal(staging.subject_gp),
+                
+                # Semester-level fields (NEW)
+                sem_credit_obtained=safe_decimal(staging.total_ce),
+                sgpa=safe_decimal(staging.gpa),
+                sem_result=staging.final_result,
+                sem_grace_obtained=safe_decimal(grace_mark),
+                
+                # Temp field
+                temp_total_gp=safe_decimal(staging.total_gp),
+                
+                # JSON data - store complete staging record
                 json_data={
                     k: (v.isoformat() if isinstance(v, datetime) else v)
                     for k, v in staging.__dict__.items() 
@@ -275,6 +336,26 @@ def migrate_data(limit=None, clear_existing=False):
     duration = (datetime.now() - start_time).total_seconds()
     print(f"\n🏁 Done in {duration:.1f}s | Avg Rate: {stats['processed']/duration:.0f}/s")
     print(f"✅ Total Created: {stats['created']:,} | Duplicates: {stats['duplicates']:,} | Skipped: {stats['skipped']:,}")
+    
+    # Show progress
+    total_migrated = StudentCourseAssessment.objects.count()
+    remaining = UGSemResultCurrent.objects.filter(is_migrated=False).count()
+    total_staging = UGSemResultCurrent.objects.count()
+    percent = (total_migrated / total_staging * 100) if total_staging > 0 else 0
+    
+    print(f"\n📊 Migration Progress:")
+    print(f"   Total migrated: {total_migrated:,} / {total_staging:,} ({percent:.1f}%)")
+    print(f"   Remaining: {remaining:,} records")
+    if remaining > 0:
+        est_time = (remaining / (stats['processed']/duration)) / 60 if duration > 0 else 0
+        print(f"   Est. time for remaining: {est_time:.1f} minutes (at current rate)")
+        print(f"\n💡 Run this command again to process next batch")
+    else:
+        print(f"\n🎉 ALL RECORDS MIGRATED! Migration is complete.")
 
 if __name__ == '__main__':
-    migrate_data()
+    # Continue with next batch of 10,000 records
+    # clear_existing=False to keep existing migrated data
+    migrate_data(limit=10000, clear_existing=False)
+
+
