@@ -1,5 +1,13 @@
 from rest_framework import serializers
 from .models import UGStudentProfile, UGDepartment, UGDegree, UGProgram
+from colleges.models import College
+
+
+class UGCollegeSerializer(serializers.ModelSerializer):
+    """Lightweight College serializer for nested use."""
+    class Meta:
+        model = College
+        fields = ['uid', 'name', 'short_name', 'college_code']
 
 
 class UGDepartmentSerializer(serializers.ModelSerializer):
@@ -31,8 +39,7 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
     department = UGDepartmentSerializer(read_only=True)
     degree = UGDegreeSerializer(read_only=True)
     program = UGProgramSerializer(read_only=True)
-    college_name = serializers.CharField(source='college.name', read_only=True, allow_null=True)
-    college_code = serializers.CharField(source='college.college_code', read_only=True, allow_null=True)
+    college = UGCollegeSerializer(read_only=True)
 
     class Meta:
         model = UGStudentProfile
@@ -42,8 +49,8 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
             'mobile_no', 'aadhar_no', 'address',
-            'college_name', 'college_code',
+            'college',
             'department', 'degree', 'program',
-            'status', 'session', 'batch','is_active'
+            'status', 'session', 'batch', 'is_active'
         ]
         read_only_fields = ['uid']
