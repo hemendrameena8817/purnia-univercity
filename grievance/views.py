@@ -20,7 +20,7 @@ from .serializers import (
     GrievanceAttachmentSerializer,
 )
 from .utils.format_error import get_first_serializer_error
-
+from pup_umis_backend.utils.pagination import DefaultPagination
 
 class GrievanceListCreateView(APIView):
     """
@@ -35,9 +35,15 @@ class GrievanceListCreateView(APIView):
             openapi.Parameter(
                 'status',
                 openapi.IN_QUERY,
-                description="Filter by status",
+                description="Filter by status (for staff)",
                 type=openapi.TYPE_STRING,
-                enum=['open', 'in_progress', 'resolved', 'closed', 'escalated']
+                enum=['open', 'in_progress', 'resolved', 'closed', 'canceled', 'escalated']
+            ),
+            openapi.Parameter(
+                'is_resolved',
+                openapi.IN_QUERY,
+                description="Filter by resolution status (true/false, for students/all)",
+                type=openapi.TYPE_BOOLEAN
             ),
             openapi.Parameter(
                 'category',
@@ -52,13 +58,25 @@ class GrievanceListCreateView(APIView):
                 type=openapi.TYPE_STRING,
                 enum=['college', 'university']
             ),
+            openapi.Parameter(
+                'page',
+                openapi.IN_QUERY,
+                description="Page number",
+                type=openapi.TYPE_INTEGER
+            ),
+            openapi.Parameter(
+                'limit',
+                openapi.IN_QUERY,
+                description="Number of results to return per page",
+                type=openapi.TYPE_INTEGER
+            ),
         ],
         responses={200: GrievanceListSerializer(many=True)},
         tags=['Grievances'],
         security=[{'Bearer': []}]
     )
     def get(self, request):
-        """List grievances based on user role"""
+        """List grievances based on user role with pagination and filtering"""
         user = request.user
         
         # Filter based on user type
@@ -101,6 +119,12 @@ class GrievanceListCreateView(APIView):
         status_filter = request.query_params.get('status')
         if status_filter:
             queryset = queryset.filter(status=status_filter)
+            
+        is_resolved_filter = request.query_params.get('is_resolved')
+        if is_resolved_filter is not None:
+            # Handle boolean conversion
+            is_resolved_bool = is_resolved_filter.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(is_grievance_resolved=is_resolved_bool)
         
         category_filter = request.query_params.get('category')
         if category_filter:
@@ -108,8 +132,17 @@ class GrievanceListCreateView(APIView):
             queryset = queryset.filter(category__uid=category_filter)
         
         queryset = queryset.order_by('-submitted_at')
+        
+        paginator = DefaultPagination()
+        result_page = paginator.paginate_queryset(queryset, request)
+
+        if result_page is not None:
+            serializer = GrievanceListSerializer(result_page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
         serializer = GrievanceListSerializer(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
 
     @swagger_auto_schema(
         operation_description="""Submit a new grievance (students only).

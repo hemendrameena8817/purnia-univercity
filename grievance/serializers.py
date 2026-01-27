@@ -79,6 +79,8 @@ class GrievanceListSerializer(serializers.ModelSerializer):
     college_name = serializers.CharField(source='assigned_to_college.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     category_display = serializers.CharField(source='category.name', read_only=True)
+    attachments = GrievanceAttachmentSerializer(many=True, read_only=True)
+    categories = GrievanceCategorySerializer(many=True, read_only=True)
     
     class Meta:
         model = Grievance
@@ -96,6 +98,12 @@ class GrievanceListSerializer(serializers.ModelSerializer):
             'escalated_to_university',
             'submitted_at',
             'updated_at',
+            'resolved_at',
+            'closed_at',
+            'final_remark',
+            'attachments',
+            'categories',
+            'description',
         ]
         read_only_fields = ['uid', 'grievance_number', 'submitted_at', 'updated_at']
 
@@ -237,6 +245,8 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Grievance
         fields = [
+            'uid',
+            'grievance_number',
             'contact_person_name',
             'contact_person_phone_number',
             'category_uid',
@@ -245,8 +255,10 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
             'subject',
             'description',
             'attachment_uids',
+            'submitted_at',
         ]
-    
+        read_only_fields = ['uid', 'grievance_number', 'submitted_at']
+
     def create(self, validated_data):
         # Get user from request context
         request = self.context.get('request')
@@ -263,7 +275,6 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
             validated_data['category'] = category
         except GrievanceCategory.DoesNotExist:
             raise serializers.ValidationError({"error": "Invalid or inactive category"})
-        
         
         college_uid = validated_data.pop('college_uid')
         active_profile = validated_data.pop('active_profile')
@@ -292,7 +303,6 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
                 print(f"Warning: Only {updated_count} of {len(attachment_uids)} attachments were linked")
         
         return grievance
-
 
 class GrievanceUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating grievance (college/university staff)"""
