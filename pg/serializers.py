@@ -1,5 +1,13 @@
 from rest_framework import serializers
 from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram
+from colleges.models import College
+
+
+class PGCollegeSerializer(serializers.ModelSerializer):
+    """Lightweight College serializer for nested use."""
+    class Meta:
+        model = College
+        fields = ['uid', 'name', 'short_name', 'college_code']
 
 
 class PGDepartmentSerializer(serializers.ModelSerializer):
@@ -31,8 +39,7 @@ class PGStudentProfileSerializer(serializers.ModelSerializer):
     department = PGDepartmentSerializer(read_only=True)
     degree = PGDegreeSerializer(read_only=True)
     program = PGProgramSerializer(read_only=True)
-    college_name = serializers.CharField(source='college.name', read_only=True, allow_null=True)
-    college_code = serializers.CharField(source='college.college_code', read_only=True, allow_null=True)
+    college = PGCollegeSerializer(read_only=True)
 
     class Meta:
         model = PGStudentProfile
@@ -42,8 +49,8 @@ class PGStudentProfileSerializer(serializers.ModelSerializer):
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
             'mobile_no', 'aadhar_no', 'address',
-            'college_name', 'college_code',
+            'college',
             'department', 'degree', 'program',
-            'status', 'session', 'batch','is_active'
+            'status', 'session', 'batch', 'is_active'
         ]
         read_only_fields = ['uid']
