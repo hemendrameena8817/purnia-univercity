@@ -57,10 +57,10 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     
     # Performance optimizations for large datasets
-    list_select_related = ('department', 'program', 'degree', 'batch', 'college')
+    list_select_related = ('college', 'department', 'program', 'degree')
     show_full_result_count = False
     list_per_page = 50
-    raw_id_fields = ('user', 'department', 'program', 'degree', 'batch', 'college')
+    raw_id_fields = ('user', 'college', 'department', 'program', 'degree')
     
     fieldsets = (
         ('Personal Information', {
