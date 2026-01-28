@@ -84,8 +84,6 @@ class Grievance(models.Model):
         blank=True
     )
     
-    # Can be escalated to university
-    escalated_to_university = models.BooleanField(default=False)
     assigned_to_university = models.ForeignKey(
         'university.University',
         on_delete=models.CASCADE,
@@ -181,7 +179,8 @@ class Grievance(models.Model):
     
     def escalate_to_university(self):
         """Escalate grievance to university level"""
-        self.escalated_to_university = True
+        self.is_assigned_to_university = True
+        self.is_assigned_to_college = False
         self.status = 'escalated'
         if self.user and hasattr(self.user, 'get_college'):
             college = self.user.get_college()
@@ -219,9 +218,7 @@ class GrievanceComment(models.Model):
     
     COMMENT_TYPE_CHOICES = [
         ('comment', 'Comment'),
-        ('status_update', 'Status Update'),
-        ('escalation', 'Escalation'),
-        ('resolution', 'Resolution'),
+        ('action_update', 'Action Update'),
     ]
     
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
