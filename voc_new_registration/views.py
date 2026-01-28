@@ -11,6 +11,7 @@ from .models import (
     NewRegistrationBatch,
     NewRegistrationSession
 )
+from .utils.registration_logic import generate_registration_number
 from .serializers import (
     CourseMinimalSerializer,
     BatchMinimalSerializer,
@@ -219,6 +220,14 @@ class RegistrationStatusView(views.APIView):
         latest_payment = registration.payments.order_by('-created_at').first()
         payment_status = latest_payment.payment_status if latest_payment else None
 
+        if not registration.registration_number and registration.is_registration_completed:
+            try:
+                registration.registration_number = generate_registration_number(registration)
+                registration.save()
+            except Exception as e:
+                # Log error but don't block the status return
+                print(f"Error generating registration number in StatusView: {str(e)}")
+
         return Response({
             "uid": registration.uid,
             "student_name": registration.student_name,
@@ -226,7 +235,8 @@ class RegistrationStatusView(views.APIView):
             "is_account_created": registration.is_account_created,
             "migrated_from_other_university": registration.migrated_from_other_university,
             "latest_payment_status": payment_status,
-            "aadhaar_no": registration.aadhaar_no
+            "aadhaar_no": registration.aadhaar_no,
+            "registration_number": registration.registration_number
         }, status=status.HTTP_200_OK)
 
 
@@ -379,10 +389,20 @@ class PaymentResponseView(views.APIView):
         
         if auth_status == 'Success':
             payment.payment_status = 'SUCCESS'
-            # Complete registration
+            # Complete registration using serializer to trigger reg_no generation
             reg = payment.registration
-            reg.is_registration_completed = True
-            reg.save()
+            serializer = NewRegistrationUpdateSerializer(
+                reg, 
+                data={'is_registration_completed': True}, 
+                partial=True
+            )
+            if serializer.is_valid():
+                serializer.save()
+            else:
+                # Log error or handle failure
+                print(f"Serializer error for {reg.aadhaar_no}: {serializer.errors}")
+                reg.is_registration_completed = True
+                reg.save()
         elif auth_status == 'Aborted':
             payment.payment_status = 'ABORTED'
         else:
