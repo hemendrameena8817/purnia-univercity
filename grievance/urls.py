@@ -2,7 +2,8 @@ from django.urls import path
 from .views import (
     GrievanceListCreateView,
     GrievanceDetailView,
-    GrievanceCommentView,
+    GrievanceCommentListView,
+    GrievanceCommentCreateView,
     GrievanceStatsView,
     GrievanceCategoryListView,
     GrievanceAttachmentUploadView,
@@ -24,6 +25,9 @@ urlpatterns = [
     # Retrieve or update a specific grievance (by ID or grievance_number)
     path('<str:identifier>/', GrievanceDetailView.as_view(), name='grievance-detail'),
     
+    # Get all comments for a grievance
+    path('<str:identifier>/comments/', GrievanceCommentListView.as_view(), name='grievance-comments-list'),
+    
     # Add comment to a grievance
-    path('<str:identifier>/comments/', GrievanceCommentView.as_view(), name='grievance-comment'),
+    path('<str:identifier>/add-comment/', GrievanceCommentCreateView.as_view(), name='grievance-comment-add'),
 ]

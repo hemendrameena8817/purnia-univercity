@@ -1,7 +1,7 @@
 import uuid
 from django.db import models
 from django.utils import timezone
-import random
+
 
 ACTIVITY_STATUS_CHOICES = [
     ('open', 'Open'),
@@ -53,7 +53,7 @@ class Grievance(models.Model):
         null=True,
         blank=True
     )
-    contact_person_name = models.CharField(max_length=255, null=True, blank=True)  # Cached for quick access
+    contact_person_name = models.CharField(max_length=255, null=True, blank=True) 
     contact_person_phone_number = models.CharField(max_length=15, null=True, blank=True)
     is_assigned_to_college = models.BooleanField(default=True)
     is_assigned_to_university = models.BooleanField(default=False)
@@ -84,8 +84,6 @@ class Grievance(models.Model):
         blank=True
     )
     
-    # Can be escalated to university
-    escalated_to_university = models.BooleanField(default=False)
     assigned_to_university = models.ForeignKey(
         'university.University',
         on_delete=models.CASCADE,
@@ -167,19 +165,22 @@ class Grievance(models.Model):
         super().save(*args, **kwargs)
     
     def generate_grievance_number(self):
-        """Generate unique grievance number in format XXXXXXXXXX"""
+        """Generate unique grievance number in sequence format GRV000001"""
+        # Get count of all grievances to determine next sequential number.
+        # We start with count + 1 and increment if we hit a collision
+        sequence_number = Grievance.objects.all().count() + 1
+        
         while True:
-            # Generate 10-digit random number
-            unique_number = ''.join([str(random.randint(0, 9)) for _ in range(10)])
-            grievance_number = f"{unique_number}"
-            
-            # Check if it already exists
+            grievance_number = f"GRV{sequence_number:06d}"
+            # Check if it already exists to ensure uniqueness
             if not Grievance.objects.filter(grievance_number=grievance_number).exists():
                 return grievance_number
+            sequence_number += 1
     
     def escalate_to_university(self):
         """Escalate grievance to university level"""
-        self.escalated_to_university = True
+        self.is_assigned_to_university = True
+        self.is_assigned_to_college = False
         self.status = 'escalated'
         if self.user and hasattr(self.user, 'get_college'):
             college = self.user.get_college()
@@ -217,9 +218,7 @@ class GrievanceComment(models.Model):
     
     COMMENT_TYPE_CHOICES = [
         ('comment', 'Comment'),
-        ('status_update', 'Status Update'),
-        ('escalation', 'Escalation'),
-        ('resolution', 'Resolution'),
+        ('action_update', 'Action Update'),
     ]
     
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)

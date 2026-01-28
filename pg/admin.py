@@ -90,18 +90,18 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(PGCourseStructure)
 class PGCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'department', 'course_type', 'code', 'semester', 'max_marks', 'max_credit', 'label')
+    list_display = ('course_name', 'department', 'course_type', 'code', 'semester', 'max_marks', 'max_credit', 'label')
     list_filter = ('department__faculty', 'department', 'course_type', 'semester')
-    search_fields = ('name', 'code', 'department__name', 'label')
+    search_fields = ('course_name', 'course_short_name', 'code', 'department__name', 'label')
     ordering = ('department', 'semester', 'code')
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'name', 'department', 'course_type', 'code', 'semester')
+            'fields': ('uid', 'course_name', 'course_short_name', 'department', 'course_type', 'code', 'semester')
         }),
         ('Credits & Marks', {
-            'fields': ('max_credit', 'min_credit', 'max_marks', 'min_mark')
+            'fields': ('max_credit', 'max_marks', 'min_marks')
         }),
         ('Assessment Details', {
             'fields': ('label', 'description')
@@ -119,28 +119,37 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'course_type', 'code', 'semester', 'label', 
-                   'marks_obtained', 'max_marks', 'grade', 'exam_result', 'is_absent')
-    list_filter = ('semester', 'course_type', 'exam_type', 'exam_result', 'is_absent', 'session', 'batch')
-    search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'code', 'label')
+    list_display = ('student', 'course_type', 'course_code', 'semester', 'label', 
+                   'ind_marks_obtained', 'comb_final_marks_obtained', 'comb_letter_grade', 'sem_result', 'ind_is_absent')
+    list_filter = ('semester', 'course_type', 'exam_type', 'sem_result', 'ind_is_absent', 'session', 'batch')
+    search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'course_code', 'course_name', 'label')
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Student & Course Info', {
-            'fields': ('uid', 'student', 'course_type', 'code', 'semester', 'label')
-        }),
-        ('Credits & Marks Configuration', {
-            'fields': ('max_credit', 'min_credit', 'max_marks', 'min_mark')
-        }),
-        ('Assessment Results', {
-            'fields': ('marks_obtained', 'credit_obtained', 'grade', 'numeric_grade')
+            'fields': ('uid', 'student', 'course_name', 'course_short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label')
         }),
         ('Exam Details', {
-            'fields': ('is_absent', 'exam_type', 'exam_result', 'session', 'batch')
+            'fields': ('exam_type', 'session', 'batch', 'department', 'degree', 'college_code', 'attendance')
         }),
-        ('Description', {
-            'fields': ('description',),
+        ('Individual Assessment', {
+            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 'ind_is_absent')
+        }),
+        ('Combined Assessment', {
+            'fields': ('comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained', 
+                      'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained', 
+                      'comb_numeric_grade', 'comb_letter_grade')
+        }),
+        ('Course Assessment', {
+            'fields': ('course_max_marks', 'course_max_credits', 'course_pass_marks', 'course_marks_obtained',
+                      'course_grace_obtained', 'course_final_marks_obtained', 'course_credit_obtained', 'course_grade_point')
+        }),
+        ('Semester Assessment', {
+            'fields': ('sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained')
+        }),
+        ('Temp Fields', {
+            'fields': ('temp_total_gp',),
             'classes': ('collapse',)
         }),
         ('Additional Data', {
