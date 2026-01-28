@@ -44,7 +44,9 @@ class PGDepartment(models.Model):
     faculty = models.ForeignKey(
         PGFaculty,
         on_delete=models.CASCADE,
-        related_name='departments'
+        related_name='departments',
+        null=True,
+        blank=True
     )
 
     json_data = models.JSONField(null=True, blank=True)
@@ -56,7 +58,9 @@ class PGDepartment(models.Model):
         verbose_name_plural = 'PG Departments'
 
     def __str__(self):
-        return f"{self.name} ({self.faculty.short_name or self.faculty.name})"
+        if self.faculty:
+            return f"{self.name} ({self.faculty.short_name or self.faculty.name})"
+        return str(self.name)
 
 
 class PGDegree(models.Model):
@@ -483,18 +487,18 @@ class PGExamRegistration(models.Model):
         return f"{self.student}"
 
 
-class CommonCourseStructure(models.Model):
+class PGCommonCourseStructure(models.Model):
     """
     Represents the common course structure for a semester (CBCS).
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     semester = models.CharField(max_length=50, help_text="e.g., Semester-I")
-    course_name = models.CharField(max_length=255, help_text="e.g., Major Course 1")
-    course_type = models.CharField(max_length=50, help_text="e.g., MJC-1")
+    course_name = models.CharField(max_length=255, help_text="e.g., CC ")
+    course_type = models.CharField(max_length=50, help_text="e.g., CC-1")
     # ltp = models.CharField(max_length=20, null=True, blank=True, help_text="L-T-P e.g., 6-1-0")
     credit = models.PositiveIntegerField(default=0)
     marks = models.PositiveIntegerField(default=100)
-    old_code  = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    old_code  = models.CharField(max_length=20, null=True, blank=True, help_text="eg: 1001, 1002, 2001")
     cia_marks = models.PositiveIntegerField(default=100)
     ese_marks = models.PositiveIntegerField(default=100)
     new_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
@@ -503,7 +507,7 @@ class CommonCourseStructure(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Common Course Structure'
+        verbose_name = 'PGCommon Course Structure'
         verbose_name_plural = 'Common Course Structures'
         ordering = ['semester', 'course_name']
 
