@@ -1,6 +1,14 @@
 import uuid
 from django.db import models
 
+from .choices import (
+    SEMESTER_RESULT_CHOICES,
+    STUDENT_STATUS_CHOICES,
+    GENDER_CHOICES,
+    EXAM_TYPE_CHOICES,
+    PROMOTION_STATUS_CHOICES,
+)
+
 
 class UGFaculty(models.Model):
     """
@@ -158,17 +166,6 @@ class UGStudentProfile(models.Model):
     Contains undergrad-specific course selections: Major, Minor, MDC.
     """
 
-    STATUS_CHOICES = [
-        ('Active', 'Active'),
-        ('Suspended', 'Suspended'),
-        ('Alumni', 'Alumni'),
-    ]
-
-    GENDER_CHOICES = [
-        ('Male', 'Male'),
-        ('Female', 'Female'),
-        ('Other', 'Other'),
-    ]
     
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
@@ -206,7 +203,7 @@ class UGStudentProfile(models.Model):
     # Academic Information
     current_semester = models.PositiveIntegerField(null=True, blank=True)
     session = models.CharField(max_length=50, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Active')
+    status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='Active')
 
     # Relationships
     college = models.ForeignKey(
@@ -424,6 +421,68 @@ class StudentCourseAssessment(models.Model):
         
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"
+
+
+class UGExamResult(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    student = models.ForeignKey(
+        'ug.UGStudentProfile',
+        on_delete=models.CASCADE,
+        related_name='exam_results'
+    )
+
+    semester = models.CharField(max_length=10, db_index=True)
+    session = models.CharField(max_length=10, db_index=True)
+
+    # CIA / ESE STATUS
+    cia_pass = models.BooleanField()
+    ese_pass = models.BooleanField()
+
+    # FINAL SEM RESULT
+    semester_result = models.CharField(
+        max_length=20,
+        db_index=True,
+        choices=SEMESTER_RESULT_CHOICES,
+        help_text="Semester result status (PASS / FAIL / PROMOTED / ABSENT / DISQUALIFIED etc.)"
+    )
+
+    # CREDIT & SGPA
+    semester_max_credit = models.PositiveIntegerField()
+    semester_credit_earned = models.PositiveIntegerField()
+
+    sgpa = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    # PROMOTION
+    next_semester = models.PositiveIntegerField(null=True, blank=True)
+    next_sem_status = models.CharField(
+        max_length=15,
+        null=True,
+        blank=True,
+        help_text="Next semester status (ELIGIBLE / NOT_ELIGIBLE / etc.)"
+    )
+
+    # META
+    is_legacy = models.BooleanField(default=False)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Exam Result'
+        verbose_name_plural = 'Exam Results'
+        unique_together = ('student', 'semester', 'session')
+        indexes = [
+            models.Index(fields=['student', 'semester']),
+            models.Index(fields=['semester', 'session']),
+            models.Index(fields=['semester_result']),
+        ]
 
 
 class SemesterRegistration(models.Model):

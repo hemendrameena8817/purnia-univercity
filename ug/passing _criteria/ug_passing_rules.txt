@@ -1,0 +1,198 @@
+Purnea University – UG CBCS
+FINAL RESULT, CREDIT, SGPA & CGPA RULES
+(Authoritative – Pages 18 to 21)
+
+==================================================
+SOURCE
+==================================================
+
+1. UG CBCS Ordinance & Regulations (Pages 18, 19, 20, 21)
+2. Passing Criteria for UG CBCS (B.A., B.Sc., B.Com)
+
+These rules MUST be used at the time of preparation
+of results of the candidates who appeared in examination.
+
+==================================================
+RESULT LEVEL DEFINITIONS
+==================================================
+
+I. Semester Grade Point Average (SGPA)
+   - Calculated at the END of EACH semester.
+
+II. Cumulative Grade Point Average (CGPA)
+   - Calculated at the END of the PROGRAMME.
+
+==================================================
+GRADING SYSTEM (TABLE 4 – OFFICIAL)
+==================================================
+
+Final Marks (%) | Letter Grade | Numerical Grade | Description
+--------------------------------------------------------------
+>= 90 – 100     | O            | 10              | Outstanding
+>= 80 – < 90    | A+           | 9               | Excellent
+>= 70 – < 80    | A            | 8               | Very Good
+>= 60 – < 70    | B+           | 7               | Good
+>= 55 – < 60    | B            | 6               | Above Average
+>= 50 – < 55    | C            | 5               | Average
+>= 45 – < 50    | P            | 4               | Pass
+< 45            | F            | 0               | Fail
+Absent          | Ab           | 0               | Absent
+
+--------------------------------------------------
+GRADE APPLICATION RULES
+--------------------------------------------------
+
+1. Grade is assigned based on FINAL MARKS of the course.
+2. FAILED course:
+   - Letter Grade = F
+   - Numerical Grade = 0
+   - Credit Earned = 0
+3. ABSENT course:
+   - Letter Grade = Ab
+   - Numerical Grade = 0
+   - Credit Earned = 0
+
+==================================================
+COURSE CREDIT RULE
+==================================================
+
+- Each course/paper has a FIXED credit value.
+- Credit value is defined by the prescribed course structure.
+- Credit value is NOT influenced by marks or grades.
+
+COURSE CREDIT EARNING:
+- PASSED course → FULL credit earned
+- FAILED / ABSENT course → 0 credit
+- Partial credit is NOT permitted.
+
+==================================================
+SEMESTER RESULT (PASS / PROMOTED / FAILED)
+==================================================
+
+If a student passes in:
+- ALL CIA and ALL THEORY papers → PASS
+
+If a student passes in:
+- ALL CIA but FAILS in ANY THEORY paper → PROMOTED
+
+If a student passes in:
+- ALL THEORY but FAILS in ANY CIA → FAILED
+
+--------------------------------------------------
+GRACE RULE
+--------------------------------------------------
+
+- If a student FAILS in any semester:
+  - Grace of MAXIMUM 05 marks (in split manner) may be provided
+  - Grace is only to CLEAR failed subject(s)
+  - Grace must NOT be used to improve grade or SGPA
+
+==================================================
+SEMESTER CREDIT & SGPA RULE
+==================================================
+
+semester_max_credit:
+- Sum of credits prescribed for the semester.
+
+semester_credit_earned:
+- Sum of credits of PASSED courses only.
+
+--------------------------------------------------
+SGPA ELIGIBILITY (MANDATORY NOTE)
+--------------------------------------------------
+
+A candidate SHALL NOT be awarded or calculated
+ANY SGPA if he/she FAILS to earn the TOTAL prescribed
+credits in that particular semester.
+
+--------------------------------------------------
+SGPA FORMULA (AS PER ORDINANCE)
+--------------------------------------------------
+
+SGPA = ( Σ (m_i × o_i) ) / ( Σ o_i )
+
+Where:
+- n   = number of courses in the semester
+- m_i = numerical grade obtained in course i
+- o_i = credit of course i
+
+FAILED / ABSENT courses:
+- m_i = 0
+- o_i = 0 (credit not earned)
+
+==================================================
+PROMOTION RULES
+==================================================
+
+--------------------------------------------------
+PROMOTION TO SEMESTER III
+--------------------------------------------------
+
+ELIGIBLE if:
+- Student passes in ALL CIA components, AND
+- Secures AT LEAST 28 credits in Semester I & II taken together
+
+NOT ELIGIBLE if:
+- CIA passed but total credits in Sem I & II < 28
+
+--------------------------------------------------
+PROMOTION TO SEMESTER V
+--------------------------------------------------
+
+ELIGIBLE if:
+- Student passes in ALL CIA components, AND
+- Earns total credits of 40 (20 + 20) in Semester I & II, AND
+- Earns AT LEAST 68 credits in Semester I, II, III & IV together
+
+Else:
+- NOT ELIGIBLE
+
+==================================================
+CGPA RULES (END OF PROGRAMME)
+==================================================
+
+- CGPA is calculated at the END of the programme.
+- CGPA uses SGPA values of ALL semesters.
+
+CGPA FORMULA:
+CGPA = ( Σ (SGPA × Semester Credits) ) / ( Σ Semester Credits )
+
+--------------------------------------------------
+MINIMUM CGPA FOR DEGREE
+--------------------------------------------------
+
+- Minimum CGPA required for award of Bachelor Degree = 4.5
+
+If:
+- CGPA < 4.5
+- BUT student earned REQUIRED credits
+- AND passed in ALL papers/courses
+
+Then:
+- 0.5 shall be ADDED to actual CGPA
+- Final CGPA SHALL NOT exceed 4.5
+
+--------------------------------------------------
+CGPA TO PERCENTAGE CONVERSION
+--------------------------------------------------
+
+% of Marks = CGPA × 10
+
+==================================================
+RESULT DISPLAY RULE
+==================================================
+
+The award sheet / result shall display:
+- Grades obtained in ALL courses/papers
+- SGPA of each semester
+- CGPA
+- Promotion status
+
+==================================================
+FINAL CONSTRAINT
+==================================================
+
+No result, credit, SGPA, CGPA, promotion, or eligibility
+logic is permitted outside THIS document.
+
+This document is the SINGLE SOURCE OF TRUTH.

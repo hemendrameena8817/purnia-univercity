@@ -105,18 +105,49 @@ class CourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'semester', 'label', 'course_type', 'paper_code', 'ind_marks_obtained', 'comb_letter_grade')
-    list_filter = ('semester', 'label', 'course_type', 'exam_type', 'ind_is_absent')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'paper_code')
-    ordering = ('-created_at',)
+    # Simplified display - only essential fields
+    list_display = ('id', 'student', 'semester', 'label', 'paper_code', 'ind_marks_obtained')
     
-    # Performance optimizations for large datasets
-    list_select_related = ('student', 'department', 'batch')  # Reduce DB queries for ForeignKeys
-    show_full_result_count = False  # Disable expensive COUNT(*) query
-    list_per_page = 50  # Reduce records per page (default is 100)
+    # Only indexed fields in filters
+    list_filter = ('semester', 'label', 'course_type', 'ind_is_absent')
     
-    # Optional: Add raw_id_fields for faster FK selection in forms
+    # Search only by indexed fields
+    search_fields = ('student__registration_no', 'paper_code')
+    
+    # Order by indexed field (created_at has auto index)
+    ordering = ('-id',)
+    
+    # Aggressive performance optimizations for 2M+ records
+    list_select_related = ('student',)  # Only most critical FK
+    show_full_result_count = False  # Skip COUNT query
+    list_per_page = 25  # Reduced from 50
+    date_hierarchy = None  # Disable date drill-down
+    
+    # Fast FK lookups in forms
     raw_id_fields = ('student', 'department', 'batch')
+    
+    # Disable unnecessary features
+    actions = None  # Disable bulk actions for speed
+    
+    def has_add_permission(self, request):
+        # Disable add in admin (use migration scripts instead)
+        return False
+    
+    def get_queryset(self, request):
+        """Optimize queryset - limit to recent records by default"""
+        qs = super().get_queryset(request)
+        
+        # If no filters applied, only show records from last 100k IDs
+        # This approach works with .distinct() unlike slicing
+        if not request.GET or request.GET.get('all'):
+            from django.db.models import Max
+            max_id = StudentCourseAssessment.objects.aggregate(Max('id'))['id__max']
+            if max_id:
+                # Only show last 100k records by ID range
+                min_id = max(1, max_id - 100000)
+                qs = qs.filter(id__gte=min_id)
+        
+        return qs
 
 
 @admin.register(SemesterRegistration)
