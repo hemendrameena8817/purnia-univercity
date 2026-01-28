@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment
 
 
@@ -57,10 +58,8 @@ class GrievanceAdmin(admin.ModelAdmin):
     list_filter = [
         'status',
         'category',
-        'escalated_to_university',
         'is_deleted',
         'assigned_to_college',
-        # 'submitted_at',  # Removed due to MySQL timezone issue
     ]
     search_fields = [
         'grievance_number',
@@ -113,7 +112,7 @@ class GrievanceAdmin(admin.ModelAdmin):
         }),
     )
     inlines = [GrievanceAttachmentInline, GrievanceCommentInline]
-    # date_hierarchy = 'submitted_at'  # Removed due to MySQL timezone issue
+   
 
 
 @admin.register(GrievanceAttachment)
@@ -143,10 +142,26 @@ class GrievanceCommentAdmin(admin.ModelAdmin):
         return obj.created_at.strftime('%Y-%m-%d %H:%M') if obj.created_at else '-'
     comment_date.short_description = 'Created'
     
+    def attachments(self, obj):
+        attachments = obj.attachments.all()
+        if not attachments.exists():
+            return "No Attachments"
+        
+        links = []
+        for att in attachments:
+            if att.file:
+                links.append(format_html('<a href="{}" target="_blank">{}</a>', att.file.url, att.file_name))
+            else:
+                links.append(att.file_name)
+        
+        return format_html("<br>".join(links))
+    attachments.short_description = 'Attachments'
+
     list_display = [
         'grievance',
         'commented_by',
         'comment_type',
+        'attachments',
         'previous_status',
         'new_status',
         'is_internal',
@@ -155,20 +170,19 @@ class GrievanceCommentAdmin(admin.ModelAdmin):
     list_filter = [
         'comment_type',
         'is_internal',
-        # 'created_at',  # Removed due to MySQL timezone issue
     ]
     search_fields = [
         'grievance__grievance_number',
         'comment',
         'commented_by__username',
     ]
-    readonly_fields = ['uid', 'created_at', 'updated_at']
+    readonly_fields = ['uid', 'created_at', 'updated_at', 'attachments']
     fieldsets = (
         ('Comment Information', {
             'fields': ('uid', 'grievance', 'commented_by', 'comment_type')
         }),
         ('Content', {
-            'fields': ('comment', 'attachment', 'is_internal')
+            'fields': ('comment', 'attachments', 'is_internal')
         }),
         ('Status Change', {
             'fields': ('previous_status', 'new_status')
@@ -177,4 +191,3 @@ class GrievanceCommentAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at')
         }),
     )
-    date_hierarchy = 'created_at'
