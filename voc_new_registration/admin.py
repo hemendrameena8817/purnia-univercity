@@ -34,16 +34,19 @@ class NewRegistrationAdmin(admin.ModelAdmin):
     list_display = [
         'student_name',
         'course',
+        'course_type',
         'batch',
         'gender',
         'mobile_no',
         'college',
         'migration_submitted',
         'is_registration_completed',
+        'registration_number',
         'created_at',
     ]
     list_filter = [
         'course',
+        'course_type',
         'batch',
         'gender',
         'caste',
@@ -67,6 +70,8 @@ class NewRegistrationAdmin(admin.ModelAdmin):
                 'uid',
                 'profile_picture',
                 'signature',
+                'migration_certificate',
+                'registration_certificate',
                 'student_name',
                 'student_name_hindi',
                 'father_name',
@@ -76,6 +81,7 @@ class NewRegistrationAdmin(admin.ModelAdmin):
         ('Course & Category', {
             'fields': (
                 'course',
+                'course_type',
                 'batch',
                 'gender',
                 'caste',
@@ -98,6 +104,7 @@ class NewRegistrationAdmin(admin.ModelAdmin):
                 'old_registration_no',
                 'is_account_created',
                 'is_registration_completed',
+                'registration_number',
                 'college',
             )
         }),
