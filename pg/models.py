@@ -271,7 +271,8 @@ class PGCourseStructure(models.Model):
     Represents the course structure for a program.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    name = models.CharField(max_length=100, null=True, blank=True, help_text="Course Name")
+    course_name = models.CharField(max_length=500, null=True, blank=True, help_text="Course Name")
+    course_short_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Short Name (e.g., 'IM' for 'Introductory Microeconomics').")
     department = models.ForeignKey(
         PGDepartment,
         on_delete=models.CASCADE,
@@ -283,10 +284,9 @@ class PGCourseStructure(models.Model):
     code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
-    max_marks = models.IntegerField(null=True, blank=True, help_text="Course Marks")
+    max_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course Marks")
 
-    min_mark = models.IntegerField(null=True, blank=True, help_text="Pass Mark")
-    min_credit = models.IntegerField(null=True, blank=True, help_text="Min Credit")
+    min_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Pass Mark")
 
     description = models.TextField(null=True, blank=True, help_text="Course Description")
     label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
@@ -318,46 +318,20 @@ class PGStudentCourseAssessment(models.Model):
     using flexible labels (CIA-Theory, ESE-Practical, etc.)
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Name")
+    course_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Name")
+    course_short_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Short Name (e.g., 'IM' for 'Introductory Microeconomics').")
     student = models.ForeignKey(
         'pg.PGStudentProfile',
         on_delete=models.CASCADE,
         related_name='course_assessments',
         help_text="Student"
     )
-    course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
-    code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
-    paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
-    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
+    course_type = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Course Type")
+    course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    paper_code = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Paper Code")
 
-    max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
-    max_marks = models.IntegerField(null=True, blank=True, help_text="Course Marks")
-
-    min_mark = models.IntegerField(null=True, blank=True, help_text="Min Mark")
-    min_credit = models.IntegerField(null=True, blank=True, help_text="Min Credit")
-
-    description = models.TextField(null=True, blank=True, help_text="Course Description")
-    label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
-
-    marks_obtained = models.IntegerField(null=True, blank=True, help_text="Marks Obtained")
-    credit_obtained = models.IntegerField(null=True, blank=True, help_text="Credit Obtained")
-
-    grade = models.CharField(max_length=10, null=True, blank=True, help_text="Grade")
-    numeric_grade = models.IntegerField(null=True, blank=True, help_text="Numeric Grade")
-
-    is_absent = models.BooleanField(default=False, help_text="Is Absent")
-    exam_type = models.CharField(max_length=10, null=True, blank=True, help_text="Type Regular/Back")
-
-    session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
-    exam_result = models.CharField(max_length=10, null=True, blank=True, help_text="Status pass/fail/promoted")
-    batch = models.ForeignKey(
-        PGBatch,
-        on_delete=models.CASCADE,
-        related_name='pg_student_assessments',
-        null=True,
-        blank=True
-    )
-
+    semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester")
+    label = models.CharField(max_length=100, db_index=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
     department = models.ForeignKey(
         PGDepartment,
         on_delete=models.CASCADE,
@@ -365,9 +339,64 @@ class PGStudentCourseAssessment(models.Model):
         null=True,
         blank=True
     )
-
     degree = models.CharField(max_length=20, null=True, blank=True)
+    session = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Session")
+    batch = models.ForeignKey(
+        PGBatch,
+        on_delete=models.CASCADE,
+        related_name='pg_student_assessments',
+        null=True,
+        blank=True
+    )
+    college_code = models.CharField(max_length=10, null=True, blank=True, help_text="College Code")
+    exam_type = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Type Regular/Back")
+
+    ###attendance###
     attendance = models.CharField(max_length=10, null=True, blank=True, help_text="Attendance")
+    ###attendance###
+
+    ####Individual####
+    ind_max_marks = models.IntegerField(null=True, blank=True, help_text="Individual MAX MARKS")
+    ind_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual PASS MARKS")
+    ind_is_absent = models.BooleanField(default=True, db_index=True, help_text="Is Absent")
+    ind_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual MARKS OBTAINED")
+    ####Individual####
+
+    ####combined####
+    comb_max_marks = models.IntegerField(null=True, blank=True, help_text="Total MAX MARKS")
+    comb_max_credits = models.IntegerField(null=True, blank=True, help_text="Total MAX CREDIT")
+    comb_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total PASS MARKS")
+    comb_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total MARKS OBTAINED")
+    comb_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRACE MARKS OBTAINED")
+    comb_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total FINAL MARKS OBTAINED")
+    comb_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total CREDIT OBTAINED")
+    comb_numeric_grade = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total NUMERIC GRADE")
+    comb_letter_grade = models.CharField(max_length=10, null=True, blank=True, help_text="Total LETTER GRADE")
+    ####combined####
+
+    ####course####
+    course_max_marks = models.IntegerField(null=True, blank=True, help_text="Course MAX MARKS")
+    course_max_credits = models.IntegerField(null=True, blank=True, help_text="Course MAX CREDIT")
+    course_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course PASS MARKS")
+    course_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course MARKS OBTAINED")
+    course_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course GRACE MARKS")
+    course_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course FINAL MARKS OBTAINED")
+    course_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course CREDIT OBTAINED")
+    course_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course GRADE POINT")
+    ####course####
+ 
+    ####semester####
+    sem_max_credit = models.IntegerField(null=True, blank=True, help_text="Semester MAX CREDIT")
+    sem_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester CREDIT OBTAINED")
+    sgpa = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRADE POINT")
+    sem_result = models.CharField(max_length=10, null=True, blank=True, help_text="Semester Result eg: pass/fail/promoted")
+    next_sem_status = models.CharField(max_length=10, null=True, blank=True, help_text="Next Semester Status eg: eligible/not eligible")
+    sem_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRACE MARKS OBTAINED")
+    ####semester####
+
+    #####temp#####
+    temp_total_gp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
+    #####temp#####
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
@@ -376,7 +405,25 @@ class PGStudentCourseAssessment(models.Model):
         verbose_name = 'PG Student Course Assessment'
         verbose_name_plural = 'PG Student Course Assessments'
         ordering = ['-created_at']
-        unique_together = ('student', 'course_type', 'semester', 'label', 'exam_type')
+        # unique_together = ('student', 'course_type', 'semester', 'label', 'exam_type')
+        
+        # Composite indexes for common query patterns
+        indexes = [
+            # Student-based queries
+            models.Index(fields=['student', 'semester'], name='pg_idx_student_sem'),
+            models.Index(fields=['student', 'semester', 'label'], name='pg_idx_stud_sem_lbl'),
+            
+            # Department-based queries (for faculty reports via department FK)
+            models.Index(fields=['department', 'semester'], name='pg_idx_dept_sem'),
+            models.Index(fields=['department', 'semester', 'label'], name='pg_idx_dept_sem_lbl'),
+            
+            # Batch-based queries
+            models.Index(fields=['batch', 'semester'], name='pg_idx_batch_sem'),
+            
+            # Course-based queries
+            models.Index(fields=['paper_code', 'semester'], name='pg_idx_paper_sem'),
+            models.Index(fields=['semester', 'label'], name='pg_idx_sem_label'),
+        ]
         
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"
@@ -434,3 +481,31 @@ class PGExamRegistration(models.Model):
 
     def __str__(self):
         return f"{self.student}"
+
+
+class CommonCourseStructure(models.Model):
+    """
+    Represents the common course structure for a semester (CBCS).
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    semester = models.CharField(max_length=50, help_text="e.g., Semester-I")
+    course_name = models.CharField(max_length=255, help_text="e.g., Major Course 1")
+    course_type = models.CharField(max_length=50, help_text="e.g., MJC-1")
+    # ltp = models.CharField(max_length=20, null=True, blank=True, help_text="L-T-P e.g., 6-1-0")
+    credit = models.PositiveIntegerField(default=0)
+    marks = models.PositiveIntegerField(default=100)
+    old_code  = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    cia_marks = models.PositiveIntegerField(default=100)
+    ese_marks = models.PositiveIntegerField(default=100)
+    new_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Common Course Structure'
+        verbose_name_plural = 'Common Course Structures'
+        ordering = ['semester', 'course_name']
+
+    def __str__(self):
+        return f"{self.semester} - {self.course_type} ({self.course_name})"
