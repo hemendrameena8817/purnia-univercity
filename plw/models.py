@@ -4,6 +4,8 @@ from django.db import models
 class PLWCourse(models.Model):
     name = models.CharField(max_length=255)  # Bachelor of Law (LL.B.)
     duration_years = models.PositiveIntegerField(default=5)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -15,6 +17,8 @@ class PLWSession(models.Model):
     start_year = models.PositiveIntegerField()
     end_year = models.PositiveIntegerField()
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -64,6 +68,8 @@ class PLWStudentProfile(models.Model):
     )
 
     is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.roll_no} - {self.user.get_full_name()}"
@@ -73,6 +79,8 @@ class PLWSubject(models.Model):
     paper_code = models.CharField(max_length=10)  # I, II, III
     full_marks = models.PositiveIntegerField(default=100)
     pass_marks = models.PositiveIntegerField(default=33)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name} ({self.paper_code})"
@@ -83,6 +91,8 @@ class PLWExam(models.Model):
     session = models.CharField(max_length=20)  # 2021-24
     exam_month_year = models.CharField(max_length=20)  # July 2022
     publication_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -103,11 +113,13 @@ class PLWResult(models.Model):
     exam_center = models.CharField(max_length=255, blank=True, null=True) # M L A College, Kasba
 
     total_marks = models.PositiveIntegerField(default=0)
+    grace = models.PositiveIntegerField(null=True, blank=True)
     result_status = models.CharField(
         max_length=500,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.student.roll_no} - {self.exam.name}"
@@ -130,6 +142,8 @@ class PLWResultDetail(models.Model):
     )
 
     marks_obtained = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         subject_name = self.subject.name if self.subject else "No Subject"

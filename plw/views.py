@@ -134,11 +134,38 @@ class PLWResultMarksDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 import os
 from django.conf import settings
+from django.views import View
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.text import slugify
 from .utils.pdf_generator import generate_marksheet_pdf
+from django.http import HttpResponse, Http404
+from django.shortcuts import get_object_or_404
+
+class PLWResultPDFView(View):
+    """
+    Generates and returns a single PDF marksheet for viewing/downloading.
+    URL: /results/<registration_no>/pdf/
+    Example: /results/1946B370095/pdf/
+    """
+    def get(self, request, registration_no):
+        result = get_object_or_404(
+            PLWResult.objects.select_related(
+                'student', 'student__user', 'student__course', 'student__college', 'exam'
+            ).prefetch_related('details', 'details__subject'), 
+            student__registration_no=registration_no
+        )
+        
+        pdf_content = generate_marksheet_pdf(result)
+        
+        if not pdf_content:
+            return HttpResponse("Failed to generate PDF", status=500, content_type='text/plain')
+             
+        response = HttpResponse(pdf_content, content_type='application/pdf')
+        filename = f"Marksheet_{result.student.roll_no}.pdf"
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
 
 class PLWBulkMarksheetGenerateView(APIView):
     """
