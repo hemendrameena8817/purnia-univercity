@@ -163,7 +163,8 @@ class PLWResultPDFView(View):
             return HttpResponse("Failed to generate PDF", status=500, content_type='text/plain')
              
         response = HttpResponse(pdf_content, content_type='application/pdf')
-        filename = f"Marksheet_{result.student.roll_no}.pdf"
+        session_formatted = result.exam.session.replace('-', '_')
+        filename = f"MARKSHEET_{result.student.registration_no}_PLW_{session_formatted}.pdf"
         response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
@@ -196,7 +197,8 @@ class PLWBulkMarksheetGenerateView(APIView):
             for result in results:
                 pdf_content = generate_marksheet_pdf(result)
                 if pdf_content:
-                    filename = f"{result.student.roll_no}_{result.student.registration_no}.pdf"
+                    session_formatted = result.exam.session.replace('-', '_')
+                    filename = f"MARKSHEET_{result.student.registration_no}_PLW_{session_formatted}.pdf"
                     file_path = os.path.join(save_path, filename)
                     with open(file_path, 'wb') as f:
                         f.write(pdf_content)

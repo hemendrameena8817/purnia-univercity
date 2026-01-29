@@ -59,7 +59,7 @@
         line-height: 20px;
       }
       .detail-table .label {
-        width: 120pt;
+        width: 100pt;
         font-weight: normal;
       }
 
@@ -330,7 +330,13 @@
             <td class="text-left-subject">&nbsp;</td>
             <td><strong>1000</strong></td>
             <td class="text-left-subject">&nbsp;</td>
-            <td><strong>{{ result.total_marks }}</strong></td>
+            <td>
+              <strong
+                >{{ result.total_marks }}{% if result.grace %}<sup
+                  >+{{ result.grace }}</sup
+                >{% endif %}</strong
+              >
+            </td>
           </tr>
         </tbody>
       </table>
