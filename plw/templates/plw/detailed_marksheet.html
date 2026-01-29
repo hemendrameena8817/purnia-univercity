@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Statement of Marks</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 1cm;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 11pt;
+        line-height: 1.3;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .header h2 {
+        margin: 0;
+        text-transform: uppercase;
+        font-size: 16pt;
+        font-weight: bold;
+      }
+      .header p {
+        margin: 5px 0;
+        font-size: 11pt;
+      }
+      .meta-info {
+        width: 100%;
+        margin-bottom: 15px;
+      }
+      .meta-info td {
+        vertical-align: top;
+        padding: 2px 5px;
+      }
+      .marks-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 15px;
+      }
+      .marks-table th,
+      .marks-table td {
+        border: 1px solid black;
+        padding: 5px;
+        text-align: center;
+        font-size: 10pt;
+      }
+      .marks-table th {
+        font-weight: bold;
+        background-color: #f0f0f0;
+      }
+      .text-left {
+        text-align: left !important;
+      }
+      .footer {
+        margin-top: 30px;
+        width: 100%;
+      }
+      .footer td {
+        vertical-align: top;
+      }
+      .qr-code {
+        width: 100px;
+        height: 100px;
+      }
+      .signature-area {
+        margin-top: 50px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .signature-block {
+        text-align: center;
+        width: 30%;
+        display: inline-block;
+      }
+      .signature-line {
+        border-top: 1px solid black;
+        margin-top: 40px;
+        padding-top: 5px;
+      }
+      .bold {
+        font-weight: bold;
+      }
+
+      /* Layout for student details */
+      .student-details-container {
+        width: 100%;
+        margin-bottom: 10px;
+      }
+      .col-left {
+        width: 50%;
+        float: left;
+      }
+      .col-right {
+        width: 50%;
+        float: right;
+      }
+      .clearfix {
+        clear: both;
+      }
+
+      .row {
+        margin-bottom: 3px;
+      }
+      .label {
+        display: inline-block;
+        width: 120px;
+        font-weight: bold;
+      }
+      .value {
+        display: inline-block;
+        font-weight: bold;
+      }
+
+      .aggregate-row {
+        font-weight: bold;
+        background-color: #f9f9f9;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h2>STATEMENT OF MARKS</h2>
+      <p>
+        <strong
+          >{{ result.exam.name }}, Session ({{ result.exam.session }}), held in
+          the month of {{ result.exam.exam_month_year }}</strong
+        >
+      </p>
+    </div>
+
+    <div class="student-details-container">
+      <table style="width: 100%; border: none">
+        <tr>
+          <td style="width: 60%; vertical-align: top">
+            <div class="row">
+              <span class="label">ROLL NO.</span> :
+              <span class="value">{{ student.roll_no }}</span>
+            </div>
+            <div class="row">
+              <span class="label">REG. NO.</span> :
+              <span class="value">{{ student.registration_no }}</span>
+            </div>
+            <div class="row">
+              <span class="label">Course</span> :
+              <span class="value">{{ student.course.name }}</span>
+            </div>
+            <div class="row">
+              <span class="label">College Name</span> :
+              <span class="value">{{ student.college.name }}</span>
+            </div>
+          </td>
+          <td style="width: 40%; vertical-align: top">
+            <div class="row">
+              <span class="label">Name of Candidate</span> :
+              <span class="value">{{ student.user.get_full_name }}</span>
+            </div>
+            <div class="row">
+              <span class="label">Father's Name</span> :
+              <span class="value">{{ student.father_name }}</span>
+            </div>
+            <div class="row">
+              <span class="label">Mother's Name</span> :
+              <span class="value">{{ student.mother_name }}</span>
+            </div>
+            <div class="row">
+              <span class="label">Centre Name</span> :
+              <span class="value">{{ result.exam_center|default:"-" }}</span>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <table class="marks-table">
+      <thead>
+        <tr>
+          <th style="width: 8%">Sl.No.</th>
+          <th style="width: 30%">Subject</th>
+          <th style="width: 10%">Papers</th>
+          <th style="width: 15%">Full Marks</th>
+          <th style="width: 15%">Pass Marks</th>
+          <th style="width: 22%">Marks Obtained</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for detail in result.details.all %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td class="text-left">{{ detail.subject.name }}</td>
+          <td>{{ detail.subject.paper_code }}</td>
+          <td>{{ detail.subject.full_marks }}</td>
+          <td>{{ detail.subject.pass_marks }}</td>
+          <td><strong>{{ detail.marks_obtained }}</strong></td>
+        </tr>
+        {% endfor %}
+        <tr class="aggregate-row">
+          <td colspan="5" class="text-left" style="padding-left: 20px">
+            <strong>AGGREGATE</strong>
+          </td>
+          <td><strong>{{ result.total_marks }}</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-bottom: 10px">
+      <strong
+        >Result :
+        <span style="margin-left: 20px"
+          >{{ result.result_status }}</span
+        ></strong
+      >
+    </div>
+
+    <div style="margin-bottom: 30px">
+      Date of Publication :
+      <span style="margin-left: 10px; text-decoration: underline"
+        >{{ result.exam.publication_date|date:"d-m-Y" }}</span
+      >
+    </div>
+
+    <table style="width: 100%; margin-top: 20px">
+      <tr>
+        <td style="width: 33%; vertical-align: top">
+          <strong>Remarks -</strong><br />
+          <small>
+            1. In Order to Pass each paper {{ pass_percentage }}% marks in
+            aggregate.<br />
+            2. 1st Class - 65%
+          </small>
+        </td>
+        <td style="width: 33%; text-align: center; vertical-align: bottom">
+          {% if qr_code %}
+          <img
+            src="data:image/png;base64,{{ qr_code }}"
+            class="qr-code"
+            alt="QR Code"
+          />
+          {% endif %}
+        </td>
+        <td style="width: 33%">
+          <div style="height: 60px"></div>
+          <!-- Signature space -->
+          <div class="signature-block" style="width: 100%">
+            <!-- Placeholder signature -->
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <table style="width: 100%; margin-top: 80px">
+      <tr>
+        <td style="width: 33%; text-align: center">
+          <div class="signature-line"><strong>Assistant</strong></div>
+        </td>
+        <td style="width: 33%; text-align: center">
+          <div class="signature-line"><strong>Comparison</strong></div>
+        </td>
+        <td style="width: 33%; text-align: center">
+          <div class="signature-line">
+            <strong>Controller of Examinations</strong>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
