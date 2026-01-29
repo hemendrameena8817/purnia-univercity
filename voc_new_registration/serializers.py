@@ -313,16 +313,27 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
         current_course_type = validated_data.get('course_type', instance.course_type)
         current_college = validated_data.get('college', instance.college)
 
-        # Generate registration number if completing for the first time
         if is_now_completed and not instance.registration_number:
-            try:
-                instance.registration_number = generate_registration_number(
-                    instance, 
-                    course_type=current_course_type,
-                    college=current_college
-                )
-            except ValueError as e:
-                raise serializers.ValidationError({"error": str(e)})
+            # Check migration status
+            is_migrated = validated_data.get('migrated_from_other_university', instance.migrated_from_other_university)
+            old_reg_no = validated_data.get('old_registration_no', instance.old_registration_no)
+
+            if not is_migrated:
+                if old_reg_no:
+                    instance.registration_number = old_reg_no
+            else:
+                try:
+                    instance.registration_number = generate_registration_number(
+                        instance, 
+                        course_type=current_course_type,
+                        college=current_college
+                    )
+                except ValueError as e:
+                    raise serializers.ValidationError({"error": str(e)})
+
+        # Enforce: only mark completed if registration number exists
+        if not instance.registration_number:
+            validated_data['is_registration_completed'] = False
 
         return super().update(instance, validated_data)
 
