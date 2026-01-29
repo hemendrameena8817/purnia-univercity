@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from datetime import timedelta, datetime
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -76,6 +78,31 @@ class GrievanceListCreateView(APIView):
                 description="Filter by College UID (for University Admins only)",
                 type=openapi.TYPE_STRING
             ),
+            openapi.Parameter(
+                'time_filter',
+                openapi.IN_QUERY,
+                description="Quick time filters",
+                type=openapi.TYPE_STRING,
+                enum=['last_7_days', 'older_than_7_days', 'older_than_month']
+            ),
+            openapi.Parameter(
+                'date',
+                openapi.IN_QUERY,
+                description="Filter by specific date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING
+            ),
+            openapi.Parameter(
+                'start_date',
+                openapi.IN_QUERY,
+                description="Filter by start date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING
+            ),
+            openapi.Parameter(
+                'end_date',
+                openapi.IN_QUERY,
+                description="Filter by end date (YYYY-MM-DD)",
+                type=openapi.TYPE_STRING
+            ),
         ],
         responses={200: GrievanceListSerializer(many=True)},
         tags=['Grievances'],
@@ -141,6 +168,46 @@ class GrievanceListCreateView(APIView):
         college_filter = request.query_params.get('college')
         if college_filter and user.user_type == 'university_admin':
             queryset = queryset.filter(assigned_to_college__uid=college_filter)
+        
+        # --- Time-based Filters ---
+        time_filter = request.query_params.get('time_filter')
+        now = timezone.now()
+        
+        if time_filter == 'last_7_days':
+            seven_days_ago = now - timedelta(days=7)
+            queryset = queryset.filter(submitted_at__gte=seven_days_ago)
+        elif time_filter == 'older_than_7_days':
+            seven_days_ago = now - timedelta(days=7)
+            queryset = queryset.filter(submitted_at__lt=seven_days_ago)
+        elif time_filter == 'older_than_month':
+            one_month_ago = now - timedelta(days=30)
+            queryset = queryset.filter(submitted_at__lt=one_month_ago)
+            
+        # Date-wise filters
+        date_str = request.query_params.get('date')
+        if date_str:
+            try:
+                filter_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                queryset = queryset.filter(submitted_at__date=filter_date)
+            except ValueError:
+                pass # Or return 400
+                
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                queryset = queryset.filter(submitted_at__date__gte=start_date)
+            except ValueError:
+                pass
+                
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                queryset = queryset.filter(submitted_at__date__lte=end_date)
+            except ValueError:
+                pass
         
         queryset = queryset.order_by('-submitted_at')
         
