@@ -7,6 +7,7 @@ from .models import (
     NewRegistrationBatch, 
     NewRegistrationSession
 )
+from .utils.registration_logic import generate_registration_number
 
 
 class SessionMinimalSerializer(serializers.ModelSerializer):
@@ -59,8 +60,9 @@ class NewRegistrationGetSerializer(serializers.ModelSerializer):
             'email',
             'migration_submitted',
             'migrated_from_other_university',
-            'is_account_created',
             'is_registration_completed',
+            'course_type',
+            'registration_number',
             'last_attended_university',
             'old_registration_no',
             'college_details',
@@ -69,12 +71,16 @@ class NewRegistrationGetSerializer(serializers.ModelSerializer):
             'session_details',
             'profile_picture',
             'signature',
+            'migration_certificate',
+            'registration_certificate',
             'json_data',
             'apaar_no',
             'created_at',
             'updated_at',
+            'registration_number',
+            'course_type',
         ]
-        read_only_fields = ['uid', 'created_at', 'updated_at', 'college_details', 'batch_details', 'session_details', 'course_details']
+        read_only_fields = ['uid', 'created_at', 'updated_at', 'college_details', 'batch_details', 'session_details', 'course_details', 'registration_number']
     
     def validate_aadhaar_no(self, value):
         """Validate Aadhaar number format"""
@@ -122,6 +128,8 @@ class NewRegistrationListSerializer(serializers.ModelSerializer):
             'college_name',
             'migration_submitted',
             'apaar_no',
+            'course_type',
+            'registration_number',
             'created_at',
         ]
         read_only_fields = ['uid', 'created_at', 'college_name']
@@ -157,10 +165,13 @@ class NewRegistrationCreateSerializer(serializers.ModelSerializer):
             'old_registration_no',
             'profile_picture',
             'signature',
+            'migration_certificate',
+            'registration_certificate',
             'college',
             'college_code',
             'college_name',
             'apaar_no',
+            'course_type',
             'json_data',
         ]
     
@@ -244,9 +255,14 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
             'is_registration_completed',
             'profile_picture',
             'signature',
+            'migration_certificate',
+            'registration_certificate',
             'college',
             'json_data',
+            'course_type',
+            'registration_number',
         ]
+        read_only_fields = ['registration_number']
 
     def validate_dob(self, value):
         """Handle empty string dob sending from frontend as null"""
@@ -284,6 +300,31 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
         if value and not value.isdigit():
             raise serializers.ValidationError("Apaar number must contain only digits")
         return value
+
+    def update(self, instance, validated_data):
+        """
+        Custom update to handle registration number generation.
+        """
+        # Determine if registration is being completed
+        was_completed = instance.is_registration_completed
+        is_now_completed = validated_data.get('is_registration_completed', was_completed)
+        
+        # Determine course type, college
+        current_course_type = validated_data.get('course_type', instance.course_type)
+        current_college = validated_data.get('college', instance.college)
+
+        # Generate registration number if completing for the first time
+        if is_now_completed and not instance.registration_number:
+            try:
+                instance.registration_number = generate_registration_number(
+                    instance, 
+                    course_type=current_course_type,
+                    college=current_college
+                )
+            except ValueError as e:
+                raise serializers.ValidationError({"error": str(e)})
+
+        return super().update(instance, validated_data)
 
 
 class RegistrationPaymentSerializer(serializers.ModelSerializer):

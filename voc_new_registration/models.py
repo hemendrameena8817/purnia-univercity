@@ -1,5 +1,6 @@
 import uuid
-from django.db import models
+from django.db import models, transaction
+from django.utils import timezone
 
 
 class NewRegistrationCourse(models.Model):
@@ -87,6 +88,14 @@ class NewRegistration(models.Model):
         ('FDC', 'FDC'),
     ]
 
+    # Course Type choices
+    COURSE_TYPE_CHOICES = [
+        ('UG', 'Undergraduate'),
+        ('PG', 'Postgraduate'),
+        ('VOC', 'Vocational'),
+        ('BED', 'Bachelor of Education'),
+    ]
+
     # UUID for unique identification
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
@@ -94,6 +103,8 @@ class NewRegistration(models.Model):
     # Profile Images
     profile_picture = models.ImageField(upload_to='voc_registrations/images/', null=True, blank=True)
     signature = models.ImageField(upload_to='voc_registrations/signatures/', null=True, blank=True)
+    migration_certificate = models.ImageField(upload_to='voc_registrations/certificates/', null=True, blank=True)
+    registration_certificate = models.ImageField(upload_to='voc_registrations/certificates/', null=True, blank=True)
     
     # Student Information
     student_name = models.CharField(max_length=255, help_text="Student name in English")
@@ -104,6 +115,13 @@ class NewRegistration(models.Model):
     caste = models.CharField(max_length=10, choices=CASTE_CHOICES, null=True, blank=True)
     dob = models.DateField(null=True, blank=True, help_text="Date of Birth")
     
+    course_type = models.CharField(
+        max_length=10, 
+        choices=COURSE_TYPE_CHOICES, 
+        null=True, 
+        blank=True,
+        help_text="UG/PG/Vocational/B.ED."
+    )
     course = models.ForeignKey(
         NewRegistrationCourse,
         on_delete=models.SET_NULL,
@@ -152,6 +170,7 @@ class NewRegistration(models.Model):
 
     is_account_created = models.BooleanField(default=False)
     is_registration_completed = models.BooleanField(default=False)
+    registration_number = models.CharField(max_length=50, null=True, blank=True, unique=True, help_text="Generated unique registration number")
 
     
     # Soft Delete

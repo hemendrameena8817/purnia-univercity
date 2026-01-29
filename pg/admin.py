@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
-    PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration
+    PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
+    PGCommonCourseStructure
 )
 
 
@@ -209,6 +210,35 @@ class PGExamRegistrationAdmin(admin.ModelAdmin):
         }),
         ('Fees', {
             'fields': ('fees',)
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(PGCommonCourseStructure)
+class CommonCourseStructureAdmin(admin.ModelAdmin):
+    list_display = ('semester', 'course_type', 'course_name', 'credit', 'marks', 'cia_marks', 'ese_marks', 'old_code', 'new_code')
+    list_filter = ('semester', 'credit')
+    search_fields = ('course_name', 'course_type', 'old_code', 'new_code')
+    ordering = ('semester', 'course_type')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('uid', 'semester', 'course_type', 'course_name')
+        }),
+        ('Credits & Marks', {
+            'fields': ('credit', 'marks', 'cia_marks', 'ese_marks')
+        }),
+        ('Course Codes', {
+            'fields': ('old_code', 'new_code')
         }),
         ('Additional Data', {
             'fields': ('json_data',),
