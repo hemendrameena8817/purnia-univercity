@@ -222,8 +222,13 @@ class RegistrationStatusView(views.APIView):
 
         if not registration.registration_number and registration.is_registration_completed:
             try:
-                registration.registration_number = generate_registration_number(registration)
-                registration.save()
+                if not registration.migrated_from_other_university:
+                    if registration.old_registration_no:
+                        registration.registration_number = registration.old_registration_no
+                        registration.save()
+                else:
+                    registration.registration_number = generate_registration_number(registration)
+                    registration.save()
             except Exception as e:
                 # Log error but don't block the status return
                 print(f"Error generating registration number in StatusView: {str(e)}")

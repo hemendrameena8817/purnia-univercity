@@ -43,10 +43,16 @@ def generate_registration_number(instance, course_type=None, session=None, colle
 
     prefix = f"{session_code}{college_suffix}{course_code}"
 
-    # 5. FIVE DIGIT SERIES: Thread-safe sequential count
+    # 5. THREAD-SAFE GENERATION
+    # We must lock a parent object (College) to ensure serial execution even if no registrations exist yet.
+    # We must also SAVE the registration number before releasing the lock.
     with transaction.atomic():
-        # Select for update to block other threads from reading the same "last number"
-        last_reg = NewRegistration.objects.select_for_update().filter(
+        # Lock the College row to serialize generation for this college
+        # This prevents two threads from both seeing "0 records" and creating 00001
+        _ = college.__class__.objects.select_for_update().get(pk=college.pk)
+
+        # Now safe to query max number
+        last_reg = NewRegistration.objects.filter(
             registration_number__startswith=prefix
         ).order_by('-registration_number').only('registration_number').first()
 
@@ -60,4 +66,10 @@ def generate_registration_number(instance, course_type=None, session=None, colle
         else:
             new_series = 1
 
-        return f"{prefix}{new_series:05d}"
+        final_number = f"{prefix}{new_series:05d}"
+        
+        # SAVE IMMEDIATELY to reserve this number before releasing lock
+        instance.registration_number = final_number
+        instance.save(update_fields=['registration_number'])
+        
+        return final_number
