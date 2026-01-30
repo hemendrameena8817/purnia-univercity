@@ -174,32 +174,25 @@ class PLWBulkMarksheetGenerateView(APIView):
     Query Params: exam_id (required)
     """
     def post(self, request):
-        exam_id = request.data.get('exam_id')
-        exam_uid = request.data.get('exam_uid')
+        exam_uid = request.data.get('exam_uid') or request.query_params.get('exam_uid')
         
         try:
             results = PLWResult.objects.select_related(
                 'student', 'student__user', 'student__course', 'student__college', 'exam'
             ).prefetch_related('details', 'details__subject')
             
-            if exam_id or exam_uid:
-                if exam_id:
-                    results = results.filter(exam_id=exam_id)
-                else:
-                    results = results.filter(exam__uid=exam_uid)
-                
+            # 1. Filter results based on provided UID
+            if exam_uid:
+                results = results.filter(exam__uid=exam_uid)
                 if not results.exists():
-                    identifier = exam_id if exam_id else exam_uid
-                    return Response({"error": f"No results found for identifier: {identifier}"}, status=status.HTTP_404_NOT_FOUND)
+                    return Response({"error": f"No results found for exam_uid: {exam_uid}"}, status=status.HTTP_404_NOT_FOUND)
                 
                 exam = results.first().exam
-                exam_name = exam.name
-                # Use uid for folder name if id is not available or if uid was provided
-                folder_id = exam_id if exam_id else exam_uid
-                folder_name = f"plw_marksheets_{slugify(exam_name)}_{folder_id}"
+                folder_name = f"plw_marksheets_{slugify(exam.name)}_{exam_uid}"
             else:
+                # 2. If no UID provided, check if any results exist at all (fallback to "all")
                 if not results.exists():
-                    return Response({"error": "No results found"}, status=status.HTTP_404_NOT_FOUND)
+                    return Response({"error": "No results found in the system"}, status=status.HTTP_404_NOT_FOUND)
                 folder_name = "plw_marksheets_all"
 
             save_path = os.path.join(settings.MEDIA_ROOT, folder_name)
