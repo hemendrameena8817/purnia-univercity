@@ -32,7 +32,7 @@ class PLWSubjectAdmin(admin.ModelAdmin):
 
 @admin.register(PLWExam)
 class PLWExamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'session', 'exam_month_year', 'publication_date')
+    list_display = ('uid', 'name', 'session', 'exam_month_year', 'publication_date')
     search_fields = ('name', 'session')
 
 class PLWResultDetailInline(admin.TabularInline):

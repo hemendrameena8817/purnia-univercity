@@ -175,21 +175,34 @@ class PLWBulkMarksheetGenerateView(APIView):
     """
     def post(self, request):
         exam_id = request.data.get('exam_id')
-        if not exam_id:
-            return Response({"error": "exam_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        exam_uid = request.data.get('exam_uid')
         
         try:
-            results = PLWResult.objects.filter(exam_id=exam_id).select_related(
+            results = PLWResult.objects.select_related(
                 'student', 'student__user', 'student__course', 'student__college', 'exam'
             ).prefetch_related('details', 'details__subject')
             
-            if not results.exists():
-                 return Response({"error": "No results found for this exam"}, status=status.HTTP_404_NOT_FOUND)
-            
-            exam_name = results.first().exam.name
-            folder_name = f"plw_marksheets_{slugify(exam_name)}_{exam_id}"
+            if exam_id or exam_uid:
+                if exam_id:
+                    results = results.filter(exam_id=exam_id)
+                else:
+                    results = results.filter(exam__uid=exam_uid)
+                
+                if not results.exists():
+                    identifier = exam_id if exam_id else exam_uid
+                    return Response({"error": f"No results found for identifier: {identifier}"}, status=status.HTTP_404_NOT_FOUND)
+                
+                exam = results.first().exam
+                exam_name = exam.name
+                # Use uid for folder name if id is not available or if uid was provided
+                folder_id = exam_id if exam_id else exam_uid
+                folder_name = f"plw_marksheets_{slugify(exam_name)}_{folder_id}"
+            else:
+                if not results.exists():
+                    return Response({"error": "No results found"}, status=status.HTTP_404_NOT_FOUND)
+                folder_name = "plw_marksheets_all"
+
             save_path = os.path.join(settings.MEDIA_ROOT, folder_name)
-            
             os.makedirs(save_path, exist_ok=True)
             
             generated_count = 0
