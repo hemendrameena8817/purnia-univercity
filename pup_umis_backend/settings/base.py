@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "staging",
     "voc_new_registration",
     "captcha",
+    'plw'
 ]
 
 
