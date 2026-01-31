@@ -19,15 +19,23 @@ from university.models import University
 EXCEL_FILE = BASE_DIR / 'UG - Course Structure [2025-29].xlsx'
 BATCH_NAME = '2025-2029'
 
-# Course type to paper code mapping (from migrate_ug_sem_result_current.py)
+# Course type to paper code mapping (verified from CommonCourseStructure database)
 COURSE_TYPE_CODES = {
-    'MJC-1': '1001', 'MIC-1': '1002', 'MDC-1': '1003', 'AEC-1': '1004', 'SEC-1': '1005', 'VAC-1': '1006',
-    'MJC-2': '2001', 'MIC-2': '2002', 'MDC-2': '2003', 'AEC-2': '2004', 'SEC-2': '2005', 'VAC-2': '2006',
-    'MJC-3': '3001', 'MJC-4': '3002', 'MIC-3': '3003', 'MDC-3': '3004', 'AEC-3': '3005', 'SEC-3': '3006',
+    # Semester I - codes updated to match database
+    'MJC-1': '1001', 'MIC-1': '1002', 'SEC-1': '1003', 'VAC-1': '1004', 'MDC-1': '1005', 'AEC-1': '1006',
+    # Semester II - codes updated to match database
+    'MJC-2': '2001', 'MIC-2': '2002', 'SEC-2': '2003', 'VAC-2': '2004', 'MDC-2': '2005', 'AEC-2': '2006',
+    # Semester III - codes updated to match database
+    'MJC-3': '3001', 'MJC-4': '3002', 'MIC-3': '3003', 'SEC-3': '3004', 'MDC-3': '3005', 'AEC-3': '3006',
+    # Semester IV - verified
     'MJC-5': '4001', 'MJC-6': '4002', 'MJC-7': '4003', 'MIC-4': '4004', 'AEC-4': '4005',
+    # Semester V - verified
     'MJC-8': '5001', 'MJC-9': '5002', 'MIC-5': '5003', 'MIC-6': '5004', 'INT-1': '5005',
+    # Semester VI - verified
     'MJC-10': '6001', 'MJC-11': '6002', 'MJC-12': '6003', 'MIC-7': '6004', 'MIC-8': '6005',
+    # Semester VII - verified
     'MJC-13': '7001', 'MJC-14': '7002', 'MJC-15': '7003', 'MIC-9': '7004',
+    # Semester VIII - verified
     'MJC-16': '8001', 'MIC-10': '8002', 'RP-1': '8003',
 }
 
