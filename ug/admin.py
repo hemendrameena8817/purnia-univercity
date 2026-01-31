@@ -106,10 +106,22 @@ class CourseStructureAdmin(admin.ModelAdmin):
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
     # Display all marks and calculation fields directly from database
-    list_display = ('id', 'student', 'semester', 'label', 'paper_code', 'course_code', 'course_type',
-                    'ind_marks_obtained', 'ind_max_marks', 'ind_pass_marks', 'ind_is_pass',
-                    'comb_marks_obtained', 'comb_max_marks', 'comb_max_credits', 'comb_credit_obtained', 
-                    'comb_grade_point')
+    # Display all marks and calculation fields directly from database
+    list_display = (
+        'id', 'student', 'semester', 'paper_code', 'label',
+        # Individual
+        'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
+        'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass',
+        # Combined
+        'comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained',
+        'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained',
+        'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point',
+        # Course
+        'course_max_marks', 'course_max_credits', 'course_pass_marks', 'course_marks_obtained',
+        'course_grace_obtained', 'course_final_marks_obtained', 'course_credit_obtained', 'course_grade_point',
+        # Semester
+        'sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained'
+    )
     
     # Filters for easy navigation
     list_filter = ('semester', 'label', 'course_type', 'ind_is_absent', 'ind_is_pass')
@@ -235,7 +247,7 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
 @admin.register(UGExamResult)
 class UGExamResultAdmin(admin.ModelAdmin):
     list_display = ('get_student_name', 'get_registration_no', 'semester', 'session', 
-                    'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit')
+                    'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 'cia_pass', 'ese_pass')
     list_filter = ('semester', 'semester_result', 'session', 'is_legacy', 'created_at')
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'semester')
     ordering = ('-created_at', 'student__registration_no')
