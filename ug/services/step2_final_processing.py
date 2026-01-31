@@ -539,12 +539,22 @@ class FinalResultProcessingService:
             sem_max_credits += Decimal(result_data['max_credit'] or 0)
             sem_credits_earned += Decimal(result_data['credits_earned'] or 0)
 
+        # OFFICIAL RULE (ug_passing_rules.txt, lines 104-106):
+        # "A candidate SHALL NOT be awarded or calculated ANY SGPA if he/she 
+        # FAILS to earn the TOTAL prescribed credits in that particular semester."
+        # 
+        # Therefore:
+        # - PASS → Calculate SGPA
+        # - PROMOTED → SGPA = None (didn't earn total credits)
+        # - FAILED → SGPA = None
+        final_sgpa = sgpa if status == 'PASS' else None
+        
         UGExamResult.objects.update_or_create(
             student=student,
             semester=self.semester,
             session=self.session,
             defaults={
-                'sgpa': sgpa,
+                'sgpa': final_sgpa,
                 'semester_result': status,
                 'semester_credit_earned': sem_credits_earned,
                 'semester_max_credit': sem_max_credits,
@@ -565,11 +575,14 @@ class FinalResultProcessingService:
         sem_max = exam_result.semester_max_credit if exam_result else 0
         sem_earned = exam_result.semester_credit_earned if exam_result else 0
         
+        # Apply official rule: SGPA only for PASS students
+        final_sgpa = sgpa if result_status == 'PASS' else None
+        
         # Batch Update
         StudentCourseAssessment.objects.filter(
             student=student, semester=self.semester
         ).update(
-            sgpa=sgpa,
+            sgpa=final_sgpa,
             sem_result=result_status,
             sem_max_credit=sem_max,
             sem_credit_obtained=sem_earned
