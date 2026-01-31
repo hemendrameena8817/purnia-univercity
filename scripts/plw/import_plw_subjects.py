@@ -9,7 +9,7 @@ poetry run python manage.py shell
 
 Then:
 >>> from scripts.plw.import_plw_subjects import run_import
->>> run_import('old_data/PLW_PART_I_Subjects_with_code.xlsx')
+>>> run_import('old_data/LLB_PART_1_SUBJECTS.xlsx')
 
 OR run directly:
 poetry run python scripts/plw/import_plw_subjects.py --file "old_data/PLW_PART_I_Subjects_with_code.xlsx"
@@ -72,9 +72,9 @@ def run_import(file_path):
                 pass_marks = 33 # Default
             
             subject, created = PLWSubject.objects.update_or_create(
+                name=name,
                 paper_code=paper_code,
                 defaults={
-                    'name': name,
                     'full_marks': full_marks,
                     'pass_marks': pass_marks
                 }
