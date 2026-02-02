@@ -6,8 +6,10 @@ from .views import (
     MCAStudentProfileListView, MCAStudentProfileCreateView, MCAStudentProfileDetailView,
     MCASubjectListView, MCASubjectDetailView,
     MCAExamListView, MCAExamDetailView,
-    MCAResultListView, MCAResultCreateView, MCAResultDetailView,
-    MCAResultMarksListView, MCAResultMarksDetailView
+    MCAExamScheduleListView, MCAExamScheduleDetailView,
+    MCAStudentAssessmentListView, MCAStudentAssessmentDetailView,
+    MCASemesterResultListView, MCASemesterResultDetailView,
+    MCASemesterRegistrationListView, MCAExamRegistrationListView
 )
 
 urlpatterns = [
@@ -36,12 +38,19 @@ urlpatterns = [
     path('exams/', MCAExamListView.as_view(), name='mca-exam-list'),
     path('exams/<int:pk>/', MCAExamDetailView.as_view(), name='mca-exam-detail'),
 
-    # Results
-    path('results/', MCAResultListView.as_view(), name='mca-result-list'),
-    path('results/create/', MCAResultCreateView.as_view(), name='mca-result-create'),
-    path('results/<int:pk>/', MCAResultDetailView.as_view(), name='mca-result-detail'),
+    # Exam Schedules (Routines)
+    path('exam-schedules/', MCAExamScheduleListView.as_view(), name='mca-exam-schedule-list'),
+    path('exam-schedules/<int:pk>/', MCAExamScheduleDetailView.as_view(), name='mca-exam-schedule-detail'),
 
-    # Result Marks
-    path('result-marks/', MCAResultMarksListView.as_view(), name='mca-result-marks-list'),
-    path('result-marks/<int:pk>/', MCAResultMarksDetailView.as_view(), name='mca-result-marks-detail'),
+    # Assessments (Marks)
+    path('assessments/', MCAStudentAssessmentListView.as_view(), name='mca-assessment-list'),
+    path('assessments/<int:pk>/', MCAStudentAssessmentDetailView.as_view(), name='mca-assessment-detail'),
+
+    # Semester Results
+    path('semester-results/', MCASemesterResultListView.as_view(), name='mca-sem-result-list'),
+    path('semester-results/<int:pk>/', MCASemesterResultDetailView.as_view(), name='mca-sem-result-detail'),
+
+    # Registrations
+    path('semester-registrations/', MCASemesterRegistrationListView.as_view(), name='mca-sem-reg-list'),
+    path('exam-registrations/', MCAExamRegistrationListView.as_view(), name='mca-exam-reg-list'),
 ]

@@ -1,8 +1,8 @@
 """
 Import MCA Students Script
 
-This script imports student profiles, and optionally exams and results from an Excel file.
-It creates Users, Students, and optionally Exams and Results with Details.
+This script imports student profiles, and optionally assessments and results from an Excel file.
+It creates Users, Students, and optionally Semester Results and Assessments.
 
 HOW TO RUN:
 -----------
@@ -27,10 +27,9 @@ Required Excel Columns:
 - Mother Name (optional)
 
 Optional Columns (if importing results):
-- MCA Exam
+- MCA Exam (used to fetch session/semester)
 - Result (Status e.g., PASS)
-- Total (Total Marks)
-- Exam Center (optional)
+- Total (Marks Obtained)
 - Subject Columns (Subject names as defined in MCASubject)
 """
 
@@ -50,7 +49,7 @@ if __name__ == '__main__':
     django.setup()
 
 from mca_sem.models import (
-    MCAStudentProfile, MCAExam, MCAResult, MCAResultDetail, 
+    MCAStudentProfile, MCAExam, MCASemesterResult, MCAStudentAssessment, 
     MCASubject, MCABatch, MCASession, MCACourse
 )
 from colleges.models import College
@@ -164,7 +163,12 @@ def run_import(file_path):
                 if subject_name not in cache['subjects']:
                     cache['subjects'][subject_name] = MCASubject.objects.filter(name__iexact=subject_name).first()
                 if not cache['subjects'][subject_name]:
-                    errors.append(f"Row {row_num}: Subject '{subject_name}' not found.")
+                    # Also try to find by paper_code
+                    subj = MCASubject.objects.filter(paper_code__iexact=subject_name).first()
+                    cache['subjects'][subject_name] = subj
+                
+                if not cache['subjects'][subject_name]:
+                    errors.append(f"Row {row_num}: Subject/Paper '{subject_name}' not found.")
 
     if errors:
         print("\nVALIDATION FAILED! Please fix the following errors before re-running:")
@@ -218,48 +222,53 @@ def run_import(file_path):
                 exam_name = row.get('MCA Exam')
                 if not pd.isna(exam_name):
                     exam_obj = cache['exams'][str(exam_name).strip()]
-                    total_marks = row.get('Total', 0)
                     result_status = str(row.get('Result', '')).strip()
-                    exam_center = str(row.get('Exam Center', '')).strip() if not pd.isna(row.get('Exam Center')) else ""
                     
-                    grace_marks = row.get('Grace')
-                    if pd.isna(grace_marks) or str(grace_marks).strip() == '':
-                        grace_marks = None
-                    else:
-                        try: grace_marks = int(grace_marks)
-                        except: grace_marks = None
+                    # Estimate semester and session from exam
+                    sem_str = str(exam_obj.name).upper()
+                    semester = "1" # default
+                    if "SEM-I" in sem_str or "1ST" in sem_str: semester = "1"
+                    elif "SEM-II" in sem_str or "2ND" in sem_str: semester = "2"
+                    elif "SEM-III" in sem_str or "3RD" in sem_str: semester = "3"
+                    elif "SEM-IV" in sem_str or "4TH" in sem_str: semester = "4"
 
-                    try: t_marks = int(total_marks)
-                    except: t_marks = 0
-
-                    result_obj, created = MCAResult.objects.update_or_create(
+                    res_obj, created = MCASemesterResult.objects.update_or_create(
                         student=student,
-                        exam=exam_obj,
+                        semester=semester,
+                        session=exam_obj.session,
                         defaults={
-                            'total_marks': t_marks,
-                            'grace': grace_marks,
-                            'result_status': result_status,
-                            'exam_center': exam_center
+                            'semester_result': result_status,
                         }
                     )
                     if created: stats['results_created'] += 1
                     else: stats['results_updated'] += 1
                     
-                    # Result Details
+                    # Student Assessments (Granular marks)
                     for sub_col in subject_cols:
                         marks_val = row[sub_col]
                         if pd.isna(marks_val) or str(marks_val).strip() == '':
                             continue
                             
-                        try: obtained = int(marks_val)
+                        try: obtained = float(marks_val)
                         except: obtained = 0
                         
                         subject_obj = cache['subjects'][str(sub_col).strip()]
                         
-                        MCAResultDetail.objects.update_or_create(
-                            result=result_obj,
+                        MCAStudentAssessment.objects.update_or_create(
+                            student=student,
                             subject=subject_obj,
-                            defaults={'marks_obtained': obtained}
+                            semester=semester,
+                            label='ESE-Theory', # Defaulting to ESE-Theory for legacy import
+                            defaults={
+                                'ind_marks_obtained': obtained,
+                                'ind_max_marks': subject_obj.full_marks,
+                                'ind_pass_marks': subject_obj.pass_marks,
+                                'ind_is_absent': False if obtained > 0 else True,
+                                'session': exam_obj.session,
+                                'college': college,
+                                'batch': batch_obj,
+                                'exam_type': 'REGULAR'
+                            }
                         )
 
         except Exception as e:

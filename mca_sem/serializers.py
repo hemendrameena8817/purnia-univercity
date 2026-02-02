@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from .models import (
     MCACourse, MCASession, MCABatch, MCAStudentProfile, 
-    MCASubject, MCAExam, MCAResult, MCAResultDetail
+    MCASubject, MCAExam, MCAExamSchedule, MCAStudentAssessment, 
+    MCASemesterResult, MCASemesterRegistration, MCAExamRegistration
 )
 
 class MCACourseSerializer(serializers.ModelSerializer):
@@ -30,6 +31,12 @@ class MCAExamSerializer(serializers.ModelSerializer):
         model = MCAExam
         fields = '__all__'
 
+class MCAExamScheduleSerializer(serializers.ModelSerializer):
+    subject_details = MCASubjectSerializer(source='subject', read_only=True)
+    class Meta:
+        model = MCAExamSchedule
+        fields = '__all__'
+
 class MCAStudentProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField(source='user.get_full_name')
     course_name = serializers.ReadOnlyField(source='course.name')
@@ -40,21 +47,26 @@ class MCAStudentProfileSerializer(serializers.ModelSerializer):
         model = MCAStudentProfile
         fields = '__all__'
 
-class MCAResultDetailSerializer(serializers.ModelSerializer):
+class MCAStudentAssessmentSerializer(serializers.ModelSerializer):
     subject_name = serializers.ReadOnlyField(source='subject.name')
     paper_code = serializers.ReadOnlyField(source='subject.paper_code')
-    full_marks = serializers.ReadOnlyField(source='subject.full_marks')
-    pass_marks = serializers.ReadOnlyField(source='subject.pass_marks')
-
+    
     class Meta:
-        model = MCAResultDetail
+        model = MCAStudentAssessment
         fields = '__all__'
 
-class MCAResultSerializer(serializers.ModelSerializer):
-    details = MCAResultDetailSerializer(many=True, read_only=True)
+class MCASemesterResultSerializer(serializers.ModelSerializer):
     student_details = MCAStudentProfileSerializer(source='student', read_only=True)
-    exam_details = MCAExamSerializer(source='exam', read_only=True)
-
     class Meta:
-        model = MCAResult
+        model = MCASemesterResult
+        fields = '__all__'
+
+class MCASemesterRegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MCASemesterRegistration
+        fields = '__all__'
+
+class MCAExamRegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MCAExamRegistration
         fields = '__all__'

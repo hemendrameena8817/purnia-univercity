@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     MCACourse, MCASession, MCABatch, MCAStudentProfile, 
-    MCASubject, MCAExam, MCAResult, MCAResultDetail
+    MCASubject, MCAExam, MCAExamSchedule, MCAStudentAssessment, 
+    MCASemesterResult, MCASemesterRegistration, MCAExamRegistration
 )
 
 @admin.register(MCACourse)
@@ -27,26 +28,39 @@ class MCAStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(MCASubject)
 class MCASubjectAdmin(admin.ModelAdmin):
-    list_display = ('name', 'paper_code', 'full_marks', 'pass_marks')
-    search_fields = ('name', 'paper_code')
+    list_display = ('name', 'subject_code', 'paper_code', 'semester', 'full_marks', 'pass_marks', 'credit')
+    search_fields = ('name', 'subject_code', 'paper_code')
+    list_filter = ('semester',)
 
 @admin.register(MCAExam)
 class MCAExamAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'session', 'exam_month_year', 'publication_date')
+    list_display = ('name', 'session', 'exam_month_year', 'publication_date')
     search_fields = ('name', 'session')
 
-class MCAResultDetailInline(admin.TabularInline):
-    model = MCAResultDetail
-    extra = 1
+@admin.register(MCAExamSchedule)
+class MCAExamScheduleAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'subject', 'exam_date', 'exam_time', 'sitting')
+    list_filter = ('exam', 'exam_date', 'sitting')
+    search_fields = ('subject__name', 'subject__paper_code')
 
-@admin.register(MCAResult)
-class MCAResultAdmin(admin.ModelAdmin):
-    list_display = ('student', 'exam', 'total_marks', 'result_status', 'exam_center')
-    list_filter = ('exam', 'result_status')
-    search_fields = ('student__roll_no', 'student__user__first_name', 'student__user__last_name')
-    inlines = [MCAResultDetailInline]
+@admin.register(MCAStudentAssessment)
+class MCAStudentAssessmentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'subject', 'semester', 'label', 'ind_marks_obtained', 'ind_is_pass')
+    list_filter = ('semester', 'label', 'exam_type', 'batch')
+    search_fields = ('student__roll_no', 'subject__name', 'subject__paper_code')
 
-@admin.register(MCAResultDetail)
-class MCAResultDetailAdmin(admin.ModelAdmin):
-    list_display = ('result', 'subject', 'marks_obtained')
-    list_filter = ('subject',)
+@admin.register(MCASemesterResult)
+class MCASemesterResultAdmin(admin.ModelAdmin):
+    list_display = ('student', 'semester', 'session', 'semester_result', 'sgpa')
+    list_filter = ('semester', 'session', 'semester_result')
+    search_fields = ('student__roll_no',)
+
+@admin.register(MCASemesterRegistration)
+class MCASemesterRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('student', 'sem', 'session', 'status', 'exam_eligible')
+    list_filter = ('sem', 'session', 'status', 'exam_eligible')
+
+@admin.register(MCAExamRegistration)
+class MCAExamRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('student', 'sem', 'session', 'status', 'is_open')
+    list_filter = ('sem', 'session', 'status', 'is_open')

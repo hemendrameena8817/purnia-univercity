@@ -196,7 +196,7 @@ SWAGGER_SETTINGS = {
 # -------------------------------------------------
 
 ACCOUNT_LOGIN_METHODS = {'username'}  # Use username for login
-ACCOUNT_SIGNUP_FIELDS = ['username']  # Only username is required for signup
+# ACCOUNT_SIGNUP_FIELDS = ['username']  # Only username is required for signup
 # ACCOUNT_EMAIL_REQUIRED = False
 ACCOUNT_UNIQUE_EMAIL = True  # Keep email unique if provided
 # ACCOUNT_USERNAME_REQUIRED = True
