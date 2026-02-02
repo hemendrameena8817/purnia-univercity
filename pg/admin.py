@@ -47,7 +47,7 @@ class PGBatchAdmin(admin.ModelAdmin):
 
 @admin.register(PGStudentProfile)
 class PGStudentProfileAdmin(admin.ModelAdmin):
-    list_display = ('registration_no', 'first_name', 'last_name', 'roll_no', 'college', 
+    list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
@@ -120,8 +120,22 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'course_type', 'course_code', 'semester', 'label', 
-                   'ind_marks_obtained', 'comb_final_marks_obtained', 'comb_letter_grade', 'sem_result', 'ind_is_absent')
+    list_display = (
+        'uid', 'student', 'course_name', 'course_short_name', 'department', 
+        'course_type', 'course_code', 'paper_code', 'semester', 'label', 
+        'degree', 'session', 'batch', 'college_code', 'exam_type', 'attendance', 
+        'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
+        'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 
+        'comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained', 
+        'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained', 
+        'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point', 
+        'course_max_marks', 'course_max_credits', 'course_pass_marks', 
+        'course_marks_obtained', 'course_grace_obtained', 'course_final_marks_obtained', 
+        'course_credit_obtained', 'course_grade_point', 
+        'sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 
+        'next_sem_status', 'sem_grace_obtained', 
+        'temp_total_gp', 'created_at', 'updated_at'
+    )
     list_filter = ('semester', 'course_type', 'exam_type', 'sem_result', 'ind_is_absent', 'session', 'batch')
     search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'course_code', 'course_name', 'label')
     ordering = ('-created_at',)
@@ -135,12 +149,13 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
             'fields': ('exam_type', 'session', 'batch', 'department', 'degree', 'college_code', 'attendance')
         }),
         ('Individual Assessment', {
-            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 'ind_is_absent')
+            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 
+                      'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 'ind_is_absent')
         }),
         ('Combined Assessment', {
             'fields': ('comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained', 
                       'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained', 
-                      'comb_numeric_grade', 'comb_letter_grade')
+                      'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point')
         }),
         ('Course Assessment', {
             'fields': ('course_max_marks', 'course_max_credits', 'course_pass_marks', 'course_marks_obtained',
