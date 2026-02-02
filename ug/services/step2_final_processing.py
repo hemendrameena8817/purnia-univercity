@@ -158,8 +158,13 @@ class FinalResultProcessingService:
         if not all_assessments:
             return
 
-        # 1. Individual Level (Already done via Save/Step 1)
-        # self._process_individual_level(student) 
+        # 1. Individual Level - Apply Grace Marks (NEW: Automatic calculation)
+        # Must happen BEFORE combined/course processing so grace is included in all calculations
+        all_assessments = UGResultCalculator.calculate_and_apply_grace(
+            student.id,
+            self.semester,
+            all_assessments
+        )
         
         # 2. Combined Level (Theory+Practical Aggregation)
         # Pass the list for processing logic, but we still need QuerySets for UPDATE
@@ -263,8 +268,11 @@ class FinalResultProcessingService:
         from ug.services.result_calculator import UGResultCalculator
         
         total_max = sum(a.ind_max_marks or 0 for a in component_list)
-        total_obtained = sum(a.ind_marks_obtained or 0 for a in component_list)
+        # FIXED: Use ind_final_marks_obtained (includes grace) instead of ind_marks_obtained
+        total_obtained = sum(a.ind_final_marks_obtained or 0 for a in component_list)
         total_pass_marks = sum(a.ind_pass_marks or 0 for a in component_list)
+        # Calculate total grace for this component
+        total_grace = sum(a.ind_grace_obtained or 0 for a in component_list)
         
         # Targeted filter
         if type_str == 'Theory':
@@ -275,16 +283,18 @@ class FinalResultProcessingService:
         # STEP 1: Always update marks (derived from ind_ fields)
         base_qs.filter(paper_code=paper_code).filter(filters).update(
             comb_max_marks=total_max,
-            comb_marks_obtained=total_obtained,
+            comb_marks_obtained=total_obtained,  # Now includes grace
             comb_pass_marks=total_pass_marks,
+            comb_grace_obtained=total_grace,  # Track grace at combined level
         )
         
-        # STEP 2: Conditionally update credits and grade points
-        # Check if values already exist in ANY component (not just the first)
+        # STEP 2: Always recalculate credits based on comb_marks_obtained (includes grace)
+        # This ensures grace marks are properly reflected in credits
         if not component_list:
             return
         
-        # Check each component to see if values are already populated
+        # Check if we should recalculate credits and grades
+        # For legacy data: preserve grade_point but recalculate credits (for grace)
         has_any_existing_values = False
         for comp in component_list:
             comp.refresh_from_db()
@@ -294,28 +304,28 @@ class FinalResultProcessingService:
                     has_any_existing_values = True
                     break
         
-        # If ANY component has values, DON'T overwrite (preserve from json_data or direct entry)
+        # STEP 3: Calculate values
+        # For legacy: use existing comb_max_credits; for new: calculate based on course split
         if has_any_existing_values:
-            # Values already populated in at least one component, skip calculation
-            return
-        
-        # STEP 3: Calculate values (for future data without json_data)
-        # Calculate component-specific max_credit
-        component_max_credit = 0
-        if course_max_credit and has_both_components:
-            # Split credits based on component type
-            if course_max_credit == 6:
-                component_max_credit = 4 if type_str == 'Theory' else 2
-            elif course_max_credit == 5:
-                component_max_credit = 3 if type_str == 'Theory' else 2
-            elif course_max_credit == 3:
-                component_max_credit = 2 if type_str == 'Theory' else 1
-            else:
-                # Default split: roughly 2/3 for theory, 1/3 for practical
-                component_max_credit = int(course_max_credit * (2/3) if type_str == 'Theory' else course_max_credit * (1/3))
-        elif course_max_credit:
-            # Only one component, use full credit
-            component_max_credit = course_max_credit
+            # Use existing comb_max_credits from first component
+            component_max_credit = component_list[0].comb_max_credits or 0
+        else:
+            # Calculate component-specific max_credit for new data
+            component_max_credit = 0
+            if course_max_credit and has_both_components:
+                # Split credits based on component type
+                if course_max_credit == 6:
+                    component_max_credit = 4 if type_str == 'Theory' else 2
+                elif course_max_credit == 5:
+                    component_max_credit = 3 if type_str == 'Theory' else 2
+                elif course_max_credit == 3:
+                    component_max_credit = 2 if type_str == 'Theory' else 1
+                else:
+                    # Default split: roughly 2/3 for theory, 1/3 for practical
+                    component_max_credit = int(course_max_credit * (2/3) if type_str == 'Theory' else course_max_credit * (1/3))
+            elif course_max_credit:
+                # Only one component, use full credit
+                component_max_credit = course_max_credit
         
         # Calculate component grade
         component_grade, component_numeric_grade = UGResultCalculator.calculate_grade(
@@ -323,22 +333,28 @@ class FinalResultProcessingService:
             total_max
         )
         
-        # Check if component passed
+        # Check if component passed (using total_obtained which includes grace)
         component_passed = total_obtained >= total_pass_marks if total_pass_marks > 0 else (total_obtained > 0)
         
         # Calculate credits earned
         component_credit_obtained = Decimal(component_max_credit) if component_passed else Decimal(0)
         
-        # Calculate grade point = NumGrade × ComponentCredit
-        component_grade_point = Decimal(component_numeric_grade) * Decimal(component_max_credit)
-        
-        # Update calculated values
-        base_qs.filter(paper_code=paper_code).filter(filters).update(
-            comb_max_credits=component_max_credit,
-            comb_numeric_grade=component_numeric_grade,
-            comb_credit_obtained=component_credit_obtained,
-            comb_grade_point=component_grade_point,
-        )
+        # For legacy data, preserve existing grade_point; for new data, calculate it
+        if has_any_existing_values:
+            # Legacy: Update credits only (preserve existing grade_point)
+            base_qs.filter(paper_code=paper_code).filter(filters).update(
+                comb_credit_obtained=component_credit_obtained,  # Recalculate with grace
+            )
+        else:
+            # New data: Calculate and update everything
+            component_grade_point = Decimal(component_numeric_grade) * Decimal(component_max_credit)
+            
+            base_qs.filter(paper_code=paper_code).filter(filters).update(
+                comb_max_credits=component_max_credit,
+                comb_numeric_grade=component_numeric_grade,
+                comb_credit_obtained=component_credit_obtained,
+                comb_grade_point=component_grade_point,
+            )
 
     ################################################################################
     # #### Course Level ####
@@ -391,9 +407,6 @@ class FinalResultProcessingService:
                     # 'course_grade_point': result_data['grade_point'], # Conditional
                     'course_max_credits': result_data['max_credit'],
                     'course_max_marks': result_data['total_max_marks'],
-                    # 'comb_numeric_grade': result_data['grade_point'], # Conditional
-                    # 'comb_credit_obtained': result_data['credits_earned'], # Set by combined-level!
-                    # 'comb_max_credits': result_data['max_credit'], # Set by combined-level with split!
                     'comb_final_marks_obtained': result_data['total_marks']
                 }
                 
@@ -537,7 +550,18 @@ class FinalResultProcessingService:
             )
             
             sem_max_credits += Decimal(result_data['max_credit'] or 0)
-            sem_credits_earned += Decimal(result_data['credits_earned'] or 0)
+            
+            # FIXED: Refresh assessments from DB to get updated comb_credit_obtained (with grace)
+            # The in-memory all_assessments_list has OLD values because .update() doesn't refresh objects
+            # We need fresh values that include grace marks applied at combined level
+            from ug.models import StudentCourseAssessment
+            paper_assessments_fresh = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=self.semester,
+                paper_code=paper_code
+            )
+            paper_credits_earned = max((a.comb_credit_obtained or 0) for a in paper_assessments_fresh) if paper_assessments_fresh else Decimal(0)
+            sem_credits_earned += paper_credits_earned
 
         # OFFICIAL RULE (ug_passing_rules.txt, lines 104-106):
         # "A candidate SHALL NOT be awarded or calculated ANY SGPA if he/she 

@@ -61,6 +61,149 @@ class UGResultCalculator:
                 return (grade, points)
         
         return ('F', 0)
+    
+    ################################################################################
+    # GRACE MARKS CALCULATION
+    ################################################################################
+    
+    @staticmethod
+    def calculate_and_apply_grace(student_id: int, semester: str, assessments: List) -> List:
+        """
+        Automatically calculate and apply grace marks to failed assessments.
+        
+        CRITICAL RULE: Grace is ONLY applied if, after applying max 5 marks,
+        the student will PASS ALL CIA and ALL ESE/Theory assessments.
+        
+        Grace Rules (ug_passing_rules.txt):
+        - Maximum 5 marks total (can be split across subjects)
+        - Only to clear failed subjects
+        - Must result in passing ALL CIA and ALL ESE
+        - Must NOT improve grade/SGPA (only to achieve passing)
+        
+        Algorithm:
+        1. Separate assessments into CIA and ESE
+        2. Find failed assessments within 5 marks of passing
+        3. Simulate applying grace (max 5 marks)
+        4. Check: Will student pass ALL CIA AND ALL ESE after grace?
+        5. If YES → Apply grace permanently
+           If NO → Don't apply any grace
+        
+        Args:
+            student_id: Student ID
+            semester: Semester
+            assessments: List of StudentCourseAssessment instances
+            
+        Returns:
+            Updated list of assessments with grace applied (if validation passed)
+        """
+        from decimal import Decimal
+        
+        # Separate CIA and ESE assessments
+        cia_assessments = [a for a in assessments if 'CIA' in (a.label or '')]
+        ese_assessments = [a for a in assessments if 'ESE' in (a.label or '') or 'END_TERM' in (a.label or '')]
+        
+        # Find candidates for grace marks (all failed assessments within 5 marks)
+        grace_candidates = []
+        for a in assessments:
+            # Skip if absent, already passed, or no pass marks defined
+            if a.ind_is_absent or a.ind_is_pass or not a.ind_pass_marks:
+                continue
+            
+            ind_marks = a.ind_marks_obtained or Decimal(0)
+            pass_marks = a.ind_pass_marks or Decimal(0)
+            
+            # Calculate shortfall
+            shortfall = pass_marks - ind_marks
+            
+            # Only consider if within grace range (0 < shortfall <= 5)
+            if shortfall > 0 and shortfall <= 5:
+                grace_candidates.append({
+                    'assessment': a,
+                    'shortfall': shortfall,
+                    'ind_marks': ind_marks,
+                    'pass_marks': pass_marks
+                })
+        
+        if not grace_candidates:
+            return assessments  # No one needs grace
+        
+        # Sort by smallest shortfall first (optimize grace usage)
+        grace_candidates.sort(key=lambda x: x['shortfall'])
+        
+        # SIMULATION: Allocate grace marks (max 5 total) to see if it helps
+        simulated_grace = {}  # {assessment_id: grace_amount}
+        total_grace_allocated = Decimal(0)
+        MAX_GRACE = Decimal(5)
+        
+        for candidate in grace_candidates:
+            assessment = candidate['assessment']
+            shortfall = candidate['shortfall']
+            
+            # Check if we have enough grace remaining
+            grace_available = MAX_GRACE - total_grace_allocated
+            if grace_available <= 0:
+                break  # No grace left
+            
+            # Allocate grace (minimum of shortfall or available grace)
+            grace_to_give = min(shortfall, grace_available)
+            simulated_grace[assessment.id] = grace_to_give
+            total_grace_allocated += grace_to_give
+        
+        # VALIDATION: Check if all CIA and all ESE will pass after grace
+        def will_pass_with_grace(assessment_list, grace_dict):
+            """Check if all assessments in list will pass with simulated grace"""
+            for a in assessment_list:
+                if a.ind_is_absent:
+                    return False  # Absent = always fail
+                
+                # Calculate final marks with simulated grace
+                final_marks = (a.ind_marks_obtained or Decimal(0)) + grace_dict.get(a.id, Decimal(0))
+                pass_marks = a.ind_pass_marks or Decimal(0)
+                
+                if pass_marks > 0 and final_marks < pass_marks:
+                    return False  # Still fails even with grace
+            
+            return True  # All passed
+        
+        all_cia_pass = will_pass_with_grace(cia_assessments, simulated_grace)
+        all_ese_pass = will_pass_with_grace(ese_assessments, simulated_grace)
+        
+        # CRITICAL DECISION: Only apply grace if student will pass EVERYTHING
+        if not (all_cia_pass and all_ese_pass):
+            print(f"  ⚠️ Grace NOT applied: Student won't pass all CIA and ESE even with {total_grace_allocated} grace marks")
+            print(f"     CIA pass: {all_cia_pass}, ESE pass: {all_ese_pass}")
+            return assessments  # Don't apply any grace
+        
+        # APPLY GRACE: Student will pass everything with grace
+        for candidate in grace_candidates:
+            assessment = candidate['assessment']
+            grace_to_give = simulated_grace.get(assessment.id)
+            
+            if not grace_to_give:
+                continue
+            
+            # Apply grace marks permanently
+            assessment.ind_grace_obtained = grace_to_give
+            assessment.ind_final_marks_obtained = candidate['ind_marks'] + grace_to_give
+            assessment.ind_is_pass = (assessment.ind_final_marks_obtained >= candidate['pass_marks'])
+            
+            # Save to database
+            assessment.save(update_fields=[
+                'ind_grace_obtained',
+                'ind_final_marks_obtained',
+                'ind_is_pass'
+            ])
+            
+            # Log for debugging
+            print(f"  ✅ Grace applied: {assessment.student.registration_no} - "
+                  f"{assessment.paper_code} {assessment.label}: "
+                  f"{candidate['ind_marks']} + {grace_to_give} = {assessment.ind_final_marks_obtained} "
+                  f"(pass: {candidate['pass_marks']})")
+        
+        print(f"  📊 Total grace allocated: {total_grace_allocated}/5 marks")
+        print(f"  ✅ Validation passed: Student will pass ALL CIA and ALL ESE")
+        
+        return assessments
 
     ################################################################################
     # #### Individual Level ####
@@ -83,16 +226,19 @@ class UGResultCalculator:
         if assessment.ind_is_absent:
             return False
         
+        # Use final marks (includes grace) for pass check
+        final_marks = assessment.ind_final_marks_obtained or assessment.ind_marks_obtained or 0
+        
         # No marks obtained = Fail
-        if not assessment.ind_marks_obtained:
+        if not final_marks:
             return False
         
         # No pass marks defined = assume pass
         if not assessment.ind_pass_marks:
             return True
         
-        # Check against pass marks
-        return assessment.ind_marks_obtained >= assessment.ind_pass_marks
+        # FIXED: Check using final_marks (marks + grace) instead of just marks_obtained
+        return final_marks >= assessment.ind_pass_marks
     
     ################################################################################
     # #### Combined Level #### (Component Aggregation)
@@ -246,7 +392,8 @@ class UGResultCalculator:
                 practical_assessments.append(a)
         
         # Calculate total marks and max marks
-        total_marks = sum(a.ind_marks_obtained or 0 for a in assessment_list)
+        # FIXED: Use ind_final_marks_obtained (includes grace) instead of ind_marks_obtained
+        total_marks = sum(a.ind_final_marks_obtained or 0 for a in assessment_list)
         total_max_marks = sum(a.ind_max_marks or 0 for a in assessment_list)
         
         # Calculate grade
@@ -329,9 +476,36 @@ class UGResultCalculator:
         
         max_credit = course_max_credit
         
-        # Award credits if course passed
-        if course_passed:
-            credits_earned = max_credit
+        # FIXED: Award credits based on component-level pass/fail  
+        # For papers with both Theory and Practical, award partial credits
+        if has_both:
+            # Split credits for Theory+Practical papers
+            theory_credit = Decimal(0)
+            practical_credit = Decimal(0)
+            
+            if course_max_credit == 6:
+                theory_credit = Decimal(4)
+                practical_credit = Decimal(2)
+            elif course_max_credit == 5:
+                theory_credit = Decimal(3)
+                practical_credit = Decimal(2)
+            elif course_max_credit == 3:
+                theory_credit = Decimal(2)
+                practical_credit = Decimal(1)
+            else:
+                # Default split: roughly 2/3 for theory, 1/3 for practical
+                theory_credit = Decimal(course_max_credit) * Decimal('0.67')
+                practical_credit = Decimal(course_max_credit) * Decimal('0.33')
+            
+            # Award credits based on individual component pass status
+            credits_earned = Decimal(0)
+            if theory_passed:
+                credits_earned += theory_credit
+            if practical_passed:
+                credits_earned += practical_credit
+        else:
+            # Single component paper: all or nothing
+            credits_earned = max_credit if course_passed else Decimal(0)
         
         return {
             'paper_code': paper_code,
@@ -470,21 +644,25 @@ class UGResultCalculator:
         if cia_assessments:
             all_cia_passed = all(UGResultCalculator.check_individual_pass(a) for a in cia_assessments)
         
-        # Get theory assessments
-        theory_assessments = [
+        # FIXED: Get ALL ESE assessments (Theory AND Practical)
+        # Previously only checked 'ESE-Theory', missing ESE-Practical absences
+        ese_assessments = [
             a for a in assessment_list 
-            if 'ESE-Theory' in (a.label or '') or a.label == 'END_TERM'
+            if 'ESE' in (a.label or '')  # Matches ESE-Theory, ESE-Practical, END_TERM
         ]
         
-        # Check if all theory passed
-        all_theory_passed = True
-        if theory_assessments:
-            all_theory_passed = all(UGResultCalculator.check_individual_pass(a) for a in theory_assessments)
+        # Check if all ESE passed
+        all_ese_passed = True
+        if ese_assessments:
+            all_ese_passed = all(UGResultCalculator.check_individual_pass(a) for a in ese_assessments)
         
         # Determine result
-        if all_cia_passed and all_theory_passed:
+        # PASS: All CIA passed AND all ESE passed (no failures/absences)
+        # PROMOTED: All CIA passed BUT some ESE failed/absent  
+        # FAIL: CIA failed
+        if all_cia_passed and all_ese_passed:
             return 'PASS'
-        elif all_cia_passed and not all_theory_passed:
+        elif all_cia_passed and not all_ese_passed:
             return 'PROMOTED'
         else:
             return 'FAIL'
