@@ -10,7 +10,7 @@ poetry run python manage.py shell
 
 Then:
 >>> from scripts.plw.import_plw_results import run_import
->>> run_import('old_data/PRE_LAW_PART_I_USER_PROFILE_MARKS.xlsx')
+>>> run_import('old_data/FINAL_LLB_PART_1.xlsx')
 
 OR run directly:
 poetry run python scripts/plw/import_plw_results.py --file "old_data/Pre_Law_Sample.xlsx"
@@ -98,35 +98,106 @@ def run_import(file_path):
     subject_cols = [col for col in df.columns if col not in NON_SUBJECT_COLUMNS and "Unnamed" not in str(col)]
     print(f"Identified Subjects: {subject_cols}")
     
+    # --- PHASE 1: VALIDATION ---
+    print("\nStarting Validation Pass...")
+    errors = []
+    
+    # Cache to avoid duplicate DB lookups for the same values
+    cache = {
+        'colleges': {}, 'sessions': {}, 'batches': {}, 
+        'courses': {}, 'exams': {}, 'subjects': {}
+    }
+
+    for index, row in df.iterrows():
+        row_num = index + 2
+        
+        # 1. College
+        college_name = str(row['College']).strip()
+        if college_name not in cache['colleges']:
+            college = College.objects.filter(name__iexact=college_name).first()
+            if not college:
+                college = College.objects.filter(name__icontains=college_name).first()
+            cache['colleges'][college_name] = college
+        if not cache['colleges'][college_name]:
+            errors.append(f"Row {row_num}: College '{college_name}' not found.")
+
+        # 2. Session
+        session_name = str(row['Session']).strip()
+        if session_name not in cache['sessions']:
+            cache['sessions'][session_name] = PLWSession.objects.filter(name=session_name).first()
+        if not cache['sessions'][session_name]:
+            errors.append(f"Row {row_num}: Session '{session_name}' not found.")
+
+        # 3. Batch
+        batch_name = str(row['Batch']).strip()
+        if batch_name not in cache['batches']:
+            # Also check session link for batch
+            sess = cache['sessions'].get(session_name)
+            if sess:
+                cache['batches'][batch_name] = PLWBatch.objects.filter(name=batch_name, session=sess).first()
+            else:
+                cache['batches'][batch_name] = None
+        if not cache['batches'][batch_name]:
+            errors.append(f"Row {row_num}: Batch '{batch_name}' not found for session '{session_name}'.")
+
+        # 4. Course
+        course_name = str(row.get('Course', 'Pre-Law')).strip()
+        if course_name not in cache['courses']:
+            cache['courses'][course_name] = PLWCourse.objects.filter(name__iexact=course_name).first()
+        if not cache['courses'][course_name]:
+            errors.append(f"Row {row_num}: Course '{course_name}' not found.")
+
+        # 5. Exam
+        exam_name = str(row['PLW Exam']).strip()
+        if exam_name not in cache['exams']:
+            # Match ONLY by name now, as requested
+            exam = PLWExam.objects.filter(name__iexact=exam_name).first()
+            
+            if not exam:
+                errors.append(f"Row {row_num}: Exam '{exam_name}' not found in database.")
+            
+            cache['exams'][exam_name] = exam
+
+        # 6. Subjects
+        for sub_col in subject_cols:
+            subject_name = str(sub_col).strip()
+            if subject_name not in cache['subjects']:
+                cache['subjects'][subject_name] = PLWSubject.objects.filter(name__iexact=subject_name).first()
+            if not cache['subjects'][subject_name]:
+                errors.append(f"Row {row_num}: Subject '{subject_name}' not found. Please create it or check spelling.")
+
+    if errors:
+        print("\nVALIDATION FAILED! Please fix the following errors before re-running:")
+        for err in errors[:50]: # Show first 50 errors
+            print(f"  - {err}")
+        if len(errors) > 50:
+            print(f"  ... and {len(errors)-50} more errors.")
+        return
+
+    print("Validation Successful! All dependencies found. Starting Import...\n")
+
+    # --- PHASE 2: IMPORT ---
     stats = {
         'students_created': 0, 'students_updated': 0,
         'results_created': 0, 'results_updated': 0
     }
 
-    # Iterate rows
     for index, row in df.iterrows():
         try:
             with transaction.atomic():
-                # 1. Extract Basic Data
                 roll_no = str(row['Roll Number']).strip()
                 reg_no = str(row['Reg No']).strip()
                 name = str(row['Name of Candidate']).strip()
-                college_name = str(row['College']).strip()
-                batch_name = str(row['Batch']).strip()
-                session_name = str(row['Session']).strip()
-                exam_name = str(row['PLW Exam']).strip()
                 
-                father_name = row.get('Father Name')
-                if pd.isna(father_name): father_name = ""
-                else: father_name = str(father_name).strip()
-
-                mother_name = row.get('Mother Name')
-                if pd.isna(mother_name): mother_name = ""
-                else: mother_name = str(mother_name).strip()
-
-                exam_center = row.get('Exam Center')
-                if pd.isna(exam_center): exam_center = ""
-                else: exam_center = str(exam_center).strip()
+                college = cache['colleges'][str(row['College']).strip()]
+                session_obj = cache['sessions'][str(row['Session']).strip()]
+                batch_obj = cache['batches'][str(row['Batch']).strip()]
+                course = cache['courses'][str(row.get('Course', 'Pre-Law')).strip()]
+                exam_obj = cache['exams'][str(row['PLW Exam']).strip()]
+                
+                father_name = str(row.get('Father Name', '')).strip() if not pd.isna(row.get('Father Name')) else ""
+                mother_name = str(row.get('Mother Name', '')).strip() if not pd.isna(row.get('Mother Name')) else ""
+                exam_center = str(row.get('Exam Center', '')).strip() if not pd.isna(row.get('Exam Center')) else ""
                 
                 total_marks = row['Total']
                 result_status = str(row['Result']).strip()
@@ -143,57 +214,12 @@ def run_import(file_path):
                 # 2. User
                 user = get_or_create_user(reg_no, name)
                 
-                # 3. College
-                # Try exact match or contains
-                college = College.objects.filter(name__iexact=college_name).first()
-                if not college:
-                    college = College.objects.filter(name__icontains=college_name).first()
-                
-                if not college:
-                    # Create generic college if missing to avoid breaking import, or error out?
-                    # For now, create a placeholder if strictly needed, or skip
-                    # Better to create one to proceed
-                    college, _ = College.objects.get_or_create(name=college_name, defaults={'college_code': 'TEMP'})
-                    print(f"Warning: Created provisional college '{college_name}'")
-
-                # 4. Session & Batch
-                # Handle session years (e.g. 2023 -> 2023-2024 or just 2023?) Assuming name is key
-                session_obj, _ = PLWSession.objects.get_or_create(
-                    name=session_name,
-                    defaults={
-                        'start_year': int(session_name.split('-')[0]) if '-' in session_name else int(session_name),
-                        'end_year': int(session_name.split('-')[1]) if '-' in session_name else int(session_name) + 1
-                    }
-                )
-                
-                batch_obj, _ = PLWBatch.objects.get_or_create(
-                    name=batch_name,
-                    session=session_obj,
-                    defaults={'admission_year': session_obj.start_year}
-                )
-
-                # 5. Course - Read from Excel and map to existing course
-                course_name = row.get('Course')
-                if pd.isna(course_name) or str(course_name).strip() == '':
-                    # Default to Pre-Law if no course specified
-                    course_name = "Pre-Law"
-                else:
-                    course_name = str(course_name).strip()
-                
-                # Try to find existing course (case-insensitive)
-                course = PLWCourse.objects.filter(name__iexact=course_name).first()
-                
-                if not course:
-                    # Create new course if not found
-                    print(f"Warning: Course '{course_name}' not found in database. Creating new course...")
-                    course = PLWCourse.objects.create(name=course_name, duration_years=5)
-
                 # 6. Student Profile
                 student, created = PLWStudentProfile.objects.update_or_create(
-                    roll_no=roll_no,
+                    registration_no=reg_no,
                     defaults={
                         'user': user,
-                        'registration_no': reg_no,
+                        'roll_no': roll_no,
                         'father_name': father_name,
                         'mother_name': mother_name,
                         'college': college,
@@ -204,19 +230,7 @@ def run_import(file_path):
                 if created: stats['students_created'] += 1
                 else: stats['students_updated'] += 1
 
-                # 7. Exam
-                # Assuming exam name is unique enough; publication date default today if new
-                exam_obj, _ = PLWExam.objects.get_or_create(
-                    name=exam_name,
-                    session=session_name,
-                    defaults={
-                        'exam_month_year': 'Unknown', # Or parse from name/sheet if available
-                        'publication_date': date.today()
-                    }
-                )
-                
                 # 8. Result
-                # total_marks might be NaN or string
                 try:
                     t_marks = int(total_marks)
                 except:
@@ -238,27 +252,15 @@ def run_import(file_path):
                 # 9. Result Details (Subjects)
                 for sub_col in subject_cols:
                     marks_val = row[sub_col]
-                    
-                    # Skip if marks is empty/NaN
                     if pd.isna(marks_val) or str(marks_val).strip() == '':
                         continue
                         
                     try:
                         obtained = int(marks_val)
                     except:
-                        # Could be 'Absent' or other text
-                        obtained = 0 # Or handle appropriately
+                        obtained = 0
                     
-                    # Find Subject by Name
-                    # We assume subject name in Excel matches DB name
-                    # Or we create it dynamically? Better to try find.
-                    # Since we have "English-I" in excel and DB, name match should work.
-                    subject_obj = PLWSubject.objects.filter(name__iexact=sub_col).first()
-                    
-                    if not subject_obj:
-                        # Try simple matching or create?
-                        print(f"  Note: Subject '{sub_col}' not found in DB. Creating...")
-                        subject_obj = PLWSubject.objects.create(name=sub_col, paper_code="?", full_marks=100, pass_marks=33)
+                    subject_obj = cache['subjects'][sub_col]
                     
                     PLWResultDetail.objects.update_or_create(
                         result=result_obj,

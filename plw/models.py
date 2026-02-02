@@ -1,8 +1,10 @@
 from django.db import models
+import uuid
 
 
 class PLWCourse(models.Model):
-    name = models.CharField(max_length=255)  # Bachelor of Law (LL.B.)
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255)  
     duration_years = models.PositiveIntegerField(default=5)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -13,6 +15,7 @@ class PLWCourse(models.Model):
 from django.conf import settings
 
 class PLWSession(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=20)  # 2021-24
     start_year = models.PositiveIntegerField()
     end_year = models.PositiveIntegerField()
@@ -24,6 +27,7 @@ class PLWSession(models.Model):
         return self.name
 
 class PLWBatch(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=50)  # 2021 Admission
     admission_year = models.PositiveIntegerField()
 
@@ -39,6 +43,7 @@ class PLWBatch(models.Model):
         return f"{self.name} ({self.session.name})"
 
 class PLWStudentProfile(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -75,6 +80,7 @@ class PLWStudentProfile(models.Model):
         return f"{self.roll_no} - {self.user.get_full_name()}"
 
 class PLWSubject(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)  # English-I, Political Science-I
     paper_code = models.CharField(max_length=10)  # I, II, III
     full_marks = models.PositiveIntegerField(default=100)
@@ -87,6 +93,7 @@ class PLWSubject(models.Model):
 
 
 class PLWExam(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)  
     session = models.CharField(max_length=20)  # 2021-24
     exam_month_year = models.CharField(max_length=20)  # July 2022
@@ -98,6 +105,7 @@ class PLWExam(models.Model):
         return self.name
 
 class PLWResult(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     student = models.ForeignKey(
         PLWStudentProfile,
         on_delete=models.CASCADE,
@@ -126,6 +134,7 @@ class PLWResult(models.Model):
 
 
 class PLWResultDetail(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     result = models.ForeignKey(
         PLWResult,
         on_delete=models.CASCADE,
