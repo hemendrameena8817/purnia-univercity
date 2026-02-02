@@ -46,7 +46,7 @@ def generate_marksheet_pdf(result):
     }
     
     # 3. Render Template
-    template_path = 'plw/detailed_marksheet.html'
+    template_path = 'plw/detailed_marksheet_LLB.html'
     template = get_template(template_path)
     html = template.render(context)
     

@@ -164,7 +164,7 @@ class PLWResultPDFView(View):
              
         response = HttpResponse(pdf_content, content_type='application/pdf')
         session_formatted = result.exam.session.replace('-', '_')
-        filename = f"MARKSHEET_{result.student.registration_no}_PLW_{session_formatted}.pdf"
+        filename = f"MARKSHEET_{result.student.registration_no}_LLB_{session_formatted}.pdf"
         response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
@@ -188,12 +188,12 @@ class PLWBulkMarksheetGenerateView(APIView):
                     return Response({"error": f"No results found for exam_uid: {exam_uid}"}, status=status.HTTP_404_NOT_FOUND)
                 
                 exam = results.first().exam
-                folder_name = f"plw_marksheets_{slugify(exam.name)}_{exam_uid}"
+                folder_name = f"Marksheets_{slugify(exam.name)}_{exam_uid}"
             else:
                 # 2. If no UID provided, check if any results exist at all (fallback to "all")
                 if not results.exists():
                     return Response({"error": "No results found in the system"}, status=status.HTTP_404_NOT_FOUND)
-                folder_name = "plw_marksheets_all"
+                folder_name = "Marksheets_all"
 
             save_path = os.path.join(settings.MEDIA_ROOT, folder_name)
             os.makedirs(save_path, exist_ok=True)
@@ -204,7 +204,7 @@ class PLWBulkMarksheetGenerateView(APIView):
                 pdf_content = generate_marksheet_pdf(result)
                 if pdf_content:
                     session_formatted = result.exam.session.replace('-', '_')
-                    filename = f"MARKSHEET_{result.student.registration_no}_PLW_{session_formatted}.pdf"
+                    filename = f"MARKSHEET_{result.student.registration_no}_LLB_{session_formatted}.pdf"
                     file_path = os.path.join(save_path, filename)
                     with open(file_path, 'wb') as f:
                         f.write(pdf_content)
