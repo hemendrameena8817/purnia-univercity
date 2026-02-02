@@ -1,15 +1,17 @@
 from rest_framework import generics
 from .models import (
     MCACourse, MCASession, MCABatch, MCAStudentProfile, 
-    MCASubject, MCAExam, MCAExamSchedule, MCAStudentAssessment, 
-    MCASemesterResult, MCASemesterRegistration, MCAExamRegistration
+    MCACourseStructure, MCACommonCourseStructure,
+    MCAExam, MCAExamSchedule, MCASemesterRegistration, 
+    MCAExamRegistration, MCAStudentAssessment, MCAExamResult
 )
 from .serializers import (
-    MCACourseSerializer, MCASessionSerializer, MCABatchSerializer,
-    MCAStudentProfileSerializer, MCASubjectSerializer, MCAExamSerializer,
-    MCAExamScheduleSerializer, MCAStudentAssessmentSerializer,
-    MCASemesterResultSerializer, MCASemesterRegistrationSerializer,
-    MCAExamRegistrationSerializer
+    MCACourseSerializer, MCASessionSerializer,
+    MCABatchSerializer, MCAStudentProfileSerializer,
+    MCACourseStructureSerializer, MCACommonCourseStructureSerializer,
+    MCAExamSerializer, MCAExamScheduleSerializer, 
+    MCASemesterRegistrationSerializer, MCAExamRegistrationSerializer,
+    MCAStudentAssessmentSerializer, MCAExamResultSerializer
 )
 
 # Course Views
@@ -20,6 +22,7 @@ class MCACourseListView(generics.ListCreateAPIView):
 class MCACourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MCACourse.objects.all()
     serializer_class = MCACourseSerializer
+    lookup_field = 'uid'
 
 # Session Views
 class MCASessionListView(generics.ListCreateAPIView):
@@ -29,6 +32,7 @@ class MCASessionListView(generics.ListCreateAPIView):
 class MCASessionDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MCASession.objects.all()
     serializer_class = MCASessionSerializer
+    lookup_field = 'uid'
 
 # Batch Views
 class MCABatchListView(generics.ListCreateAPIView):
@@ -38,25 +42,17 @@ class MCABatchListView(generics.ListCreateAPIView):
 class MCABatchDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MCABatch.objects.all()
     serializer_class = MCABatchSerializer
+    lookup_field = 'uid'
 
 # Student Profile Views
 class MCAStudentProfileListView(generics.ListAPIView):
     serializer_class = MCAStudentProfileSerializer
-    
     def get_queryset(self):
         queryset = MCAStudentProfile.objects.all()
         roll_no = self.request.query_params.get('roll_no')
-        if roll_no:
-            queryset = queryset.filter(roll_no=roll_no)
-        registration_no = self.request.query_params.get('registration_no')
-        if registration_no:
-            queryset = queryset.filter(registration_no=registration_no)
-        batch = self.request.query_params.get('batch')
-        if batch:
-            queryset = queryset.filter(batch_id=batch)
-        course = self.request.query_params.get('course')
-        if course:
-            queryset = queryset.filter(course_id=course)
+        if roll_no: queryset = queryset.filter(roll_no=roll_no)
+        reg_no = self.request.query_params.get('registration_no')
+        if reg_no: queryset = queryset.filter(registration_no=reg_no)
         return queryset
 
 class MCAStudentProfileCreateView(generics.CreateAPIView):
@@ -68,14 +64,15 @@ class MCAStudentProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MCAStudentProfileSerializer
     lookup_field = 'roll_no'
 
-# Subject Views
-class MCASubjectListView(generics.ListCreateAPIView):
-    queryset = MCASubject.objects.all()
-    serializer_class = MCASubjectSerializer
+# Course Structure Views
+class MCACourseStructureListView(generics.ListCreateAPIView):
+    queryset = MCACourseStructure.objects.all()
+    serializer_class = MCACourseStructureSerializer
 
-class MCASubjectDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = MCASubject.objects.all()
-    serializer_class = MCASubjectSerializer
+class MCACourseStructureDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = MCACourseStructure.objects.all()
+    serializer_class = MCACourseStructureSerializer
+    lookup_field = 'uid'
 
 # Exam Views
 class MCAExamListView(generics.ListCreateAPIView):
@@ -85,6 +82,7 @@ class MCAExamListView(generics.ListCreateAPIView):
 class MCAExamDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MCAExam.objects.all()
     serializer_class = MCAExamSerializer
+    lookup_field = 'uid'
 
 # Exam Schedule Views
 class MCAExamScheduleListView(generics.ListCreateAPIView):
@@ -92,13 +90,13 @@ class MCAExamScheduleListView(generics.ListCreateAPIView):
     def get_queryset(self):
         queryset = MCAExamSchedule.objects.all()
         exam_id = self.request.query_params.get('exam')
-        if exam_id:
-            queryset = queryset.filter(exam_id=exam_id)
+        if exam_id: queryset = queryset.filter(exam_id=exam_id)
         return queryset
 
 class MCAExamScheduleDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MCAExamSchedule.objects.all()
     serializer_class = MCAExamScheduleSerializer
+    lookup_field = 'uid'
 
 # Assessment Views
 class MCAStudentAssessmentListView(generics.ListCreateAPIView):
@@ -106,30 +104,27 @@ class MCAStudentAssessmentListView(generics.ListCreateAPIView):
     def get_queryset(self):
         queryset = MCAStudentAssessment.objects.all()
         student = self.request.query_params.get('student')
-        if student:
-            queryset = queryset.filter(student_id=student)
-        semester = self.request.query_params.get('semester')
-        if semester:
-            queryset = queryset.filter(semester=semester)
+        if student: queryset = queryset.filter(student_id=student)
         return queryset
 
 class MCAStudentAssessmentDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = MCAStudentAssessment.objects.all()
     serializer_class = MCAStudentAssessmentSerializer
+    lookup_field = 'uid'
 
-# Semester Result Views
-class MCASemesterResultListView(generics.ListCreateAPIView):
-    serializer_class = MCASemesterResultSerializer
+# Exam Result Views
+class MCAExamResultListView(generics.ListCreateAPIView):
+    serializer_class = MCAExamResultSerializer
     def get_queryset(self):
-        queryset = MCASemesterResult.objects.all()
+        queryset = MCAExamResult.objects.all()
         student = self.request.query_params.get('student')
-        if student:
-            queryset = queryset.filter(student_id=student)
+        if student: queryset = queryset.filter(student_id=student)
         return queryset
 
-class MCASemesterResultDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = MCASemesterResult.objects.all()
-    serializer_class = MCASemesterResultSerializer
+class MCAExamResultDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = MCAExamResult.objects.all()
+    serializer_class = MCAExamResultSerializer
+    lookup_field = 'uid'
 
 # Registration Views
 class MCASemesterRegistrationListView(generics.ListCreateAPIView):
