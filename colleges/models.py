@@ -20,6 +20,8 @@ class College(models.Model):
     founded = models.DateField(null=True, blank=True)
     website = models.URLField(blank=True, null=True)
     logo = models.ImageField(upload_to='college_logos/', null=True, blank=True)
+    college_name_hindi = models.TextField(null=True, blank=True)
+    college_name_krutidev = models.TextField(null=True, blank=True)
 
     university = models.ForeignKey(
         'university.University',

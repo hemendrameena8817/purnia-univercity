@@ -1,22 +1,20 @@
 from django.db import models
 import uuid
+from django.conf import settings
 
-
-class PLWCourse(models.Model):
+class MCACourse(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)  
-    duration_years = models.PositiveIntegerField(default=5)
+    duration_years = models.PositiveIntegerField(default=2)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
 
-from django.conf import settings
-
-class PLWSession(models.Model):
+class MCASession(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    name = models.CharField(max_length=20)  # 2021-24
+    name = models.CharField(max_length=20)  # 2021-23
     start_year = models.PositiveIntegerField()
     end_year = models.PositiveIntegerField()
     is_active = models.BooleanField(default=True)
@@ -26,13 +24,13 @@ class PLWSession(models.Model):
     def __str__(self):
         return self.name
 
-class PLWBatch(models.Model):
+class MCABatch(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=50)  # 2021 Admission
     admission_year = models.PositiveIntegerField()
 
     session = models.ForeignKey(
-        PLWSession,
+        MCASession,
         on_delete=models.PROTECT,
         related_name='batches'
     )
@@ -42,12 +40,12 @@ class PLWBatch(models.Model):
     def __str__(self):
         return f"{self.name} ({self.session.name})"
 
-class PLWStudentProfile(models.Model):
+class MCAStudentProfile(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name="plw_profile"
+        related_name="mca_profile"
     )
 
     roll_no = models.CharField(max_length=20, unique=True)
@@ -59,16 +57,16 @@ class PLWStudentProfile(models.Model):
     college = models.ForeignKey(
         'colleges.College',
         on_delete=models.PROTECT,
-        related_name='plw_students'
+        related_name='mca_students'
     )
 
     course = models.ForeignKey(
-        PLWCourse,
+        MCACourse,
         on_delete=models.PROTECT
     )
 
     batch = models.ForeignKey(
-        PLWBatch,
+        MCABatch,
         on_delete=models.PROTECT
     )
 
@@ -77,12 +75,12 @@ class PLWStudentProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.roll_no} - {self.user.get_full_name()}"
+        return f"{self.roll_no} - {self.user.get_full_name() if self.user else 'No User'}"
 
-class PLWSubject(models.Model):
+class MCASubject(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    name = models.CharField(max_length=255)  # English-I, Political Science-I
-    paper_code = models.CharField(max_length=10)  # I, II, III
+    name = models.CharField(max_length=255)  
+    paper_code = models.CharField(max_length=10)  
     full_marks = models.PositiveIntegerField(default=100)
     pass_marks = models.PositiveIntegerField(default=33)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -91,34 +89,33 @@ class PLWSubject(models.Model):
     def __str__(self):
         return f"{self.name} ({self.paper_code})"
 
-
-class PLWExam(models.Model):
+class MCAExam(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)  
-    session = models.CharField(max_length=20)  # 2021-24
+    session = models.CharField(max_length=20)  # 2021-23
     exam_month_year = models.CharField(max_length=20)  # July 2022
-    publication_date = models.DateField()
+    publication_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
 
-class PLWResult(models.Model):
+class MCAResult(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     student = models.ForeignKey(
-        PLWStudentProfile,
+        MCAStudentProfile,
         on_delete=models.CASCADE,
         related_name='results'
     )
 
     exam = models.ForeignKey(
-        PLWExam,
+        MCAExam,
         on_delete=models.CASCADE,
         related_name='results'
     )
     
-    exam_center = models.CharField(max_length=255, blank=True, null=True) # M L A College, Kasba
+    exam_center = models.CharField(max_length=255, blank=True, null=True) 
 
     total_marks = models.PositiveIntegerField(default=0)
     grace = models.PositiveIntegerField(null=True, blank=True)
@@ -132,11 +129,10 @@ class PLWResult(models.Model):
     def __str__(self):
         return f"{self.student.roll_no} - {self.exam.name}"
 
-
-class PLWResultDetail(models.Model):
+class MCAResultDetail(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     result = models.ForeignKey(
-        PLWResult,
+        MCAResult,
         on_delete=models.CASCADE,
         related_name='details',
         null=True,
@@ -144,7 +140,7 @@ class PLWResultDetail(models.Model):
     )
 
     subject = models.ForeignKey(
-        PLWSubject,
+        MCASubject,
         on_delete=models.PROTECT,
         null=True,
         blank=True

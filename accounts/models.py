@@ -22,6 +22,7 @@ class UserAccountManager(BaseUserManager):
             first_name=extra_fields.get("first_name", ""),
             last_name=extra_fields.get("last_name", ""),
             user_type=extra_fields.get("user_type", "student"),
+            current_profile=extra_fields.get("current_profile"),
             is_staff=extra_fields.get("is_staff", False),
             is_superuser=extra_fields.get("is_superuser", False),
             is_active=extra_fields.get("is_active", True),
@@ -59,6 +60,13 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
         ("examiner", "Examiner"),
     ]
 
+    PROFILE_TYPE_CHOICES = [
+        ("mca_sem", "MCA Semester"),
+        ("plw", "Pre-Law"),
+        ("ug", "Undergraduate"),
+        ("pg", "Postgraduate"),
+    ]
+
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     username = models.CharField(max_length=150, unique=True)
     email = models.EmailField(_("email address"), max_length=255, blank=True, null=True)
@@ -66,6 +74,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     last_name = models.CharField(_("last name"), max_length=100, blank=True, null=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default="student")
+    current_profile = models.CharField(max_length=20, choices=PROFILE_TYPE_CHOICES, blank=True, null=True)
 
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(_("staff status"), default=False)

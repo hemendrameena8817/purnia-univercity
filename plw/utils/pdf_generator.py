@@ -1,5 +1,7 @@
 import base64
 import io
+import os
+from django.conf import settings
 from django.template.loader import get_template
 from xhtml2pdf import pisa
 import qrcode
@@ -27,16 +29,24 @@ def generate_marksheet_pdf(result):
     img.save(buffered, format="PNG")
     qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
     
-    # 2. Context for the template
+    # 2. Add University Logo
+    logo_path = os.path.join(settings.MEDIA_ROOT, 'common', 'purnea-logo.png')
+    university_logo_base64 = ""
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as image_file:
+            university_logo_base64 = base64.b64encode(image_file.read()).decode('utf-8')
+
+    # 3. Context for the template
     context = {
         'result': result,
         'student': result.student,
         'qr_code': qr_code_base64,
-        'pass_percentage': 33, # Or derive dynamically if needed
+        'university_logo': university_logo_base64,
+        'pass_percentage': 33, 
     }
     
     # 3. Render Template
-    template_path = 'plw/detailed_marksheet.html'
+    template_path = 'plw/detailed_marksheet_LLB.html'
     template = get_template(template_path)
     html = template.render(context)
     
