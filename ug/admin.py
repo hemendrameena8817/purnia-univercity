@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
-    CommonCourseStructure
+    CommonCourseStructure, UGExamResult
 )
 
 
@@ -105,29 +105,44 @@ class CourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(StudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
-    # Simplified display - only essential fields
-    list_display = ('id', 'student', 'semester', 'label', 'paper_code', 'ind_marks_obtained')
+    # Display all marks and calculation fields directly from database
+    # Display all marks and calculation fields directly from database
+    list_display = (
+        'id', 'student', 'semester', 'paper_code', 'label',
+        # Individual
+        'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
+        'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass',
+        # Combined
+        'comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained',
+        'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained',
+        'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point',
+        # Course
+        'course_max_marks', 'course_max_credits', 'course_pass_marks', 'course_marks_obtained',
+        'course_grace_obtained', 'course_final_marks_obtained', 'course_credit_obtained', 'course_grade_point',
+        # Semester
+        'sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained'
+    )
     
-    # Only indexed fields in filters
-    list_filter = ('semester', 'label', 'course_type', 'ind_is_absent')
+    # Filters for easy navigation
+    list_filter = ('semester', 'label', 'course_type', 'ind_is_absent', 'ind_is_pass')
     
-    # Search only by indexed fields
-    search_fields = ('student__registration_no', 'paper_code')
+    # Search by student registration number AND name
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
+                     'paper_code', 'course_code')
     
-    # Order by indexed field (created_at has auto index)
+    # Order by ID for performance (indexed)
     ordering = ('-id',)
     
-    # Aggressive performance optimizations for 2M+ records
-    list_select_related = ('student',)  # Only most critical FK
+    # Performance optimizations for 2M+ records
+    list_select_related = ('student',)  # Reduce DB queries
     show_full_result_count = False  # Skip COUNT query
-    list_per_page = 25  # Reduced from 50
-    date_hierarchy = None  # Disable date drill-down
+    list_per_page = 50
     
     # Fast FK lookups in forms
     raw_id_fields = ('student', 'department', 'batch')
     
-    # Disable unnecessary features
-    actions = None  # Disable bulk actions for speed
+    # Disable bulk actions for speed
+    actions = None
     
     def has_add_permission(self, request):
         # Disable add in admin (use migration scripts instead)
@@ -148,6 +163,61 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
                 qs = qs.filter(id__gte=min_id)
         
         return qs
+    
+    # Organized fieldsets for detail view
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('student', 'semester', 'paper_code', 'course_code', 'course_type', 'label')
+        }),
+        ('Individual Assessment (CIA/ESE)', {
+            'fields': (
+                'ind_max_marks',
+                'ind_pass_marks', 
+                'ind_marks_obtained',
+                'ind_grace_obtained',
+                'ind_final_marks_obtained',
+                'ind_is_absent',
+                'ind_is_pass'
+            ),
+            'description': 'Individual component marks (CIA or ESE separately)'
+        }),
+        ('Combined Assessment (Theory + Practical)', {
+            'fields': (
+                'comb_max_marks',
+                'comb_pass_marks',
+                'comb_marks_obtained',
+                'comb_grace_obtained',
+                'comb_final_marks_obtained',
+                'comb_max_credits',
+                'comb_credit_obtained',
+                'comb_numeric_grade',
+                'comb_grade_point'
+            ),
+            'description': 'Combined CIA + ESE marks and calculated credits/grades'
+        }),
+        ('Course Level Summary', {
+            'fields': (
+                'course_max_credits',
+                'course_credit_obtained',
+                'course_grade_point'
+            ),
+            'classes': ('collapse',),
+            'description': 'Overall course-level aggregated values'
+        }),
+        ('Semester Level Summary', {
+            'fields': (
+                'sem_max_credit',
+                'sem_credit_obtained',
+                'sem_result'
+            ),
+            'classes': ('collapse',),
+            'description': 'Semester-level aggregated values'
+        }),
+        ('Additional Information', {
+            'fields': ('college_code', 'exam_type', 'department', 'batch'),
+            'classes': ('collapse',)
+        }),
+    )
 
 
 @admin.register(SemesterRegistration)
@@ -171,3 +241,58 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
     list_filter = ('semester', 'course_type')
     search_fields = ('semester', 'course_name', 'course_type')
     ordering = ('semester', 'course_type')
+    list_editable = ('code', 'course_name', 'ltp', 'credit', 'marks')
+
+
+@admin.register(UGExamResult)
+class UGExamResultAdmin(admin.ModelAdmin):
+    list_display = ('get_student_name', 'get_registration_no', 'semester', 'session', 
+                    'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 'cia_pass', 'ese_pass')
+    list_filter = ('semester', 'semester_result', 'session', 'is_legacy', 'created_at')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'semester')
+    ordering = ('-created_at', 'student__registration_no')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    # Performance optimizations
+    list_select_related = ('student',)
+    show_full_result_count = False
+    list_per_page = 50
+    
+    # Custom display methods
+    @admin.display(description='Student Name', ordering='student__first_name')
+    def get_student_name(self, obj):
+        return f"{obj.student.first_name} {obj.student.last_name}"
+    
+    @admin.display(description='Registration No', ordering='student__registration_no')
+    def get_registration_no(self, obj):
+        return obj.student.registration_no
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': ('student', 'semester', 'session')
+        }),
+        ('Assessment Status', {
+            'fields': ('cia_pass', 'ese_pass')
+        }),
+        ('Credits', {
+            'fields': ('semester_max_credit', 'semester_credit_earned')
+        }),
+        ('Results', {
+            'fields': ('sgpa', 'semester_result')
+        }),
+        ('Promotion', {
+            'fields': ('next_semester', 'next_sem_status'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('is_legacy', 'published_at', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_queryset(self, request):
+        """Optimize queryset with select_related"""
+        qs = super().get_queryset(request)
+        return qs.select_related('student')
+
+

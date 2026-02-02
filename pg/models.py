@@ -364,6 +364,9 @@ class PGStudentCourseAssessment(models.Model):
     ind_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual PASS MARKS")
     ind_is_absent = models.BooleanField(default=True, db_index=True, help_text="Is Absent")
     ind_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual MARKS OBTAINED")
+    ind_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual GRACE MARKS OBTAINED")
+    ind_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual FINAL MARKS OBTAINED")
+    ind_is_pass = models.BooleanField(null=True, blank=True, help_text="Is Pass")
     ####Individual####
 
     ####combined####
@@ -376,6 +379,7 @@ class PGStudentCourseAssessment(models.Model):
     comb_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total CREDIT OBTAINED")
     comb_numeric_grade = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total NUMERIC GRADE")
     comb_letter_grade = models.CharField(max_length=10, null=True, blank=True, help_text="Total LETTER GRADE")
+    comb_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
     ####combined####
 
     ####course####
@@ -494,13 +498,14 @@ class PGCommonCourseStructure(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     semester = models.CharField(max_length=50, help_text="e.g., Semester-I")
     course_name = models.CharField(max_length=255, help_text="e.g., CC ")
-    course_type = models.CharField(max_length=50, help_text="e.g., CC-1")
+    course_code = models.CharField(max_length=20, help_text="e.g., CC-1", null=True,blank=True)
+    course_type = models.CharField(max_length=50, help_text="e.g., CC")
     # ltp = models.CharField(max_length=20, null=True, blank=True, help_text="L-T-P e.g., 6-1-0")
     credit = models.PositiveIntegerField(default=0)
     marks = models.PositiveIntegerField(default=100)
-    old_code  = models.CharField(max_length=20, null=True, blank=True, help_text="eg: 1001, 1002, 2001")
-    cia_marks = models.PositiveIntegerField(default=100)
-    ese_marks = models.PositiveIntegerField(default=100)
+    old_code = models.CharField(max_length=20, null=True, blank=True, help_text="eg: cc-")
+    cia_marks = models.PositiveIntegerField(null=True, blank=True)
+    ese_marks = models.PositiveIntegerField(null=True, blank=True)
     new_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -512,4 +517,4 @@ class PGCommonCourseStructure(models.Model):
         ordering = ['semester', 'course_name']
 
     def __str__(self):
-        return f"{self.semester} - {self.course_type} ({self.course_name})"
+        return f"{self.semester} - {self.course_code}"

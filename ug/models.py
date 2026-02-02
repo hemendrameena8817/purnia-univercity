@@ -353,6 +353,9 @@ class StudentCourseAssessment(models.Model):
     ind_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual PASS MARKS")
     ind_is_absent = models.BooleanField(default=True, db_index=True, help_text="Is Absent")
     ind_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual MARKS OBTAINED")
+    ind_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual GRACE MARKS OBTAINED")
+    ind_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual FINAL MARKS OBTAINED")
+    ind_is_pass = models.BooleanField(null=True, blank=True, help_text="Is Pass")
     ####Individual####
 
     ####combined####
@@ -365,6 +368,7 @@ class StudentCourseAssessment(models.Model):
     comb_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total CREDIT OBTAINED")
     comb_numeric_grade = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total NUMERIC GRADE")
     comb_letter_grade = models.CharField(max_length=10, null=True, blank=True, help_text="Total LETTER GRADE")
+    comb_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
     ####combined####
 
     ####course####
@@ -419,6 +423,33 @@ class StudentCourseAssessment(models.Model):
             models.Index(fields=['semester', 'label'], name='idx_sem_label'),
         ]
         
+    def save(self, *args, **kwargs):
+        """
+        Override save to validate and calculate pass/fail status
+        """
+        # Step 1: Validate ind_marks_obtained doesn't exceed ind_max_marks
+        if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
+            if self.ind_marks_obtained > self.ind_max_marks:
+                raise ValueError(
+                    f"Individual marks obtained ({self.ind_marks_obtained}) "
+                    f"cannot exceed maximum marks ({self.ind_max_marks})"
+                )
+        
+        # Step 2: Calculate ind_is_pass based on ind_pass_marks
+        if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
+            # If absent, mark as fail
+            if self.ind_is_absent:
+                self.ind_is_pass = False
+            else:
+                # Pass if marks obtained >= pass marks
+                self.ind_is_pass = self.ind_marks_obtained >= self.ind_pass_marks
+        elif self.ind_is_absent:
+            # If absent but no marks data, still mark as fail
+            self.ind_is_pass = False
+        
+        # Call parent save
+        super().save(*args, **kwargs)
+        
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"
 
@@ -436,8 +467,8 @@ class UGExamResult(models.Model):
     session = models.CharField(max_length=10, db_index=True)
 
     # CIA / ESE STATUS
-    cia_pass = models.BooleanField()
-    ese_pass = models.BooleanField()
+    cia_pass = models.BooleanField(null=True, blank=True)
+    ese_pass = models.BooleanField(null=True, blank=True)
 
     # FINAL SEM RESULT
     semester_result = models.CharField(
