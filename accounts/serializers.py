@@ -58,7 +58,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'uid', 'email', 'username', 'first_name', 'last_name',
-            'phone', 'user_type', 'is_verified', 'is_active', 
+            'phone', 'user_type', 'current_profile', 'is_verified', 'is_active', 
             'created_at'
         ]
         read_only_fields = ['uid', 'email', 'created_at']
@@ -88,14 +88,14 @@ class ProfileSerializer(serializers.ModelSerializer):
     college_profile = CollegeUserProfileSerializer(read_only=True)
     ug_profile = serializers.SerializerMethodField()
     pg_profile = serializers.SerializerMethodField()
-    current_profile = serializers.SerializerMethodField()
+    calculated_profile = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'uid', 'email', 'username', 'first_name', 'last_name',
-            'phone', 'user_type', 'is_verified', 'is_active', 
-            'created_at', 'college_profile', 'ug_profile', 'pg_profile', 'current_profile'
+            'phone', 'user_type', 'current_profile', 'is_verified', 'is_active', 
+            'created_at', 'college_profile', 'ug_profile', 'pg_profile', 'calculated_profile'
         ]
         read_only_fields = ['uid', 'email', 'created_at']
 
@@ -108,8 +108,8 @@ class ProfileSerializer(serializers.ModelSerializer):
         """Get PG student profile data."""
         return get_pg_profile_data(obj)
 
-    def get_current_profile(self, obj):
-        """Get current course name (UG/PG)."""
+    def get_calculated_profile(self, obj):
+        """Get current course name (UG/PG) calculation."""
         return get_user_current_profile(obj)
 
 

@@ -57,6 +57,7 @@ urlpatterns = [
     path('api/academics/', include('academics.urls')),
     path('api/captcha/', include('captcha.urls')),
     path('api/plw/', include('plw.urls')),
+    path('api/mca_sem/', include('mca_sem.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
