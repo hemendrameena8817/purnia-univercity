@@ -230,9 +230,11 @@ class StagingApplicantQualificationDetailAdmin(admin.ModelAdmin):
 
 @admin.register(UGSemResultCurrent)
 class UGSemResultCurrentAdmin(admin.ModelAdmin):
+    show_full_result_count = False
     list_display = (
         'source_id', 'college_roll_no', 'student_name', 'semester_code', 
-        'course_code', 'discipline_code', 'subject_result', 'final_result', 
+        'course_code', 'discipline_code', 'paper_code', 'subject_code',
+        'subject_result', 'final_result', 'exam_type',
         'institute_code', 'is_migrated'
     )
     list_filter = (
@@ -242,18 +244,69 @@ class UGSemResultCurrentAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
-        'mothers_name', 'user_id', 'source_id'
+        'mothers_name', 'user_id', 'source_id', 'paper_code', 'subject_code', 'exam_type'
     )
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
     list_per_page = 50
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': (
+                ('student_name', 'student_name_hindi'),
+                ('fathers_name', 'mothers_name'),
+                ('college_roll_no', 'college_reg_no'),
+                ('user_id', 'source_id'),
+            )
+        }),
+        ('Course Information', {
+            'fields': (
+                ('course_code', 'discipline_code'),
+                ('semester_code', 'session_code', 'batch_code'),
+                ('paper_code', 'subject_code'),
+                'subject_name',
+                ('faculty', 'institute_code'),
+            )
+        }),
+        ('Exam Details', {
+            'fields': (
+                ('exam_type', 'exam_type_his'),
+                ('status', 'final_sheet_status', 'record_status'),
+            )
+        }),
+        ('Marks & Result', {
+            'fields': (
+                ('maximum_mark', 'pass_mark', 'mark_secured'),
+                'subject_total_mark',
+                ('subject_ca', 'total_ca'),
+                ('subject_ce', 'total_ce'),
+                ('subject_gp', 'subject_ng'),
+                ('subject_result', 'final_result'),
+                ('grand_total_mark', 'total_secured_mark'),
+                ('total_per', 'final_merit'),
+                ('gpa', 'cgpa', 'dsc_grad'),
+                ('let_grad', 'let_grad_sub', 'numrical_let_grad'),
+                ('sem_1_total_ce', 'sem_2_total_ce', 'sem_3_total_ce'),
+                ('sem_1_final_result', 'is_grace', 'gpa_grace'),
+            )
+        }),
+        ('Migration Status', {
+            'fields': (
+                ('uid', 'imported_at'),
+                'is_migrated',
+                'migration_notes',
+            )
+        }),
+    )
 
 
 @admin.register(PGResultCurrent)
 class PGResultCurrentAdmin(admin.ModelAdmin):
+    show_full_result_count = False
     list_display = (
         'source_id', 'college_roll_no', 'student_name', 'semester_code', 
-        'course_code', 'discipline_code', 'subject_result', 'final_result', 
+        'course_code', 'discipline_code', 'paper_code', 'subject_code',
+        'subject_result', 'final_result', 'exam_type',
         'institute_code', 'is_migrated'
     )
     list_filter = (
@@ -263,11 +316,59 @@ class PGResultCurrentAdmin(admin.ModelAdmin):
     )
     search_fields = (
         'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
-        'mothers_name', 'user_id', 'source_id'
+        'mothers_name', 'user_id', 'source_id', 'paper_code', 'subject_code', 'exam_type'
     )
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
     list_per_page = 50
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': (
+                ('student_name', 'student_name_hindi'),
+                ('fathers_name', 'mothers_name'),
+                ('college_roll_no', 'college_reg_no'),
+                ('user_id', 'source_id'),
+            )
+        }),
+        ('Course Information', {
+            'fields': (
+                ('course_code', 'discipline_code'),
+                ('semester_code', 'session_code', 'batch_code'),
+                ('paper_code', 'subject_code'),
+                'subject_name',
+                ('faculty', 'institute_code'),
+            )
+        }),
+        ('Exam Details', {
+            'fields': (
+                ('exam_type', 'exam_type_his'),
+                ('status', 'final_sheet_status', 'record_status'),
+            )
+        }),
+        ('Marks & Result', {
+            'fields': (
+                ('maximum_mark', 'pass_mark', 'mark_secured'),
+                'subject_total_mark',
+                ('subject_ca', 'total_ca'),
+                ('subject_ce', 'total_ce'),
+                ('subject_gp', 'subject_ng'),
+                ('subject_result', 'final_result'),
+                ('grand_total_mark', 'total_secured_mark'),
+                ('total_per', 'max_total_mark'),
+                ('gpa', 'cgpa', 'dsc_grad'),
+                ('let_grad', 'let_grad_sub', 'numrical_let_grad'),
+                ('agreegate', 'grade'),
+            )
+        }),
+        ('Migration Status', {
+            'fields': (
+                ('uid', 'imported_at'),
+                'is_migrated',
+                'migration_notes',
+            )
+        }),
+    )
 
 
 @admin.register(DisciplineMasterDump)
