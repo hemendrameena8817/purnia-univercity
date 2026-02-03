@@ -294,7 +294,6 @@ class PGCourseStructure(models.Model):
 
     description = models.TextField(null=True, blank=True, help_text="Course Description")
     label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
-   
     semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
     batch = models.ForeignKey(
         PGBatch,
@@ -313,7 +312,8 @@ class PGCourseStructure(models.Model):
         verbose_name_plural = 'PG Course Structures'
 
     def __str__(self):
-        return f"{self.department.name} - {self.course_type}"
+        dept_name = self.department.name if self.department else "No Department"
+        return f"{dept_name} - {self.course_type or 'No Type'}"
 
 
 class PGStudentCourseAssessment(models.Model):
@@ -432,9 +432,39 @@ class PGStudentCourseAssessment(models.Model):
             models.Index(fields=['paper_code', 'semester'], name='pg_idx_paper_sem'),
             models.Index(fields=['semester', 'label'], name='pg_idx_sem_label'),
         ]
+
+
         
-    def __str__(self):
-        return f"{self.student} | Sem {self.semester} | {self.label}"
+    # def save(self, *args, **kwargs):
+    #     """
+    #     Override save to validate and calculate pass/fail status
+    #     """
+    #     # Step 1: Validate ind_marks_obtained doesn't exceed ind_max_marks
+    #     if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
+    #         if self.ind_marks_obtained > self.ind_max_marks:
+    #             raise ValueError(
+    #                 f"Individual marks obtained ({self.ind_marks_obtained}) "
+    #                 f"cannot exceed maximum marks ({self.ind_max_marks})"
+    #             )
+        
+    #     # Step 2: Calculate ind_is_pass based on ind_pass_marks
+    #     if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
+    #         # If absent, mark as fail
+    #         if self.ind_is_absent:
+    #             self.ind_is_pass = False
+    #         else:
+    #             # Pass if marks obtained >= pass marks
+    #             self.ind_is_pass = self.ind_marks_obtained >= self.ind_pass_marks
+    #     elif self.ind_is_absent:
+    #         # If absent but no marks data, still mark as fail
+    #         self.ind_is_pass = False
+        
+    #     # Call parent save
+    #     super().save(*args, **kwargs)
+        
+    # def __str__(self):
+    #     return f"{self.student} | Sem {self.semester} | {self.label}"
+
 
 
 class PGSemesterRegistration(models.Model):
@@ -496,10 +526,11 @@ class PGCommonCourseStructure(models.Model):
     Represents the common course structure for a semester (CBCS).
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    departments = models.ManyToManyField('PGDepartment', blank=True, related_name='common_courses', help_text="Departments offering this common course")
     semester = models.CharField(max_length=50, help_text="e.g., Semester-I")
-    course_name = models.CharField(max_length=255, help_text="e.g., CC ")
+    course_name = models.CharField(max_length=255, help_text="e.g., CC ",blank=True,null=True)
     course_code = models.CharField(max_length=20, help_text="e.g., CC-1", null=True,blank=True)
-    course_type = models.CharField(max_length=50, help_text="e.g., CC")
+    course_type = models.CharField(max_length=50, help_text="e.g., CC",null=True,blank=True)
     # ltp = models.CharField(max_length=20, null=True, blank=True, help_text="L-T-P e.g., 6-1-0")
     credit = models.PositiveIntegerField(default=0)
     marks = models.PositiveIntegerField(default=100)
@@ -518,3 +549,82 @@ class PGCommonCourseStructure(models.Model):
 
     def __str__(self):
         return f"{self.semester} - {self.course_code}"
+
+
+SEMESTER_RESULT_CHOICES = [
+    ('PASS', 'Pass'),
+    ('FAIL', 'Fail'),
+    ('PROMOTED', 'Promoted'),
+    ('ABSENT', 'Absent'),
+    ('DISQUALIFIED', 'Disqualified'),
+    ('PENDING', 'Pending'),
+]
+
+
+class PGExamResult(models.Model):
+    """
+    Stores semester exam results for PG students
+    Combines CIA and ESE results to determine final semester outcome
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
+    student = models.ForeignKey(
+        'PGStudentProfile',
+        on_delete=models.CASCADE,
+        related_name='exam_results'
+    )
+
+    semester = models.CharField(max_length=10, db_index=True)
+    session = models.CharField(max_length=10, db_index=True)
+
+    # CIA / ESE STATUS
+    cia_pass = models.BooleanField(null=True, blank=True)
+    ese_pass = models.BooleanField(null=True, blank=True)
+
+    # FINAL SEM RESULT
+    semester_result = models.CharField(
+        max_length=20,
+        db_index=True,
+        choices=SEMESTER_RESULT_CHOICES,
+        help_text="Semester result status (PASS / FAIL / PROMOTED / ABSENT / DISQUALIFIED etc.)"
+    )
+
+    # CREDIT & SGPA
+    semester_max_credit = models.PositiveIntegerField()
+    semester_credit_earned = models.PositiveIntegerField()
+
+    sgpa = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    # PROMOTION
+    next_semester = models.PositiveIntegerField(null=True, blank=True)
+    next_sem_status = models.CharField(
+        max_length=15,
+        null=True,
+        blank=True,
+        help_text="Next semester status (ELIGIBLE / NOT_ELIGIBLE / etc.)"
+    )
+
+    # META
+    is_legacy = models.BooleanField(default=False)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'PG Exam Result'
+        verbose_name_plural = 'PG Exam Results'
+        unique_together = ('student', 'semester', 'session')
+        indexes = [
+            models.Index(fields=['student', 'semester']),
+            models.Index(fields=['semester', 'session']),
+            models.Index(fields=['semester_result']),
+        ]
+
+    def __str__(self):
+        return f"{self.student} - Sem {self.semester} ({self.session})"

@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
-    PGCommonCourseStructure
+    PGCommonCourseStructure, PGExamResult
 )
 
 
@@ -120,26 +120,41 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
+    # Optimized for 400K+ records - showing only essential fields
     list_display = (
-        'uid', 'student', 'course_name', 'course_short_name', 'department', 
-        'course_type', 'course_code', 'paper_code', 'semester', 'label', 
-        'degree', 'session', 'batch', 'college_code', 'exam_type', 'attendance', 
-        'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
-        'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 
-        'comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained', 
-        'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained', 
-        'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point', 
-        'course_max_marks', 'course_max_credits', 'course_pass_marks', 
-        'course_marks_obtained', 'course_grace_obtained', 'course_final_marks_obtained', 
-        'course_credit_obtained', 'course_grade_point', 
-        'sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 
-        'next_sem_status', 'sem_grace_obtained', 
-        'temp_total_gp', 'created_at', 'updated_at'
+        'student', 'course_name', 'semester', 'label', 'exam_type',
+        'ind_marks_obtained', 'ind_is_absent', 
+        'comb_final_marks_obtained', 'sgpa', 'sem_result',
+        'session', 'created_at'
     )
-    list_filter = ('semester', 'course_type', 'exam_type', 'sem_result', 'ind_is_absent', 'session', 'batch')
-    search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'course_code', 'course_name', 'label')
+    
+    # Optimize foreign key queries to prevent N+1 problem
+    list_select_related = ('student', 'department', 'batch')
+    
+    # Use raw ID fields instead of dropdowns for better performance
+    raw_id_fields = ('student', 'department', 'batch')
+    
+    # Disable expensive COUNT(*) query on 400K records
+    show_full_result_count = False
+    
+    # Keep only indexed and most useful filters
+    list_filter = ('semester', 'session', 'exam_type', 'label', 'ind_is_absent', 'sem_result')
+    
+    # Optimize search - use indexed fields only
+    search_fields = ('student__registration_no', 'course_code', 'paper_code')
+    
+    # Smaller page size for faster rendering
+    list_per_page = 50
+    
     ordering = ('-created_at',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
+    
+    # Make calculated/imported fields readonly
+    readonly_fields = (
+        'uid', 'created_at', 'updated_at',
+        'comb_max_marks', 'comb_final_marks_obtained', 'comb_grade_point',
+        'course_max_marks', 'course_final_marks_obtained', 'course_grade_point',
+        'sem_max_credit', 'sgpa', 'sem_result'
+    )
     
     fieldsets = (
         ('Student & Course Info', {
@@ -239,15 +254,34 @@ class PGExamRegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(PGCommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('semester', 'course_type', 'course_name', 'credit', 'marks', 'cia_marks', 'ese_marks', 'old_code', 'new_code')
-    list_filter = ('semester', 'credit')
-    search_fields = ('course_name', 'course_type', 'old_code', 'new_code')
-    ordering = ('semester', 'course_type')
-    readonly_fields = ('uid', 'created_at', 'updated_at')
+    list_display = ('semester', 'course_code', 'course_type', 'course_name', 'get_departments_count', 'credit', 'marks', 'cia_marks', 'ese_marks')
+    list_filter = ('semester', 'credit', 'course_type')
+    search_fields = ('course_name', 'course_type', 'course_code', 'old_code', 'new_code')
+    ordering = ('semester', 'course_code')
+    readonly_fields = ('uid', 'created_at', 'updated_at', 'get_departments_list')
+    filter_horizontal = ('departments',)  # Nice interface for ManyToMany
+    list_per_page = 50
+    
+    def get_departments_count(self, obj):
+        """Display count of departments offering this course"""
+        return obj.departments.count()
+    get_departments_count.short_description = 'Dept Count'
+    
+    def get_departments_list(self, obj):
+        """Display list of all departments"""
+        depts = obj.departments.all()
+        if depts.exists():
+            return ', '.join([d.name for d in depts])
+        return 'No departments'
+    get_departments_list.short_description = 'Departments Offering This Course'
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'semester', 'course_type', 'course_name')
+            'fields': ('uid', 'semester', 'course_code', 'course_type', 'course_name')
+        }),
+        ('Departments', {
+            'fields': ('departments', 'get_departments_list'),
+            'description': 'Select all departments that offer this common course'
         }),
         ('Credits & Marks', {
             'fields': ('credit', 'marks', 'cia_marks', 'ese_marks')
@@ -261,6 +295,213 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+
+@admin.register(PGExamResult)
+class PGExamResultAdmin(admin.ModelAdmin):
+    list_display = (
+        'get_student_regno',
+        'get_student_name',
+        'get_student_dept',
+        'semester',
+        'session',
+        'cia_pass_display',
+        'ese_pass_display',
+        'semester_result',
+        'sgpa',
+        'semester_credit_earned',
+        'next_sem_status',
+        'created_at'
+    )
+    
+    list_filter = (
+        'semester',
+        'session',
+        'cia_pass',
+        'ese_pass',
+        'semester_result',
+        'next_sem_status',
+        'is_legacy',
+        'student__department',
+        'student__batch'
+    )
+    
+    search_fields = (
+        'student__registration_no',
+        'student__first_name',
+        'student__last_name',
+        'student__roll_no',
+        'uid'
+    )
+    
+    readonly_fields = (
+        'uid',
+        'get_student_full_info',
+        'get_cia_courses',
+        'get_ese_courses',
+        'created_at',
+        'updated_at'
+    )
+    
+    ordering = ('-created_at',)
+    
+    list_per_page = 50
+    
+    # Custom methods for list display
+    def get_student_regno(self, obj):
+        return obj.student.registration_no if obj.student else 'N/A'
+    get_student_regno.short_description = 'Reg No'
+    get_student_regno.admin_order_field = 'student__registration_no'
+    
+    def get_student_name(self, obj):
+        if obj.student:
+            return f"{obj.student.first_name} {obj.student.last_name}"
+        return 'N/A'
+    get_student_name.short_description = 'Student Name'
+    get_student_name.admin_order_field = 'student__first_name'
+    
+    def get_student_dept(self, obj):
+        if obj.student and obj.student.department:
+            return obj.student.department.name
+        return 'N/A'
+    get_student_dept.short_description = 'Department'
+    
+    def cia_pass_display(self, obj):
+        if obj.cia_pass is None:
+            return '⏳ Pending'
+        return '✅ PASS' if obj.cia_pass else '❌ FAIL'
+    cia_pass_display.short_description = 'CIA Status'
+    
+    def ese_pass_display(self, obj):
+        if obj.ese_pass is None:
+            return '⏳ Pending'
+        return '✅ PASS' if obj.ese_pass else '❌ FAIL'
+    ese_pass_display.short_description = 'ESE Status'
+    
+    def get_student_full_info(self, obj):
+        if not obj.student:
+            return 'N/A'
+        
+        student = obj.student
+        from django.utils.html import format_html
+        return format_html(
+            '<strong>Registration No:</strong> {}<br>'
+            '<strong>Name:</strong> {} {}<br>'
+            '<strong>Roll No:</strong> {}<br>'
+            '<strong>Department:</strong> {}<br>'
+            '<strong>Batch:</strong> {}',
+            student.registration_no,
+            student.first_name, student.last_name,
+            student.roll_no if student.roll_no else 'N/A',
+            student.department.name if student.department else 'N/A',
+            student.batch if student.batch else 'N/A'
+        )
+    get_student_full_info.short_description = 'Student Information'
+    
+    def get_cia_courses(self, obj):
+        """Show all CIA/MID_TERM courses for this student in this semester"""
+        from .models import PGStudentCourseAssessment
+        from django.utils.html import format_html
+        
+        assessments = PGStudentCourseAssessment.objects.filter(
+            student=obj.student,
+            semester=obj.semester,
+            label__icontains='MID_TERM'
+        )
+        
+        if not assessments.exists():
+            return 'No CIA assessments found'
+        
+        rows = []
+        for assessment in assessments:
+            # Calculate pass status
+            is_pass = False
+            if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
+                if not assessment.ind_is_absent:
+                    is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
+            
+            status = '✅ PASS' if is_pass else '❌ FAIL'
+            status_color = '#d4edda' if is_pass else '#f8d7da'
+            
+            rows.append(f'<tr style="background-color: {status_color};"><td style="padding: 5px;">{assessment.course_name[:50]}</td>'
+                       f'<td style="text-align: center;">{assessment.ind_marks_obtained}/{assessment.ind_max_marks}</td>'
+                       f'<td style="text-align: center;">{assessment.ind_pass_marks}</td>'
+                       f'<td style="text-align: center;">{status}</td></tr>')
+        
+        html = ('<table style="width:100%; border-collapse: collapse;">'
+                '<tr style="background-color: #f0f0f0;"><th style="padding: 5px; text-align: left;">Course</th><th>Marks</th><th>Pass Marks</th><th>Status</th></tr>'
+                + ''.join(rows) + '</table>')
+        
+        return format_html(html)
+    get_cia_courses.short_description = 'CIA Course Details'
+    
+    def get_ese_courses(self, obj):
+        """Show all ESE/END_TERM courses for this student in this semester"""
+        from .models import PGStudentCourseAssessment
+        from django.utils.html import format_html
+        
+        assessments = PGStudentCourseAssessment.objects.filter(
+            student=obj.student,
+            semester=obj.semester,
+            label__icontains='END_TERM'
+        )
+        
+        if not assessments.exists():
+            return 'No ESE assessments found (or not yet entered)'
+        
+        rows = []
+        for assessment in assessments:
+            # Calculate pass status
+            is_pass = False
+            if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
+                if not assessment.ind_is_absent:
+                    is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
+            
+            status = '✅ PASS' if is_pass else '❌ FAIL'
+            status_color = '#d4edda' if is_pass else '#f8d7da'
+            
+            rows.append(f'<tr style="background-color: {status_color};"><td style="padding: 5px;">{assessment.course_name[:50]}</td>'
+                       f'<td style="text-align: center;">{assessment.ind_marks_obtained}/{assessment.ind_max_marks}</td>'
+                       f'<td style="text-align: center;">{assessment.ind_pass_marks}</td>'
+                       f'<td style="text-align: center;">{status}</td></tr>')
+        
+        html = ('<table style="width:100%; border-collapse: collapse;">'
+                '<tr style="background-color: #f0f0f0;"><th style="padding: 5px; text-align: left;">Course</th><th>Marks</th><th>Pass Marks</th><th>Status</th></tr>'
+                + ''.join(rows) + '</table>')
+        
+        return format_html(html)
+    get_ese_courses.short_description = 'ESE Course Details'
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': ('get_student_full_info',)
+        }),
+        ('Exam Details', {
+            'fields': ('uid', 'semester', 'session')
+        }),
+        ('CIA Assessment', {
+            'fields': ('cia_pass', 'get_cia_courses'),
+            'description': 'MID_TERM examination results'
+        }),
+        ('ESE Assessment', {
+            'fields': ('ese_pass', 'get_ese_courses'),
+            'description': 'END_TERM examination results'
+        }),
+        ('Semester Result', {
+            'fields': (
+                'semester_result',
+                'sgpa',
+                'semester_max_credit',
+                'semester_credit_earned'
+            )
+        }),
+        ('Promotion', {
+            'fields': ('next_semester', 'next_sem_status')
+        }),
+        ('Meta', {
+            'fields': ('is_legacy', 'published_at', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         })
     )
