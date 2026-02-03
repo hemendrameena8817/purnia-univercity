@@ -4,44 +4,57 @@ from .views import (
     MCASessionListView, MCASessionDetailView,
     MCABatchListView, MCABatchDetailView,
     MCAStudentProfileListView, MCAStudentProfileCreateView, MCAStudentProfileDetailView,
-    MCASubjectListView, MCASubjectDetailView,
+    MCACourseStructureListView, MCACourseStructureDetailView,
     MCAExamListView, MCAExamDetailView,
-    MCAResultListView, MCAResultCreateView, MCAResultDetailView,
-    MCAResultMarksListView, MCAResultMarksDetailView
+    MCAExamScheduleListView, MCAExamScheduleDetailView,
+    MCAStudentAssessmentListView, MCAStudentAssessmentDetailView,
+    MCAExamResultListView, MCAExamResultDetailView,
+    MCASemesterRegistrationListView, MCAExamRegistrationListView,
+    MCAAdmitCardPDFView
 )
 
 urlpatterns = [
     # Courses
     path('courses/', MCACourseListView.as_view(), name='mca-course-list'),
-    path('courses/<int:pk>/', MCACourseDetailView.as_view(), name='mca-course-detail'),
+    path('courses/<uuid:uid>/', MCACourseDetailView.as_view(), name='mca-course-detail'),
 
     # Sessions
     path('sessions/', MCASessionListView.as_view(), name='mca-session-list'),
-    path('sessions/<int:pk>/', MCASessionDetailView.as_view(), name='mca-session-detail'),
+    path('sessions/<uuid:uid>/', MCASessionDetailView.as_view(), name='mca-session-detail'),
 
     # Batches
     path('batches/', MCABatchListView.as_view(), name='mca-batch-list'),
-    path('batches/<int:pk>/', MCABatchDetailView.as_view(), name='mca-batch-detail'),
+    path('batches/<uuid:uid>/', MCABatchDetailView.as_view(), name='mca-batch-detail'),
 
     # Student Profiles
     path('students/', MCAStudentProfileListView.as_view(), name='mca-student-list'),
     path('students/create/', MCAStudentProfileCreateView.as_view(), name='mca-student-create'),
     path('students/<str:roll_no>/', MCAStudentProfileDetailView.as_view(), name='mca-student-detail'),
 
-    # Subjects
-    path('subjects/', MCASubjectListView.as_view(), name='mca-subject-list'),
-    path('subjects/<int:pk>/', MCASubjectDetailView.as_view(), name='mca-subject-detail'),
+    # Course Structure (Subjects master)
+    path('course-structures/', MCACourseStructureListView.as_view(), name='mca-course-structure-list'),
+    path('course-structures/<uuid:uid>/', MCACourseStructureDetailView.as_view(), name='mca-course-structure-detail'),
 
     # Exams
     path('exams/', MCAExamListView.as_view(), name='mca-exam-list'),
-    path('exams/<int:pk>/', MCAExamDetailView.as_view(), name='mca-exam-detail'),
+    path('exams/<uuid:uid>/', MCAExamDetailView.as_view(), name='mca-exam-detail'),
 
-    # Results
-    path('results/', MCAResultListView.as_view(), name='mca-result-list'),
-    path('results/create/', MCAResultCreateView.as_view(), name='mca-result-create'),
-    path('results/<int:pk>/', MCAResultDetailView.as_view(), name='mca-result-detail'),
+    # Exam Schedules (Routines)
+    path('exam-schedules/', MCAExamScheduleListView.as_view(), name='mca-exam-schedule-list'),
+    path('exam-schedules/<uuid:uid>/', MCAExamScheduleDetailView.as_view(), name='mca-exam-schedule-detail'),
 
-    # Result Marks
-    path('result-marks/', MCAResultMarksListView.as_view(), name='mca-result-marks-list'),
-    path('result-marks/<int:pk>/', MCAResultMarksDetailView.as_view(), name='mca-result-marks-detail'),
+    # Assessments (Marks)
+    path('assessments/', MCAStudentAssessmentListView.as_view(), name='mca-assessment-list'),
+    path('assessments/<uuid:uid>/', MCAStudentAssessmentDetailView.as_view(), name='mca-assessment-detail'),
+
+    # Exam Results
+    path('exam-results/', MCAExamResultListView.as_view(), name='mca-exam-result-list'),
+    path('exam-results/<uuid:uid>/', MCAExamResultDetailView.as_view(), name='mca-exam-result-detail'),
+
+    # Registrations
+    path('semester-registrations/', MCASemesterRegistrationListView.as_view(), name='mca-sem-reg-list'),
+    path('exam-registrations/', MCAExamRegistrationListView.as_view(), name='mca-exam-reg-list'),
+
+    # Admit Card
+    path('admit-card/pdf/', MCAAdmitCardPDFView.as_view(), name='mca-admit-card-pdf'),
 ]
