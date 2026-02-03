@@ -9,8 +9,11 @@ from .models import (
     MCACourse, MCASession, MCABatch, MCAStudentProfile, 
     MCACourseStructure, MCACommonCourseStructure,
     MCAExam, MCAExamSchedule, MCASemesterRegistration, 
-    MCAExamRegistration, MCAStudentAssessment, MCAExamResult
+    MCAExamRegistration, MCAStudentAssessment, MCAExamResult,
+    MCAExamCenterMapping
 )
+import os
+from django.conf import settings
 from .serializers import (
     MCACourseSerializer, MCASessionSerializer,
     MCABatchSerializer, MCAStudentProfileSerializer,
@@ -409,3 +412,76 @@ class MCAAdmitCardPDFView(View):
         response = HttpResponse(pdf_content, content_type="application/pdf")
         response["Content-Disposition"] = f'{disposition}; filename="admit_card_{roll_no}.pdf"'
         return response
+
+class MCABulkAdmitCardPDFView(APIView):
+    """
+    Generates and saves admit card PDFs for all students registered for a specific exam.
+    Query params: exam_uid
+    """
+    def get(self, request):
+        exam_uid = request.GET.get("exam_uid")
+        if not exam_uid:
+            return Response({"error": "exam_uid is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        exam = get_object_or_404(MCAExam, uid=exam_uid)
+        
+        # Find registered students for this exam's semester and session
+        registrations = MCAExamRegistration.objects.filter(
+            sem=exam.semester,
+            session=exam.session,
+            # status='Approved'
+        ).select_related('student')
+
+        if not registrations.exists():
+            return Response({"message": "No students found for this exam registration"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Create directory for saving PDFs
+        # Use a safe name for the directory
+        safe_exam_name = "".join([c if c.isalnum() else "_" for c in str(exam.name)])
+        save_dir_name = f"{safe_exam_name}_{str(exam_uid)[:8]}"
+        save_dir = os.path.join(settings.MEDIA_ROOT, 'mca', 'admit_cards', save_dir_name)
+        
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir, exist_ok=True)
+
+        success_count = 0
+        failure_count = 0
+        results = []
+
+        for reg in registrations:
+            student = reg.student
+            if not student:
+                continue
+                
+            roll_no = student.roll_no or student.registration_no or f"student_{student.uid}"
+            filename = f"admit_card_{roll_no}.pdf"
+            file_path = os.path.join(save_dir, filename)
+
+            try:
+                pdf_content = generate_mca_admit_card_pdf(student, exam)
+                if pdf_content:
+                    with open(file_path, 'wb') as f:
+                        f.write(pdf_content)
+                    success_count += 1
+                    relative_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
+                    results.append({
+                        "roll_no": roll_no,
+                        "status": "success",
+                        "url": f"{settings.MEDIA_URL}{relative_path.replace(os.sep, '/')}"
+                    })
+                else:
+                    failure_count += 1
+                    results.append({"roll_no": roll_no, "status": "failed", "error": "PDF generation returned None"})
+            except Exception as e:
+                failure_count += 1
+                results.append({"roll_no": roll_no, "status": "error", "error": str(e)})
+
+        return Response({
+            "message": "Bulk generation completed",
+            "exam_name": exam.name,
+            "total_attempted": registrations.count(),
+            "success_count": success_count,
+            "failure_count": failure_count,
+            "save_directory": save_dir,
+            "results": results
+        })

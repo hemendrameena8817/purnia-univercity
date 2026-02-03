@@ -67,3 +67,25 @@ def format_file_size(size_bytes):
             return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024.0
     return f"{size_bytes:.2f} PB"
+
+
+def image_to_base64(path):
+    """
+    Convert an image file to a base64 string.
+    
+    Args:
+        path: Absolute file path to the image
+        
+    Returns:
+        str: Base64 encoded string of the image, or empty string if file not found
+    """
+    import os
+    import base64
+    
+    if path and os.path.exists(path):
+        try:
+            with open(path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+        except Exception:
+            return ""
+    return ""
