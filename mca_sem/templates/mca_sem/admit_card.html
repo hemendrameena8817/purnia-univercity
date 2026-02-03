@@ -179,7 +179,7 @@
       }
 
       .exam-table th {
-        background-color: #f5f5f5;
+        background-color: #f5f5f557;
         font-weight: bold;
       }
 
@@ -234,6 +234,24 @@
         margin-top: 15px;
         padding-top: 10px;
         border-top: 1px solid #000;
+        position: relative;
+        z-index: 10;
+      }
+
+      /* WATERMARK */
+      .watermark {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px;
+        opacity: 0.15;
+        z-index: -1;
+      }
+
+      .watermark img {
+        width: 100%;
+        height: auto;
       }
 
       .instructions-title {
@@ -249,6 +267,13 @@
   </head>
 
   <body>
+    <!-- WATERMARK -->
+    {% if watermark_logo %}
+    <div class="watermark">
+      <img src="data:image/png;base64,{{ watermark_logo }}" alt="Watermark" />
+    </div>
+    {% endif %}
+
     <div class="container">
       <!-- HEADER -->
       <table class="header-table">

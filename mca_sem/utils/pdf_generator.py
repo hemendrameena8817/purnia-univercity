@@ -4,6 +4,7 @@ def generate_mca_admit_card_pdf(student, exam):
     from django.conf import settings
     from django.template.loader import get_template
     from mca_sem.models import MCAExamCenterMapping, MCAExamSchedule
+    from pup_umis_backend.utils.file_utils import image_to_base64
     import logging
 
     logger = logging.getLogger(__name__)
@@ -23,12 +24,7 @@ def generate_mca_admit_card_pdf(student, exam):
         exam=exam
     ).select_related('common_course_structure')
 
-    def to_base64(path):
-        """Convert image file to base64 string"""
-        if path and os.path.exists(path):
-            with open(path, "rb") as f:
-                return base64.b64encode(f.read()).decode()
-        return ""
+
     # Prepare context for template
     context = {
         "exam": exam,
@@ -37,10 +33,11 @@ def generate_mca_admit_card_pdf(student, exam):
         "center_name": exam_center.name if exam_center else "-",
         "center_code": exam_center.college_code if exam_center else "-",
         "schedules": schedules,
-        "university_logo": to_base64(os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")),
-        "student_photo": to_base64(student.profile_image.path if student.profile_image else None),
-        "student_sig": to_base64(student.signature.path if student.signature else None),
-        "controller_signature": to_base64(os.path.join(settings.MEDIA_ROOT, "common/controller-of-examination-signature.png")),
+        "university_logo": image_to_base64(os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")),
+        "watermark_logo": image_to_base64(os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")),
+        "student_photo": image_to_base64(student.profile_image.path if student.profile_image else None),
+        "student_sig": image_to_base64(student.signature.path if student.signature else None),
+        "controller_signature": image_to_base64(os.path.join(settings.MEDIA_ROOT, "common/controller-of-examination-signature.png")),
     }
 
     # Render HTML template

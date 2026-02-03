@@ -10,6 +10,7 @@ poetry run python manage.py shell
 Then:
 >>> from scripts.plw.import_plw_subjects import run_import
 >>> run_import('old_data/LLB_PART_1_SUBJECTS.xlsx')
+>>> run_import('old_data/PLW_PART_I_Subjects_with_code.xlsx')
 
 OR run directly:
 poetry run python scripts/plw/import_plw_subjects.py --file "old_data/PLW_PART_I_Subjects_with_code.xlsx"

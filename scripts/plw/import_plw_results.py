@@ -11,6 +11,7 @@ poetry run python manage.py shell
 Then:
 >>> from scripts.plw.import_plw_results import run_import
 >>> run_import('old_data/FINAL_LLB_PART_1.xlsx')
+>>> run_import('old_data/PRE_LAW_PART_I_USER_PROFILE_MARKS_SHEET.xlsx')
 
 OR run directly:
 poetry run python scripts/plw/import_plw_results.py --file "old_data/Pre_Law_Sample.xlsx"
