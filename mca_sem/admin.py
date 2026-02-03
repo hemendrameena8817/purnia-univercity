@@ -3,27 +3,32 @@ from .models import (
     MCACourse, MCASession, MCABatch, MCAStudentProfile, 
     MCACourseStructure, MCACommonCourseStructure,
     MCAExam, MCAExamSchedule, MCASemesterRegistration, 
-    MCAExamRegistration, MCAStudentAssessment, MCAExamResult
+    MCAExamRegistration, MCAStudentAssessment, MCAExamResult,
+    MCAExamCenterMapping
 )
 
 @admin.register(MCACourse)
 class MCACourseAdmin(admin.ModelAdmin):
-    list_display = ('name', 'duration_years')
+    list_display = ('uid', 'name', 'duration_years')
+    readonly_fields = ('uid',)
     search_fields = ('name',)
 
 @admin.register(MCASession)
 class MCASessionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'start_year', 'end_year', 'is_active')
+    list_display = ('uid', 'name', 'start_year', 'end_year', 'is_active')
+    readonly_fields = ('uid',)
     list_filter = ('is_active',)
 
 @admin.register(MCABatch)
 class MCABatchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'session', 'is_active')
+    list_display = ('uid', 'name', 'session', 'is_active')
+    readonly_fields = ('uid',)
     list_filter = ('session', 'is_active')
 
 @admin.register(MCAStudentProfile)
 class MCAStudentProfileAdmin(admin.ModelAdmin):
-    list_display = ('roll_no', 'registration_no', 'first_name', 'last_name', 'college', 'batch')
+    list_display = ('uid', 'roll_no', 'registration_no', 'first_name', 'last_name', 'college', 'batch')
+    readonly_fields = ('uid',)
     search_fields = ('roll_no', 'registration_no', 'first_name', 'last_name', 'user__username')
     list_filter = ('college', 'batch', 'status')
 
@@ -41,14 +46,21 @@ class MCACommonCourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(MCAExam)
 class MCAExamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'session', 'exam_month_year', 'publication_date')
+    list_display = ('uid', 'name', 'session', 'exam_month_year', 'publication_date')
+    readonly_fields = ('uid',)
     search_fields = ('name', 'session')
+
+@admin.register(MCAExamCenterMapping)
+class MCAExamCenterMappingAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'center')
+    list_filter = ('exam', 'center')
+    filter_horizontal = ('attached_colleges',)
 
 @admin.register(MCAExamSchedule)
 class MCAExamScheduleAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'course_structure', 'exam_date', 'exam_time', 'sitting')
+    list_display = ('exam', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
     list_filter = ('exam', 'exam_date', 'sitting')
-    search_fields = ('course_structure__course_name', 'course_structure__course_code')
+    search_fields = ('common_course_structure__course_name', 'common_course_structure__code')
 
 @admin.register(MCASemesterRegistration)
 class MCASemesterRegistrationAdmin(admin.ModelAdmin):

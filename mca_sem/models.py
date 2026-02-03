@@ -186,21 +186,54 @@ class MCACommonCourseStructure(models.Model):
     def __str__(self):
         return f"{self.semester} - {self.course_name}"
 
-# 3. Exam & Registration Models
 class MCAExam(models.Model):
     """
-    Represents an MCA Examination instance.
+    Represents the overall Examination Event (e.g. MCA 4th Sem June 2024).
+    Contains the global schedule shared by all centers.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    name = models.CharField(max_length=255, null=True, blank=True)  
-    session = models.CharField(max_length=20, null=True, blank=True)  # 2021-23
-    exam_month_year = models.CharField(max_length=20, null=True, blank=True)  # July 2022
+    name = models.CharField(max_length=255, null=True, blank=True)            # MCA 4th Semester Examination
+    semester = models.PositiveIntegerField(null=True, blank=True)         # 4
+    session = models.CharField(max_length=20, null=True, blank=True)        # 2022-24
+    exam_month_year = models.CharField(max_length=20, null=True, blank=True) # June 2024
     publication_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.name if self.name else "Unnamed Exam"
+        return f"{self.name or 'Unnamed Exam'} ({self.session or 'No Session'})"
+
+class MCAExamCenterMapping(models.Model):
+    """
+    Center Fixation: Maps an Exam + Center to one or more Colleges.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    exam = models.ForeignKey(
+        MCAExam,
+        on_delete=models.CASCADE,
+        related_name='center_mappings'
+    )
+    center = models.ForeignKey(
+        'colleges.College',
+        on_delete=models.CASCADE,
+        related_name='mca_as_center_mappings'
+    )
+    # The colleges whose students will go to this center for this specific exam
+    attached_colleges = models.ManyToManyField(
+        'colleges.College',
+        related_name='mca_exam_centers'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'MCA Exam Center Mapping'
+        verbose_name_plural = 'MCA Exam Center Mappings'
+        unique_together = ('exam', 'center')
+
+    def __str__(self):
+        return f"{self.exam.name} @ {self.center.name}"
+
 
 class MCAExamSchedule(models.Model):
     """
@@ -213,8 +246,8 @@ class MCAExamSchedule(models.Model):
         related_name='schedules'
     )
     # Changed from MCASubject to MCACourseStructure
-    course_structure = models.ForeignKey(
-        MCACourseStructure, 
+    common_course_structure = models.ForeignKey(
+        MCACommonCourseStructure, 
         on_delete=models.CASCADE, 
         related_name='exam_schedules',
         null=True,
@@ -233,7 +266,7 @@ class MCAExamSchedule(models.Model):
         ordering = ['exam_date', 'exam_time']
 
     def __str__(self):
-        return f"{self.exam.name} - {self.course_structure.course_code if self.course_structure else 'N/A'} ({self.exam_date})"
+        return f"{self.exam.name} - {self.common_course_structure.code if self.common_course_structure else 'N/A'} ({self.exam_date})"
 
 class MCASemesterRegistration(models.Model):
     """

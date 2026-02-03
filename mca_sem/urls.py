@@ -9,7 +9,8 @@ from .views import (
     MCAExamScheduleListView, MCAExamScheduleDetailView,
     MCAStudentAssessmentListView, MCAStudentAssessmentDetailView,
     MCAExamResultListView, MCAExamResultDetailView,
-    MCASemesterRegistrationListView, MCAExamRegistrationListView
+    MCASemesterRegistrationListView, MCAExamRegistrationListView,
+    MCAAdmitCardPDFView
 )
 
 urlpatterns = [
@@ -53,4 +54,7 @@ urlpatterns = [
     # Registrations
     path('semester-registrations/', MCASemesterRegistrationListView.as_view(), name='mca-sem-reg-list'),
     path('exam-registrations/', MCAExamRegistrationListView.as_view(), name='mca-exam-reg-list'),
+
+    # Admit Card
+    path('admit-card/pdf/', MCAAdmitCardPDFView.as_view(), name='mca-admit-card-pdf'),
 ]
