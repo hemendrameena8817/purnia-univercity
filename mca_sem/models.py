@@ -143,9 +143,7 @@ class MCACourseStructure(models.Model):
     course_name = models.CharField(max_length=500, null=True, blank=True, help_text="Course Name")
     course_short_name = models.CharField(max_length=250, null=True, blank=True)
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
-    course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
-    paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
-    max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
+    course_code = models.CharField(max_length=50, null=True, blank=True, help_text="Course Code")
     max_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course Marks")
     min_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Pass Mark")
     
@@ -153,13 +151,7 @@ class MCACourseStructure(models.Model):
     label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
     
     semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
-    batch = models.ForeignKey(
-        MCABatch,
-        on_delete=models.CASCADE,
-        related_name='course_structures',
-        null=True,
-        blank=True
-    )
+    
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -169,7 +161,7 @@ class MCACourseStructure(models.Model):
         verbose_name_plural = 'MCA Course Structures'
 
     def __str__(self):
-        return f"{self.course_name} ({self.paper_code}) - {self.semester}"
+        return f"{self.course_name} ({self.course_code}) - {self.semester}"
 
 class MCACommonCourseStructure(models.Model):
     """
@@ -180,7 +172,6 @@ class MCACommonCourseStructure(models.Model):
     course_name = models.CharField(max_length=255)
     course_type = models.CharField(max_length=50)
     ltp = models.CharField(max_length=20, null=True, blank=True)
-    credit = models.PositiveIntegerField(default=0)
     marks = models.PositiveIntegerField(default=100)
     code  = models.CharField(max_length=20, null=True, blank=True)
     json_data = models.JSONField(null=True, blank=True)
@@ -242,7 +233,7 @@ class MCAExamSchedule(models.Model):
         ordering = ['exam_date', 'exam_time']
 
     def __str__(self):
-        return f"{self.exam.name} - {self.course_structure.paper_code if self.course_structure else 'N/A'} ({self.exam_date})"
+        return f"{self.exam.name} - {self.course_structure.course_code if self.course_structure else 'N/A'} ({self.exam_date})"
 
 class MCASemesterRegistration(models.Model):
     """
@@ -315,8 +306,7 @@ class MCAStudentAssessment(models.Model):
     )
     course_name = models.CharField(max_length=250, null=True, blank=True)
     course_type = models.CharField(max_length=200, null=True, blank=True, db_index=True)
-    course_code = models.CharField(max_length=200, null=True, blank=True)
-    paper_code = models.CharField(max_length=200, null=True, blank=True, db_index=True)
+    course_code = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     semester = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     label = models.CharField(max_length=200, db_index=True, choices=ASSESSMENT_LABEL_CHOICES)
     session = models.CharField(max_length=200, null=True, blank=True, db_index=True)
@@ -342,26 +332,18 @@ class MCAStudentAssessment(models.Model):
 
     #### Aggregated Marks ####
     comb_max_marks = models.IntegerField(null=True, blank=True)
-    comb_max_credits = models.IntegerField(null=True, blank=True)
     comb_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     comb_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    comb_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     comb_numeric_grade = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     comb_letter_grade = models.CharField(max_length=10, null=True, blank=True)
     comb_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     #### Course Summary ####
     course_max_marks = models.IntegerField(null=True, blank=True)
-    course_max_credits = models.IntegerField(null=True, blank=True)
     course_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     course_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    course_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    course_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     #### Semester Summary ####
-    sem_max_credit = models.IntegerField(null=True, blank=True)
-    sem_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    sgpa = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     sem_result = models.CharField(max_length=20, null=True, blank=True, choices=SEMESTER_RESULT_CHOICES)
     next_sem_status = models.CharField(max_length=20, null=True, blank=True, choices=PROMOTION_STATUS_CHOICES)
 
@@ -376,7 +358,7 @@ class MCAStudentAssessment(models.Model):
         indexes = [
             models.Index(fields=['student', 'semester'], name='idx_mca_stud_sem'),
             models.Index(fields=['batch', 'semester'], name='idx_mca_batch_sem'),
-            models.Index(fields=['paper_code', 'semester'], name='idx_mca_paper_sem'),
+            models.Index(fields=['course_code', 'semester'], name='idx_mca_course_sem'),
         ]
         
     def save(self, *args, **kwargs):
@@ -409,9 +391,8 @@ class MCAExamResult(models.Model):
         db_index=True,
         choices=SEMESTER_RESULT_CHOICES
     )
-    semester_max_credit = models.PositiveIntegerField(null=True, blank=True)
-    semester_credit_earned = models.PositiveIntegerField(null=True, blank=True)
-    sgpa = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    total_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     next_semester = models.PositiveIntegerField(null=True, blank=True)
     next_sem_status = models.CharField(max_length=15, null=True, blank=True, choices=PROMOTION_STATUS_CHOICES)
     is_legacy = models.BooleanField(default=False)

@@ -36,10 +36,8 @@ EXAM_TYPE_CHOICES = (
 
 # Assessment Labels (Standardized)
 ASSESSMENT_LABEL_CHOICES = (
-    ('CIA-Theory', 'CIA Theory'),
-    ('CIA-Practical', 'CIA Practical'),
-    ('ESE-Theory', 'ESE Theory'),
-    ('ESE-Practical', 'ESE Practical'),
+    ('CIA', 'CIA'),
+    ('ESE', 'ESE'),
 )
 
 # Promotion Status

@@ -29,13 +29,13 @@ class MCAStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(MCACourseStructure)
 class MCACourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('course_name', 'paper_code', 'course_type', 'semester', 'batch')
-    list_filter = ('semester', 'batch', 'course_type')
-    search_fields = ('course_name', 'course_code', 'paper_code')
+    list_display = ('course_name', 'course_code', 'course_type', 'semester')
+    list_filter = ('semester', 'course_type')
+    search_fields = ('course_name', 'course_code')
 
 @admin.register(MCACommonCourseStructure)
 class MCACommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('semester', 'course_name', 'course_type', 'credit', 'marks')
+    list_display = ('semester', 'course_name', 'course_type', 'marks')
     list_filter = ('semester', 'course_type')
     search_fields = ('course_name', 'code')
 
@@ -48,7 +48,7 @@ class MCAExamAdmin(admin.ModelAdmin):
 class MCAExamScheduleAdmin(admin.ModelAdmin):
     list_display = ('exam', 'course_structure', 'exam_date', 'exam_time', 'sitting')
     list_filter = ('exam', 'exam_date', 'sitting')
-    search_fields = ('course_structure__course_name', 'course_structure__paper_code')
+    search_fields = ('course_structure__course_name', 'course_structure__course_code')
 
 @admin.register(MCASemesterRegistration)
 class MCASemesterRegistrationAdmin(admin.ModelAdmin):
@@ -62,12 +62,12 @@ class MCAExamRegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(MCAStudentAssessment)
 class MCAStudentAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'paper_code', 'semester', 'label', 'ind_marks_obtained', 'ind_is_pass')
+    list_display = ('student', 'course_code', 'semester', 'label', 'ind_marks_obtained', 'ind_is_pass')
     list_filter = ('semester', 'label', 'exam_type', 'batch')
-    search_fields = ('student__roll_no', 'course_name', 'paper_code')
+    search_fields = ('student__roll_no', 'course_name', 'course_code')
 
 @admin.register(MCAExamResult)
 class MCAExamResultAdmin(admin.ModelAdmin):
-    list_display = ('student', 'semester', 'session', 'semester_result', 'sgpa')
+    list_display = ('student', 'semester', 'session', 'semester_result', 'total_marks_obtained', 'percentage')
     list_filter = ('semester', 'session', 'semester_result')
     search_fields = ('student__roll_no',)
