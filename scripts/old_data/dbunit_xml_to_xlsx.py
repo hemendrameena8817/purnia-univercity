@@ -11,25 +11,45 @@ Usage:
     poetry run python scripts/dbunit_xml_to_xlsx.py data.xml
     poetry run python scripts/dbunit_xml_to_xlsx.py data.xml output.xlsx
 """
-import xml.etree.ElementTree as ET
 import sys
 import os
 from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
+# Try lxml first (more robust), fallback to standard xml
+try:
+    from lxml import etree as ET
+    USE_LXML = True
+except ImportError:
+    import xml.etree.ElementTree as ET
+    USE_LXML = False
+
 
 def parse_dbunit_xml(xml_path):
     """Parse DBUnit XML and return dict of tables with their rows"""
     tables = defaultdict(list)
     
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
+    if USE_LXML:
+        # lxml can handle malformed XML better
+        parser = ET.XMLParser(recover=True, huge_tree=True)
+        tree = ET.parse(xml_path, parser)
+        root = tree.getroot()
+    else:
+        # Standard parser
+        tree = ET.parse(xml_path)
+        root = tree.getroot()
     
-    for element in root:
+    print(f"Processing {len(root)} rows...")
+    progress_interval = max(1, len(root) // 20)  # Show 20 progress updates
+    
+    for idx, element in enumerate(root):
         table_name = element.tag
         row_data = dict(element.attrib)
         tables[table_name].append(row_data)
+        
+        if (idx + 1) % progress_interval == 0:
+            print(f"  Processed {idx + 1}/{len(root)} rows ({(idx+1)/len(root)*100:.1f}%)...")
     
     return dict(tables)
 

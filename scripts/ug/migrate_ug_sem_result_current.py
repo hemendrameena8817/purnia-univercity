@@ -244,36 +244,30 @@ def migrate_data(limit=None, clear_existing=False):
                 college_code=staging.institute_code,
                 exam_type=staging.exam_type,
                 
-                # Individual assessment fields (NEW)
-                ind_max_marks=safe_int(staging.maximum_mark),
-                ind_pass_marks=safe_decimal(staging.pass_mark),
-                ind_is_absent=is_absent,
-                ind_marks_obtained=safe_decimal(ind_marks),
+                # Individual assessment fields (EXACT USER MAPPING)
+                ind_max_marks=safe_int(staging.maximum_mark),  # maximum_mark -> ind_max_marks
+                ind_pass_marks=safe_decimal(staging.pass_mark),  # pass_mark -> ind_pass_marks
+                ind_is_absent=is_absent,  # mark_secured='AB' -> ind_is_absent
+                ind_marks_obtained=safe_decimal(ind_marks),  # mark_secured -> ind_marks_obtained
+                ind_grace_obtained=safe_decimal(grace_mark),  # grace_given -> ind_grace_obtained
+                ind_final_marks_obtained=safe_decimal(staging.final_mark),  # final_mark -> ind_final_marks_obtained
+                ind_is_pass=(staging.subject_result == 'P') if staging.subject_result else None,  # subject_result -> ind_is_pass (P=True, F=False)
                 
-                # Combined assessment fields (NEW)
-                comb_max_marks=safe_int(staging.maximum_mark),
-                comb_pass_marks=safe_decimal(staging.pass_mark),
-                comb_marks_obtained=safe_decimal(staging.subject_total_mark),
-                comb_grace_obtained=safe_decimal(grace_mark),
-                comb_final_marks_obtained=safe_decimal(staging.final_mark),
-                comb_credit_obtained=safe_decimal(staging.subject_ce),
-                comb_letter_grade=staging.let_grad_sub,
-                comb_numeric_grade=safe_decimal(staging.subject_ng),
+                # Combined assessment fields (EXACT USER MAPPING)
+                comb_max_credits=safe_int(staging.subject_ca),  # subject_ca -> comb_max_credits
+                comb_marks_obtained=safe_decimal(staging.subject_total_mark),  # subject_total_mark -> comb_marks_obtained
+                comb_numeric_grade=safe_decimal(staging.subject_ng),  # subject_ng -> comb_numeric_grade
+                comb_credit_obtained=safe_decimal(staging.subject_ce),  # subject_ce -> comb_credit_obtained
+                comb_grade_point=safe_decimal(staging.subject_gp),  # subject_gp -> comb_grade_point
                 
-                # Course-level fields (NEW)
-                course_max_marks=safe_int(staging.maximum_mark),
-                course_pass_marks=safe_decimal(staging.pass_mark),
-                course_marks_obtained=safe_decimal(staging.subject_total_mark),
-                course_grace_obtained=safe_decimal(grace_mark),
-                course_final_marks_obtained=safe_decimal(staging.final_mark),
-                course_credit_obtained=safe_decimal(staging.subject_ce),
-                course_grade_point=safe_decimal(staging.subject_gp),
+                # Course-level fields (EXACT USER MAPPING)
+                course_grade_point=safe_decimal(staging.total_gp),  # total_gp -> course_grade_point
+                course_max_credits=safe_int(staging.subject_ca),  # subject_ca -> course_max_credits (duplicate from comb)
                 
-                # Semester-level fields (NEW)
-                sem_credit_obtained=safe_decimal(staging.total_ce),
-                sgpa=safe_decimal(staging.gpa),
-                sem_result=staging.final_result,
-                sem_grace_obtained=safe_decimal(grace_mark),
+                # Semester-level fields (EXACT USER MAPPING)
+                sem_max_credit=safe_int(staging.total_ca),  # total_ca -> sem_max_credit
+                sem_credit_obtained=safe_decimal(staging.total_ce),  # total_ce -> sem_credit_obtained
+                sem_result=staging.final_result,  # final_result -> sem_result
                 
                 # Temp field
                 temp_total_gp=safe_decimal(staging.total_gp),

@@ -16,10 +16,10 @@ class UGFacultyAdmin(admin.ModelAdmin):
 
 @admin.register(UGDepartment)
 class UGDepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'faculty', 'head_of_department', 'created_at')
-    list_filter = ('faculty',)
-    search_fields = ('name', 'code', 'faculty__name')
-    ordering = ('faculty', 'name')
+    list_display = ('name', 'code', 'head_of_department', 'is_publish', 'created_at')
+    list_filter = ('is_publish',)
+    search_fields = ('name', 'code')
+    ordering = ('name',)
 
 
 @admin.register(UGDegree)
@@ -32,7 +32,7 @@ class UGDegreeAdmin(admin.ModelAdmin):
 @admin.register(UGProgram)
 class UGProgramAdmin(admin.ModelAdmin):
     list_display = ('name', 'short_name', 'degree', 'department', 'created_at')
-    list_filter = ('degree', 'department__faculty')
+    list_filter = ('degree',)
     search_fields = ('name', 'short_name', 'degree__name', 'department__name')
     ordering = ('name',)
 
@@ -97,8 +97,8 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(CourseStructure)
 class CourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('course_name', 'course_short_name', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
-    list_filter = ('course_type', 'semester', 'course_code', 'department__faculty', 'department', )
+    list_display = ('course_name', 'course_short_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
+    list_filter = ('course_type', 'semester', 'course_code', 'department', )
     search_fields = ('course_name', 'course_short_name', 'course_code', 'department__name')
     ordering = ('department', 'semester', 'course_code')
 
