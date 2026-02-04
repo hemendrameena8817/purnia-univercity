@@ -8,7 +8,7 @@ Usage:
 1. Run: poetry run python manage.py shell
 2. Paste:
    >>> from scripts.mca.import_mca_student_assessments import run_import
-   >>> run_import(r"old_data/MCA_SEM_STUDENT_DETAILS.xlsx")
+   >>> run_import(r"old_data/MCA_SEM_STUDENT_DETAILS_WITH_ASSESMENT.xlsx")
 """
 
 import os
