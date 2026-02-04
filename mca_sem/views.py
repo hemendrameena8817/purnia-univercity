@@ -388,16 +388,16 @@ class MCAExamRegistrationListView(APIView):
 class MCAAdmitCardPDFView(View):
     """
     Generates and returns admit card PDF for a student.
-    Query params: roll_no, exam_uid
+    Query params: registration_no, exam_uid
     """
     def get(self, request):
-        roll_no = request.GET.get("roll_no")
+        registration_no = request.GET.get("registration_no")
         exam_uid = request.GET.get("exam_uid")
 
-        if not roll_no or not exam_uid:
-            return HttpResponse("Roll number and Exam UID are required", status=400, content_type='text/plain')
+        if not registration_no or not exam_uid:
+            return HttpResponse("Registration number and Exam UID are required", status=400, content_type='text/plain')
 
-        student = get_object_or_404(MCAStudentProfile, roll_no=roll_no)
+        student = get_object_or_404(MCAStudentProfile, registration_no=registration_no)
         exam = get_object_or_404(MCAExam, uid=exam_uid)
 
         pdf_content = generate_mca_admit_card_pdf(student, exam)
@@ -410,7 +410,7 @@ class MCAAdmitCardPDFView(View):
         disposition = 'attachment' if download else 'inline'
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
-        response["Content-Disposition"] = f'{disposition}; filename="admit_card_{roll_no}.pdf"'
+        response["Content-Disposition"] = f'{disposition}; filename="Admit_Card_{registration_no}_SEM_{exam.semester}.pdf"'
         return response
 
 class MCABulkAdmitCardPDFView(APIView):
@@ -425,15 +425,14 @@ class MCABulkAdmitCardPDFView(APIView):
 
         exam = get_object_or_404(MCAExam, uid=exam_uid)
         
-        # Find registered students for this exam's semester and session
-        registrations = MCAExamRegistration.objects.filter(
-            sem=exam.semester,
-            session=exam.session,
-            # status='Approved'
-        ).select_related('student')
+        # Find students sharing the same semester and session as the exam
+        students = MCAStudentProfile.objects.filter(
+            current_semester=exam.semester,
+            session_str=exam.session
+        )
 
-        if not registrations.exists():
-            return Response({"message": "No students found for this exam registration"}, status=status.HTTP_404_NOT_FOUND)
+        if not students.exists():
+            return Response({"message": f"No students found for Semester {exam.semester}, Session {exam.session}"}, status=status.HTTP_404_NOT_FOUND)
 
         # Create directory for saving PDFs
         # Use a safe name for the directory
@@ -448,13 +447,12 @@ class MCABulkAdmitCardPDFView(APIView):
         failure_count = 0
         results = []
 
-        for reg in registrations:
-            student = reg.student
+        for student in students:
             if not student:
                 continue
                 
-            roll_no = student.roll_no or student.registration_no or f"student_{student.uid}"
-            filename = f"admit_card_{roll_no}.pdf"
+            reg_no = student.registration_no or f"unknown_{student.uid}"
+            filename = f"Admit_Card_{reg_no}_SEM_{exam.semester}.pdf"
             file_path = os.path.join(save_dir, filename)
 
             try:
@@ -465,21 +463,21 @@ class MCABulkAdmitCardPDFView(APIView):
                     success_count += 1
                     relative_path = os.path.relpath(file_path, settings.MEDIA_ROOT)
                     results.append({
-                        "roll_no": roll_no,
+                        "registration_no": reg_no,
                         "status": "success",
                         "url": f"{settings.MEDIA_URL}{relative_path.replace(os.sep, '/')}"
                     })
                 else:
                     failure_count += 1
-                    results.append({"roll_no": roll_no, "status": "failed", "error": "PDF generation returned None"})
+                    results.append({"registration_no": reg_no, "status": "failed", "error": "PDF generation returned None"})
             except Exception as e:
                 failure_count += 1
-                results.append({"roll_no": roll_no, "status": "error", "error": str(e)})
+                results.append({"registration_no": reg_no, "status": "error", "error": str(e)})
 
         return Response({
             "message": "Bulk generation completed",
             "exam_name": exam.name,
-            "total_attempted": registrations.count(),
+            "total_attempted": students.count(),
             "success_count": success_count,
             "failure_count": failure_count,
             "save_directory": save_dir,
