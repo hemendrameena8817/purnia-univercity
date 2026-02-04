@@ -91,18 +91,18 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(PGCourseStructure)
 class PGCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('course_name', 'department', 'course_type', 'code', 'semester', 'max_marks', 'max_credit', 'label')
+    list_display = ('course_name', 'department', 'course_type', 'code', 'paper_code', 'semester', 'max_marks', 'max_credit', 'effective_credit', 'label')
     list_filter = ('department__faculty', 'department', 'course_type', 'semester')
-    search_fields = ('course_name', 'course_short_name', 'code', 'department__name', 'label')
+    search_fields = ('course_name', 'course_short_name', 'code', 'paper_code', 'department__name', 'label')
     ordering = ('department', 'semester', 'code')
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'course_name', 'course_short_name', 'department', 'course_type', 'code', 'semester')
+            'fields': ('uid', 'course_name', 'course_short_name', 'department', 'course_type', 'code', 'paper_code', 'semester')
         }),
         ('Credits & Marks', {
-            'fields': ('max_credit', 'max_marks', 'min_marks')
+            'fields': ('max_credit', 'effective_credit', 'max_marks', 'min_marks')
         }),
         ('Assessment Details', {
             'fields': ('label', 'description')
@@ -122,7 +122,7 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
 class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
     # Optimized for 400K+ records - showing only essential fields
     list_display = (
-        'student', 'course_name', 'semester', 'label', 'exam_type',
+        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type',
         'ind_marks_obtained', 'ind_is_absent', 
         'comb_final_marks_obtained', 'sgpa', 'sem_result',
         'session', 'created_at'
