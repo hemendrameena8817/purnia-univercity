@@ -286,8 +286,10 @@ class PGCourseStructure(models.Model):
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
     code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
+    effective_credit = models.IntegerField(null=True, blank=True, help_text="Effective Credit")
     max_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course Marks")
 
     min_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Pass Mark")

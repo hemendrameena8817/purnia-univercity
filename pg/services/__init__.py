@@ -1,5 +1,9 @@
 """
-PG Services Package
+PG Services Module
 
-Contains service classes for PG result processing and calculations.
+Contains business logic services for PG operations
 """
+
+from .result_service import PGResultService
+
+__all__ = ['PGResultService']
