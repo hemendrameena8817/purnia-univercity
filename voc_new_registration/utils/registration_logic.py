@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from ..models import NewRegistration
 
-def generate_registration_number(instance, course_type=None, session=None, college=None):
+def generate_registration_number(instance, session=None, college=None):
     """
     Implementation of the Purnea University generation formula:
     XX(Session) + XX(College) + Code(U/P/V/B) + XXXXX(Serial)
@@ -12,12 +12,14 @@ def generate_registration_number(instance, course_type=None, session=None, colle
     """
     # 1. Determine the ingredients
     # If not provided, fallback to instance attributes
-    course_type = course_type or instance.course_type
+    # course_type is deprecated, we derive from course
+    
     session = session or instance.session
     college = college or instance.college
+    course = instance.course
 
-    if not all([course_type, college]):
-        raise ValueError("Course type and College are required to generate a registration number.")
+    if not all([course, college]):
+        raise ValueError("Course and College are required to generate a registration number.")
 
     # 2. SESSION CODE: Last two digits of the current year
     session_year = str(timezone.now().year)
@@ -31,15 +33,12 @@ def generate_registration_number(instance, course_type=None, session=None, colle
     college_suffix = col_code[-2:] if len(col_code) >= 2 else col_code.zfill(2)
 
     # 4. COURSE CODE mapping
-    course_mapping = {
-        'UG': 'U',
-        'PG': 'P',
-        'VOC': 'V',
-        'BED': 'B'
-    }
-    course_code = course_mapping.get(course_type)
-    if not course_code:
-        raise ValueError(f"Invalid course type for generation: {course_type}")
+    # Logic: If course is B.Ed, use 'B', otherwise 'V' (Vocational)
+    # We check course code or name
+    if getattr(course, 'code', '').upper() == 'BED' or 'B.Ed' in getattr(course, 'name', ''):
+        course_code = 'B'
+    else:
+        course_code = 'V'
 
     prefix = f"{session_code}{college_suffix}{course_code}"
 
