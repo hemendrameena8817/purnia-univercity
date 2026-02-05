@@ -40,12 +40,24 @@ def run_import(file_path):
     
     stats = {'created': 0, 'updated': 0, 'errors': 0}
 
+    def format_code(val):
+        if pd.isna(val) or str(val).strip() in ['nan', 'None', '']:
+            return None
+        s = str(val).strip()
+        if s.endswith('.0'):
+            return s[:-2]
+        return s
+
     for index, row in df.iterrows():
         try:
-            code = str(row['INSTITUTE_CODE']).strip()
+            code = format_code(row.get('INSTITUTE_CODE'))
+            if not code:
+                continue
+            
             name = str(row['INSTITUTE_NAME']).strip()
             name_hindi = str(row.get('INSTITUTE_NAME_HINDI', '')).strip()
             name_krutidev = str(row.get('INSTITUTE_NAME_KRUTIDEV', '')).strip()
+            center_code = format_code(row.get('CENTER_CODE'))
 
             with transaction.atomic():
                 college, created = College.objects.update_or_create(
@@ -54,6 +66,7 @@ def run_import(file_path):
                         'name': name,
                         'college_name_hindi': name_hindi,
                         'college_name_krutidev': name_krutidev,
+                        'center_code': center_code,
                     }
                 )
                 
