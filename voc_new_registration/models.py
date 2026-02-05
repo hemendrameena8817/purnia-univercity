@@ -1,7 +1,7 @@
 import uuid
 from django.db import models, transaction
 from django.utils import timezone
-
+from .options import CASTE_CHOICES, GENDER_CHOICES
 
 class NewRegistrationCourse(models.Model):
     """
@@ -10,6 +10,7 @@ class NewRegistrationCourse(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=100, unique=True)
+    registration_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -69,33 +70,6 @@ class NewRegistration(models.Model):
     Model to store Vocational Course new registration data imported from Excel.
     """
     
-    # Gender choices
-    GENDER_CHOICES = [
-        ('M', 'Male'),
-        ('F', 'Female'),
-        ('O', 'Other'),
-    ]
-    
-    # Caste choices
-    CASTE_CHOICES = [
-        ('GEN', 'General'),
-        ('OBC', 'OBC'),
-        ('SC', 'SC'),
-        ('ST', 'ST'),
-        ('EWS', 'EWS'),
-        ('EBC', 'EBC'),
-        ('RBC', 'RBC'),
-        ('FDC', 'FDC'),
-    ]
-
-    # Course Type choices
-    COURSE_TYPE_CHOICES = [
-        ('UG', 'Undergraduate'),
-        ('PG', 'Postgraduate'),
-        ('VOC', 'Vocational'),
-        ('BED', 'Bachelor of Education'),
-    ]
-
     # UUID for unique identification
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
@@ -115,13 +89,6 @@ class NewRegistration(models.Model):
     caste = models.CharField(max_length=10, choices=CASTE_CHOICES, null=True, blank=True)
     dob = models.DateField(null=True, blank=True, help_text="Date of Birth")
     
-    course_type = models.CharField(
-        max_length=10, 
-        choices=COURSE_TYPE_CHOICES, 
-        null=True, 
-        blank=True,
-        help_text="UG/PG/Vocational/B.ED."
-    )
     course = models.ForeignKey(
         NewRegistrationCourse,
         on_delete=models.SET_NULL,
@@ -237,5 +204,4 @@ class RegistrationPayment(models.Model):
 
     def __str__(self):
         return f"{self.order_id} - {self.registration.student_name} - {self.payment_status}"
-
 

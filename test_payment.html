@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+  <head>
+    <title>CCAvenue Payment Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        background-color: #f4f7f6;
+      }
+      .container {
+        text-align: center;
+        background: white;
+        padding: 40px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        font-size: 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      h2 {
+        color: #333;
+      }
+      p {
+        color: #666;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Payment Confirmation</h2>
+      <p>Order ID: <strong>REG_5DC5A35725DF</strong></p>
+
+      <!-- CCAvenue Form -->
+      <form
+        id="paymentForm"
+        method="POST"
+        action="https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction"
+      >
+        <input
+          type="hidden"
+          name="encRequest"
+          value="b7d6569d8e6283a8db6033479f6a6fd214e8e89c22b14c0d5d1da1b1a1aa9f2f8b055e7955dc0b2257e59ead351e4203d374406c516e1473bf39da3dac8c797f661b35fc0bb9d955aac297d71988fce2126e6db09cc28addc76ec483cc820a8406716810ec568135a8c0b9379f07a94416665a45f670f80ab4d047e8cad2d45313ea328281054ce4ddec4d692d15bf1393d4e4a5ac51770d4d21e0a864dcf36c3725658a3d7c01145690945cf38b3604028afb2fcc66c256a18a64afd88bd718f9c5d8cdc1c0d94994da5b9399688f3e9019e7ad82e7f53d83453777b35774bc6ae9349a3122a6a62d31c96d97f69da56add49565cdbbefa1dd67f21a4336f53ad26e3c4b9d92f42248a724e034902badc95c2ba07062a815705631e57a0e612e342fd293f573d9d43e8368fd3dcf6ccc82ff830414e5f17c9499fb093a1eeb75a6cab93b02ac2134d6a07d63122d7eb"
+        />
+        <input type="hidden" name="access_code" value="ATMZ74ME80CE43ZMEC" />
+
+        <button type="submit">Proceed to Pay</button>
+      </form>
+
+      <p><small>Redirecting to secure payment gateway...</small></p>
+    </div>
+  </body>
+</html>

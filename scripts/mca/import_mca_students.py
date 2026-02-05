@@ -1,8 +1,21 @@
 """
-Import MCA Students Script
+This script imports student profiles from an Excel file.
+It creates Users (using Registration No as username/password) and MCAStudentProfile.
 
-This script imports student profiles, and optionally assessments and results from an Excel file.
-It creates Users, Students, and optionally Semester Results and Assessments.
+Required Excel Columns:
+- Roll No
+- Registration No
+- Student Name
+- Father Name (optional)
+- Mother Name (optional)
+- Gender
+- Current Semester (e.g., 1ST, 4TH)
+- Batch (e.g., 2022-24)
+- Session (e.g., 2022-23)
+- Course (e.g., MCA)
+- Institute code (College Code)
+- Profile Picture (optional, local path)
+- Signature (optional, local path)
 
 HOW TO RUN:
 -----------
@@ -10,27 +23,7 @@ poetry run python manage.py shell
 
 Then:
 >>> from scripts.mca.import_mca_students import run_import
->>> run_import('old_data/MCA_DATA.xlsx')
-
-OR run directly:
-poetry run python scripts/mca/import_mca_students.py --file "old_data/MCA_DATA.xlsx"
-
-Required Excel Columns:
-- Roll Number
-- Name of Candidate
-- Reg No
-- Batch (e.g., 2021 Admission)
-- Session (e.g., 2021-23)
-- College
-- Course (e.g., MCA)
-- Father Name (optional)
-- Mother Name (optional)
-
-Optional Columns (if importing results):
-- MCA Exam (used to fetch session/semester)
-- Result (Status e.g., PASS)
-- Total (Marks Obtained)
-- Subject Columns (Subject names as defined in MCASubject)
+>>> run_import('old_data/MCA_SEM_STUDENT_PROFILE.xlsx')
 """
 
 import os
@@ -39,6 +32,7 @@ import pandas as pd
 import argparse
 from django.db import transaction
 from django.contrib.auth import get_user_model
+from django.core.files import File
 
 # Setup Django if running directly
 if __name__ == '__main__':
@@ -49,19 +43,11 @@ if __name__ == '__main__':
     django.setup()
 
 from mca_sem.models import (
-    MCAStudentProfile, MCAExam, MCASemesterResult, MCAStudentAssessment, 
-    MCASubject, MCABatch, MCASession, MCACourse
+    MCAStudentProfile, MCABatch, MCASession, MCACourse
 )
 from colleges.models import College
 
 User = get_user_model()
-
-# Columns that are NOT subjects
-NON_SUBJECT_COLUMNS = [
-    'Roll Number', 'Name of Candidate', 'Reg No', 'Total', 'Result', 
-    'College', 'Batch', 'Session', 'Father Name', 'MCA Exam', 'Exam Center',
-    'Mother Name', 'DOB', 'Mobile', 'Course', 'Grace'
-]
 
 def get_or_create_user(reg_no, full_name):
     """
@@ -69,7 +55,10 @@ def get_or_create_user(reg_no, full_name):
     """
     user = User.objects.filter(username=reg_no).first()
     if user:
-        return user
+        # Update name if user exists
+        user.first_name = full_name.strip()
+        user.save()
+        return user, False
     
     first_name = full_name.strip()
     
@@ -81,8 +70,51 @@ def get_or_create_user(reg_no, full_name):
         password=reg_no, # Default password is reg no
         current_profile="mca_sem"
     )
-    print(f"Created User: {reg_no}")
-    return user
+    return user, True
+
+def parse_semester(sem_str):
+    """
+    Convert 1ST, 2ND, 3RD, 4TH to integer 1, 2, 3, 4
+    """
+    if pd.isna(sem_str):
+        return None
+    sem_str = str(sem_str).strip().upper()
+    if '1' in sem_str: return 1
+    if '2' in sem_str: return 2
+    if '3' in sem_str: return 3
+    if '4' in sem_str: return 4
+    return None
+
+def parse_gender(gender_str):
+    """
+    Convert M/F to Male/Female
+    """
+    if pd.isna(gender_str):
+        return None
+    val = str(gender_str).strip().upper()
+    if val in ['M', 'MALE']:
+        return 'Male'
+    if val in ['F', 'FEMALE']:
+        return 'Female'
+    if val in ['O', 'OTHER']:
+        return 'Other'
+    return None
+
+def clean_file_path(path_str):
+    """
+    Clean file paths from Excel (removes file:/// prefix)
+    """
+    if pd.isna(path_str):
+        return None
+    path_str = str(path_str).strip()
+    if path_str.startswith('file:///'):
+        path_str = path_str.replace('file:///', '')
+    
+    # Replace potential URL encoded spaces
+    path_str = path_str.replace('%20', ' ')
+    
+    # Handle forward/backward slash consistency
+    return os.path.normpath(path_str)
 
 def run_import(file_path):
     if not os.path.exists(file_path):
@@ -94,42 +126,41 @@ def run_import(file_path):
     
     print("Columns:", df.columns.tolist())
     
-    # Identify Subject Columns dynamically
-    subject_cols = [col for col in df.columns if col not in NON_SUBJECT_COLUMNS and "Unnamed" not in str(col)]
-    print(f"Identified Subjects: {subject_cols}")
-    
     # --- PHASE 1: VALIDATION ---
     print("\nStarting Validation Pass...")
     errors = []
     
     # Cache to avoid duplicate DB lookups
     cache = {
-        'colleges': {}, 'sessions': {}, 'batches': {}, 
-        'courses': {}, 'exams': {}, 'subjects': {}
+        'colleges': {}, 'sessions': {}, 'batches': {}, 'courses': {}
     }
 
     for index, row in df.iterrows():
         row_num = index + 2
         
-        # 1. College
-        college_name = str(row['College']).strip()
-        if college_name not in cache['colleges']:
-            college = College.objects.filter(name__iexact=college_name).first()
-            if not college:
-                college = College.objects.filter(name__icontains=college_name).first()
-            cache['colleges'][college_name] = college
-        if not cache['colleges'][college_name]:
-            errors.append(f"Row {row_num}: College '{college_name}' not found.")
+        # 1. Registration No
+        reg_no = str(row.get('Registration No', '')).strip()
+        if not reg_no or reg_no == 'nan':
+            errors.append(f"Row {row_num}: Registration No is required.")
 
-        # 2. Session
-        session_name = str(row['Session']).strip()
+        # 2. Institute code
+        inst_code = str(row.get('Institute code', '')).strip()
+        if inst_code not in cache['colleges']:
+            college = College.objects.filter(college_code=inst_code).first()
+            cache['colleges'][inst_code] = college
+        if not cache['colleges'][inst_code]:
+            errors.append(f"Row {row_num}: College code '{inst_code}' not found.")
+
+        # 3. Session
+        session_name = str(row.get('Session', '')).strip()
         if session_name not in cache['sessions']:
             cache['sessions'][session_name] = MCASession.objects.filter(name=session_name).first()
         if not cache['sessions'][session_name]:
-            errors.append(f"Row {row_num}: Session '{session_name}' not found.")
+            # Optional: handle if session doesn't exist? The previous script required it.
+            errors.append(f"Row {row_num}: MCA Session '{session_name}' not found.")
 
-        # 3. Batch
-        batch_name = str(row['Batch']).strip()
+        # 4. Batch
+        batch_name = str(row.get('Batch', '')).strip()
         if batch_name not in cache['batches']:
             sess = cache['sessions'].get(session_name)
             if sess:
@@ -137,149 +168,108 @@ def run_import(file_path):
             else:
                 cache['batches'][batch_name] = None
         if not cache['batches'][batch_name]:
-            errors.append(f"Row {row_num}: Batch '{batch_name}' not found for session '{session_name}'.")
+            errors.append(f"Row {row_num}: MCA Batch '{batch_name}' not found.")
 
-        # 4. Course
+        # 5. Course
         course_name = str(row.get('Course', 'MCA')).strip()
         if course_name not in cache['courses']:
             cache['courses'][course_name] = MCACourse.objects.filter(name__iexact=course_name).first()
         if not cache['courses'][course_name]:
-            errors.append(f"Row {row_num}: Course '{course_name}' not found.")
-
-        # 5. Exam (Optional)
-        exam_name = row.get('MCA Exam')
-        if not pd.isna(exam_name):
-            exam_name = str(exam_name).strip()
-            if exam_name not in cache['exams']:
-                exam = MCAExam.objects.filter(name__iexact=exam_name).first()
-                if not exam:
-                    errors.append(f"Row {row_num}: Exam '{exam_name}' not found in database.")
-                cache['exams'][exam_name] = exam
-
-        # 6. Subjects (Only if exam is present)
-        if not pd.isna(exam_name):
-            for sub_col in subject_cols:
-                subject_name = str(sub_col).strip()
-                if subject_name not in cache['subjects']:
-                    cache['subjects'][subject_name] = MCASubject.objects.filter(name__iexact=subject_name).first()
-                if not cache['subjects'][subject_name]:
-                    # Also try to find by paper_code
-                    subj = MCASubject.objects.filter(paper_code__iexact=subject_name).first()
-                    cache['subjects'][subject_name] = subj
-                
-                if not cache['subjects'][subject_name]:
-                    errors.append(f"Row {row_num}: Subject/Paper '{subject_name}' not found.")
+            errors.append(f"Row {row_num}: MCA Course '{course_name}' not found.")
 
     if errors:
-        print("\nVALIDATION FAILED! Please fix the following errors before re-running:")
+        print("\nVALIDATION FAILED!")
         for err in errors[:50]:
             print(f"  - {err}")
+        if len(errors) > 50:
+            print(f"  ... and {len(errors) - 50} more errors.")
         return
 
     print("Validation Successful! Starting Import...\n")
 
     # --- PHASE 2: IMPORT ---
     stats = {
-        'students_created': 0, 'students_updated': 0,
-        'results_created': 0, 'results_updated': 0
+        'users_created': 0, 'users_updated': 0,
+        'profiles_created': 0, 'profiles_updated': 0
     }
 
     for index, row in df.iterrows():
         try:
             with transaction.atomic():
-                roll_no = str(row['Roll Number']).strip()
-                reg_no = str(row['Reg No']).strip()
-                name = str(row['Name of Candidate']).strip()
+                reg_no = str(row['Registration No']).strip()
+                name = str(row['Student Name']).strip()
+                roll_no = str(row.get('Roll No', '')).strip() if not pd.isna(row.get('Roll No')) else ""
                 
-                college = cache['colleges'][str(row['College']).strip()]
+                college = cache['colleges'][str(row['Institute code']).strip()]
                 session_obj = cache['sessions'][str(row['Session']).strip()]
                 batch_obj = cache['batches'][str(row['Batch']).strip()]
                 course = cache['courses'][str(row.get('Course', 'MCA')).strip()]
                 
                 father_name = str(row.get('Father Name', '')).strip() if not pd.isna(row.get('Father Name')) else ""
                 mother_name = str(row.get('Mother Name', '')).strip() if not pd.isna(row.get('Mother Name')) else ""
+                gender = parse_gender(row.get('Gender'))
+                current_sem = parse_semester(row.get('Current Semester'))
                 
-                # User
-                user = get_or_create_user(reg_no, name)
+                # User creation/update
+                user, u_created = get_or_create_user(reg_no, name)
+                if u_created: stats['users_created'] += 1
+                else: stats['users_updated'] += 1
                 
-                # Student Profile
-                student, created = MCAStudentProfile.objects.update_or_create(
+                # Student Profile creation/update
+                student, p_created = MCAStudentProfile.objects.update_or_create(
                     registration_no=reg_no,
                     defaults={
                         'user': user,
+                        'first_name': name,
                         'roll_no': roll_no,
                         'father_name': father_name,
                         'mother_name': mother_name,
+                        'gender': gender,
                         'college': college,
                         'course': course,
-                        'batch': batch_obj
+                        'batch': batch_obj,
+                        'session_str': session_obj.name if session_obj else "",
+                        'current_semester': current_sem
                     }
                 )
-                if created: stats['students_created'] += 1
-                else: stats['students_updated'] += 1
-
-                # Optional Result
-                exam_name = row.get('MCA Exam')
-                if not pd.isna(exam_name):
-                    exam_obj = cache['exams'][str(exam_name).strip()]
-                    result_status = str(row.get('Result', '')).strip()
-                    
-                    # Estimate semester and session from exam
-                    sem_str = str(exam_obj.name).upper()
-                    semester = "1" # default
-                    if "SEM-I" in sem_str or "1ST" in sem_str: semester = "1"
-                    elif "SEM-II" in sem_str or "2ND" in sem_str: semester = "2"
-                    elif "SEM-III" in sem_str or "3RD" in sem_str: semester = "3"
-                    elif "SEM-IV" in sem_str or "4TH" in sem_str: semester = "4"
-
-                    res_obj, created = MCASemesterResult.objects.update_or_create(
-                        student=student,
-                        semester=semester,
-                        session=exam_obj.session,
-                        defaults={
-                            'semester_result': result_status,
-                        }
-                    )
-                    if created: stats['results_created'] += 1
-                    else: stats['results_updated'] += 1
-                    
-                    # Student Assessments (Granular marks)
-                    for sub_col in subject_cols:
-                        marks_val = row[sub_col]
-                        if pd.isna(marks_val) or str(marks_val).strip() == '':
-                            continue
-                            
-                        try: obtained = float(marks_val)
-                        except: obtained = 0
-                        
-                        subject_obj = cache['subjects'][str(sub_col).strip()]
-                        
-                        MCAStudentAssessment.objects.update_or_create(
-                            student=student,
-                            subject=subject_obj,
-                            semester=semester,
-                            label='ESE-Theory', # Defaulting to ESE-Theory for legacy import
-                            defaults={
-                                'ind_marks_obtained': obtained,
-                                'ind_max_marks': subject_obj.full_marks,
-                                'ind_pass_marks': subject_obj.pass_marks,
-                                'ind_is_absent': False if obtained > 0 else True,
-                                'session': exam_obj.session,
-                                'college': college,
-                                'batch': batch_obj,
-                                'exam_type': 'REGULAR'
-                            }
+                
+                # Handle images
+                profile_pic_path = clean_file_path(row.get('Profile Picture'))
+                signature_path = clean_file_path(row.get('Signature'))
+                
+                if profile_pic_path and os.path.exists(profile_pic_path):
+                    with open(profile_pic_path, 'rb') as f:
+                        student.profile_image.save(
+                            os.path.basename(profile_pic_path),
+                            File(f),
+                            save=False
                         )
+                
+                if signature_path and os.path.exists(signature_path):
+                    with open(signature_path, 'rb') as f:
+                        student.signature.save(
+                            os.path.basename(signature_path),
+                            File(f),
+                            save=False
+                        )
+                
+                student.save()
+                
+                if p_created: stats['profiles_created'] += 1
+                else: stats['profiles_updated'] += 1
+
+                if index % 10 == 0:
+                    print(f"Processed {index} rows...")
 
         except Exception as e:
-            print(f"Error processing row {index + 2} (Roll: {row.get('Roll Number')}): {e}")
+            print(f"Error processing row {index + 2} (Reg: {row.get('Registration No')}): {e}")
 
     print("\nImport Completed!")
-    print(f"Students Created: {stats['students_created']}, Updated: {stats['students_updated']}")
-    print(f"Results Created: {stats['results_created']}, Updated: {stats['results_updated']}")
+    print(f"Users Created: {stats['users_created']}, Updated: {stats['users_updated']}")
+    print(f"Profiles Created: {stats['profiles_created']}, Updated: {stats['profiles_updated']}")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Import MCA Students from Excel')
+    parser = argparse.ArgumentParser(description='Import MCA Students from Excel (New Format)')
     parser.add_argument('--file', type=str, required=True, help='Path to the Excel file')
     args = parser.parse_args()
     

@@ -1,5 +1,6 @@
 from rest_framework import generics, status, views, permissions
 from rest_framework.response import Response
+from django.shortcuts import redirect
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db.models import Q, Count
@@ -301,6 +302,63 @@ class NewRegistrationBulkCreateView(views.APIView):
         }, status=status.HTTP_201_CREATED if created else status.HTTP_400_BAD_REQUEST)
 
 
+class PaymentInfoView(views.APIView):
+    """
+    API View to get payment details (fee amount) before initiating payment.
+    Recommended to call this to show a confirmation screen to the user.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Get payment info",
+        manual_parameters=[
+            openapi.Parameter('aadhaar_no', openapi.IN_QUERY, description="Student Aadhaar No", type=openapi.TYPE_STRING, required=True),
+        ],
+        responses={200: "Payment Details"}
+    )
+    def get(self, request):
+        aadhaar_no = request.query_params.get('aadhaar_no')
+        if not aadhaar_no:
+            return Response({"error": "aadhaar_no is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            registration = NewRegistration.objects.select_related('course').get(aadhaar_no=aadhaar_no, is_deleted=False)
+        except NewRegistration.DoesNotExist:
+            return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not registration.migrated_from_other_university:
+            return Response({
+                "message": "Payment not required for non-migrated students",
+                "payment_required": False
+            }, status=status.HTTP_200_OK)
+            
+        if registration.is_registration_completed:
+             return Response({
+                "message": "Registration already completed",
+                "payment_required": False
+            }, status=status.HTTP_200_OK)
+
+        course = registration.course
+        if not course:
+             return Response({"error": "No course assigned"}, status=status.HTTP_400_BAD_REQUEST)
+             
+        return Response({
+            "student_name": registration.student_name,
+            "father_name": registration.father_name,
+            "mother_name": registration.mother_name,
+            "dob": registration.dob,
+            "gender": registration.gender,
+            "mobile_no": registration.mobile_no,
+            "email": registration.email,
+            "aadhaar_no": registration.aadhaar_no,
+            "college_name": registration.college.name if registration.college else None,
+            "course_name": course.name,
+            "course_code": course.code,
+            "payment_required": True,
+            "amount": course.registration_fee
+        }, status=status.HTTP_200_OK)
+
+
 class InitiatePaymentView(views.APIView):
     """
     API View to initiate CC Avenue payment.
@@ -308,23 +366,33 @@ class InitiatePaymentView(views.APIView):
     """
     permission_classes = [permissions.AllowAny]
 
-    VOC_REGISTRATION_FEE=500.00
-
     @swagger_auto_schema(
         operation_summary="Initiate CC Avenue payment",
         responses={200: "Redirect Data"}
     )
     def post(self, request, aadhaar_no):
         try:
-            registration = NewRegistration.objects.get(aadhaar_no=aadhaar_no, is_deleted=False)
+            registration = NewRegistration.objects.select_related('course').get(aadhaar_no=aadhaar_no, is_deleted=False)
         except NewRegistration.DoesNotExist:
             return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
 
         if not registration.migrated_from_other_university:
-            return Response({"error": "Payment only required for migrated students"}, status=status.HTTP_400_BAD_USER)
+            return Response({"error": "Payment only required for migrated students"}, status=status.HTTP_400_BAD_REQUEST)
 
         if registration.is_registration_completed:
-            return Response({"error": "Registration already completed"}, status=status.HTTP_400_BAD_REQUST)
+            return Response({"error": "Registration already completed"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Get Registration Fee from Course
+        if not registration.course:
+            return Response({"error": "No course assigned to this student"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        registration_fee = registration.course.registration_fee
+        
+        if not registration_fee or registration_fee <= 0:
+            return Response(
+                {"error": f"Registration fee not set for course: {registration.course.name}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Configuration (should be in .env)
         merchant_id = config('CCAVENUE_MERCHANT_ID', default='')
@@ -332,7 +400,9 @@ class InitiatePaymentView(views.APIView):
         working_key = config('CCAVENUE_WORKING_KEY', default='')
         redirect_url = config('CCAVENUE_REDIRECT_URL', default=f"{request.scheme}://{request.get_host()}/api/voc_new_registration/payment-response/")
         cancel_url = redirect_url
-        amount = config('VOC_REGISTRATION_FEE', default=str(self.VOC_REGISTRATION_FEE))
+        
+        # Use dynamic amount
+        amount = str(registration_fee)
 
         order_id = f"REG_{uuid.uuid4().hex[:12].upper()}"
         
@@ -356,10 +426,13 @@ class InitiatePaymentView(views.APIView):
 
         encrypted_data = encrypt(merchant_data, working_key)
         
+        ccavenue_url = config('CCAVENUE_URL', default='https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction')
+        
         return Response({
+            "order_id": order_id,
             "enc_request": encrypted_data,
             "access_code": access_code,
-            "production_url": "https://secure.ccavenue.com/transaction/transaction.do?command=initiateTransaction"
+            "production_url": ccavenue_url
         }, status=status.HTTP_200_OK)
 
 
@@ -378,10 +451,10 @@ class PaymentResponseView(views.APIView):
         working_key = config('CCAVENUE_WORKING_KEY', default='')
         decrypted_response = decrypt(enc_response, working_key)
         response_data = parse_response(decrypted_response)
-
+        
         order_id = response_data.get('order_id')
         auth_status = response_data.get('order_status')
-
+        
         try:
             payment = RegistrationPayment.objects.get(order_id=order_id)
         except RegistrationPayment.DoesNotExist:
@@ -392,7 +465,7 @@ class PaymentResponseView(views.APIView):
         payment.payment_mode = response_data.get('payment_mode')
         payment.raw_response = response_data
         
-        if auth_status == 'Success':
+        if auth_status and auth_status.lower() == 'success':
             payment.payment_status = 'SUCCESS'
             # Complete registration using serializer to trigger reg_no generation
             reg = payment.registration
@@ -415,11 +488,14 @@ class PaymentResponseView(views.APIView):
         
         payment.save()
 
-        # In a real app, you might redirect to a frontend success/fail page
-        return Response({
-            "status": payment.payment_status,
-            "order_id": order_id
-        }, status=status.HTTP_200_OK)
+        payment.save()
+
+        # Redirect to Frontend
+        # You should define FRONTEND_URL in your .env (e.g., http://localhost:3000)
+        frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+        redirect_url = f"{frontend_url}/payment/status?order_id={order_id}&status={payment.payment_status}"
+        
+        return redirect(redirect_url)
 
 
 class RegistrationOptionsView(views.APIView):
@@ -462,11 +538,13 @@ class RegistrationOptionsView(views.APIView):
         }
     )
     def get(self, request):
+        from .options import GENDER_CHOICES, CASTE_CHOICES
+        
         gender_choices = [
-            {'value': code, 'label': label} for code, label in NewRegistration.GENDER_CHOICES
+            {'value': code, 'label': label} for code, label in GENDER_CHOICES
         ]
         caste_choices = [
-            {'value': code, 'label': label} for code, label in NewRegistration.CASTE_CHOICES
+            {'value': code, 'label': label} for code, label in CASTE_CHOICES
         ]
         
         # Add academic lookup options

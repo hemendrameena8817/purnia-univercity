@@ -61,7 +61,6 @@ class NewRegistrationGetSerializer(serializers.ModelSerializer):
             'migration_submitted',
             'migrated_from_other_university',
             'is_registration_completed',
-            'course_type',
             'registration_number',
             'last_attended_university',
             'old_registration_no',
@@ -77,8 +76,6 @@ class NewRegistrationGetSerializer(serializers.ModelSerializer):
             'apaar_no',
             'created_at',
             'updated_at',
-            'registration_number',
-            'course_type',
         ]
         read_only_fields = ['uid', 'created_at', 'updated_at', 'college_details', 'batch_details', 'session_details', 'course_details', 'registration_number']
     
@@ -128,7 +125,6 @@ class NewRegistrationListSerializer(serializers.ModelSerializer):
             'college_name',
             'migration_submitted',
             'apaar_no',
-            'course_type',
             'registration_number',
             'created_at',
         ]
@@ -171,7 +167,6 @@ class NewRegistrationCreateSerializer(serializers.ModelSerializer):
             'college_code',
             'college_name',
             'apaar_no',
-            'course_type',
             'json_data',
         ]
     
@@ -259,7 +254,6 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
             'registration_certificate',
             'college',
             'json_data',
-            'course_type',
             'registration_number',
         ]
         read_only_fields = ['registration_number']
@@ -309,8 +303,8 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
         was_completed = instance.is_registration_completed
         is_now_completed = validated_data.get('is_registration_completed', was_completed)
         
-        # Determine course type, college
-        current_course_type = validated_data.get('course_type', instance.course_type)
+        
+        # Determine college
         current_college = validated_data.get('college', instance.college)
 
         if is_now_completed and not instance.registration_number:
@@ -325,7 +319,6 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
                 try:
                     instance.registration_number = generate_registration_number(
                         instance, 
-                        course_type=current_course_type,
                         college=current_college
                     )
                 except ValueError as e:
