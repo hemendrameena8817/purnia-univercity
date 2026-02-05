@@ -8,8 +8,9 @@ from .models import (
 
 @admin.register(UGFaculty)
 class UGFacultyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'short_name', 'university', 'created_at')
-    list_filter = ('university',)
+    list_display = ('name', 'short_name', 'university', 'is_publish', 'created_at')
+    list_editable = ('is_publish',)
+    list_filter = ('university', 'is_publish')
     search_fields = ('name', 'short_name')
     ordering = ('name',)
 
@@ -17,6 +18,7 @@ class UGFacultyAdmin(admin.ModelAdmin):
 @admin.register(UGDepartment)
 class UGDepartmentAdmin(admin.ModelAdmin):
     list_display = ('name', 'code', 'head_of_department', 'is_publish', 'created_at')
+    list_editable = ('is_publish',)
     list_filter = ('is_publish',)
     search_fields = ('name', 'code')
     ordering = ('name',)
@@ -97,10 +99,12 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(CourseStructure)
 class CourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('course_name', 'course_short_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
+    list_display = ('id','course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
+    list_editable = ('course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
     list_filter = ('course_type', 'semester', 'course_code', 'department', )
     search_fields = ('course_name', 'course_short_name', 'course_code', 'department__name')
     ordering = ('department', 'semester', 'course_code')
+    raw_id_fields = ('department',)
 
 
 @admin.register(StudentCourseAssessment)

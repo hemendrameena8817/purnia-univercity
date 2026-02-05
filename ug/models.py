@@ -32,6 +32,7 @@ class UGFaculty(models.Model):
         null=True,
         blank=True
     )
+    is_publish = models.BooleanField(default=False)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -70,7 +71,7 @@ class UGDepartment(models.Model):
         verbose_name_plural = 'UG Departments'
 
     def __str__(self):
-        return f"{self.name} ({self.faculty.short_name or self.faculty.name})"
+        return f"{self.name} ({self.code})" if self.code else self.name
 
 
 class UGDegree(models.Model):

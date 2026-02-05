@@ -6,10 +6,9 @@ Students with PASS/PROMOTED status can register for courses in their next semest
 """
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 from rest_framework import status
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
 
 from ug.services.semester_registration_service import SemesterRegistrationService
 from ug.serializers.registration_serializers import (
@@ -31,16 +30,9 @@ class RegistrationEligibilityView(APIView):
     - Existence of SemesterRegistration for next semester
     - Registration window status (is_open)
     """
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     
-    @swagger_auto_schema(
-        operation_description="Check if student is eligible to register for next semester",
-        responses={
-            200: EligibilityResponseSerializer,
-            400: "Bad Request",
-            403: "Not eligible for registration"
-        }
-    )
     def get(self, request):
         """Check registration eligibility for logged-in student"""
         try:
@@ -81,25 +73,9 @@ class AvailableCoursesView(APIView):
     - Elective courses (student can choose)
     - AECC courses (student can choose)
     """
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     
-    @swagger_auto_schema(
-        operation_description="Get available courses for semester registration",
-        manual_parameters=[
-            openapi.Parameter(
-                'semester',
-                openapi.IN_QUERY,
-                description="Semester to register for (e.g., '3RD', '4TH')",
-                type=openapi.TYPE_STRING,
-                required=True
-            )
-        ],
-        responses={
-            200: AvailableCoursesResponseSerializer,
-            400: "Bad Request",
-            403: "Not eligible for registration"
-        }
-    )
     def get(self, request):
         """Get available courses for semester registration"""
         try:
@@ -185,17 +161,9 @@ class SubmitRegistrationView(APIView):
     
     Updates SemesterRegistration.status to 'REGISTERED'
     """
+    authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     
-    @swagger_auto_schema(
-        operation_description="Submit course selections for semester registration",
-        request_body=CourseSelectionRequestSerializer,
-        responses={
-            200: RegistrationResponseSerializer,
-            400: "Bad Request - Invalid selections",
-            403: "Not eligible for registration"
-        }
-    )
     def post(self, request):
         """Submit course selections and create registrations"""
         try:
