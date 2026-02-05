@@ -9,6 +9,7 @@ from .views import (
     PaymentResponseView,
     RegistrationStatusView,
     CaptchaView,
+    PaymentInfoView
 )
 
 urlpatterns = [
@@ -27,15 +28,18 @@ urlpatterns = [
     # Bulk create
     path('bulk-create/', NewRegistrationBulkCreateView.as_view(), name='registration-bulk-create'),
     
-    # Retrieve, Update, Delete (by Aadhaar)
-    path('<str:aadhaar_no>/', NewRegistrationDetailView.as_view(), name='registration-detail'),
-    
-    # Payment initiation
-    path('<str:aadhaar_no>/initiate-payment/', InitiatePaymentView.as_view(), name='registration-payment-initiate'),
-    
+    # Payment Info (Pre-check)
+    path('payment-info/', PaymentInfoView.as_view(), name='registration-payment-info'),
+
     # Payment response (CC Avenue redirect)
     path('payment-response/', PaymentResponseView.as_view(), name='registration-payment-response'),
 
     # Registration status check
     path('<uuid:uid>/status/', RegistrationStatusView.as_view(), name='registration-status'),
+
+    # Payment initiation
+    path('<str:aadhaar_no>/initiate-payment/', InitiatePaymentView.as_view(), name='registration-payment-initiate'),
+
+    # Retrieve, Update, Delete (by Aadhaar) - MUST BE LAST
+    path('<str:aadhaar_no>/', NewRegistrationDetailView.as_view(), name='registration-detail'),
 ]

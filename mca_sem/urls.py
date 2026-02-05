@@ -10,7 +10,7 @@ from .views import (
     MCAStudentAssessmentListView, MCAStudentAssessmentDetailView,
     MCAExamResultListView, MCAExamResultDetailView,
     MCASemesterRegistrationListView, MCAExamRegistrationListView,
-    MCAAdmitCardPDFView
+    MCAAdmitCardPDFView, MCABulkAdmitCardPDFView
 )
 
 urlpatterns = [
@@ -57,4 +57,5 @@ urlpatterns = [
 
     # Admit Card
     path('admit-card/pdf/', MCAAdmitCardPDFView.as_view(), name='mca-admit-card-pdf'),
+    path('bulk-admit-card/pdf/', MCABulkAdmitCardPDFView.as_view(), name='mca-bulk-admit-card-pdf'),
 ]

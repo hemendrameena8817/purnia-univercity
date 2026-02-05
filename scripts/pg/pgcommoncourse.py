@@ -1,34 +1,41 @@
 """
-Script to import PG Common Course Structure data from Excel file.
-This data is based on Subject Detail_PG.xlsx with multiple semester sheets.
+Script to import PG Common Course Structure data from ODS file.
+This data is based on structureofcourse.ods with semester and department information.
 
 Usage:
-    python manage.py shell -c "exec(open('scripts/pg/pgcommoncourse.py').read()); import_common_course_structure()"
+    python scripts/pg/pgcommoncourse.py
 """
 
 import os
+import sys
+import django
+
+# Setup Django
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
+django.setup()
 
 def import_common_course_structure(clear_existing=False):
-    """Import PG Common Course Structure data from Excel file."""
+    """Import PG Common Course Structure data from ODS file."""
     import pandas as pd
-    from pg.models import PGCommonCourseStructure
+    from pg.models import PGCommonCourseStructure, PGDepartment
     
     print("="*70)
-    print("IMPORTING PG COMMON COURSE STRUCTURE FROM EXCEL")
+    print("IMPORTING PG COMMON COURSE STRUCTURE FROM ODS FILE")
     print("="*70)
     
-    # Path to Excel file
-    excel_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-                              'courses_data', 'pg', 'Subject Detail_PG.xlsx')
+    # Path to ODS file
+    ods_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+                            'courses_data', 'pg', 'structureofcourse.ods')
     
     # Check if file exists
-    if not os.path.exists(excel_path):
-        excel_path = 'courses_data/pg/Subject Detail_PG.xlsx'
-        if not os.path.exists(excel_path):
-            print(f"❌ Excel file not found at: {excel_path}")
+    if not os.path.exists(ods_path):
+        ods_path = 'courses_data/pg/structureofcourse.ods'
+        if not os.path.exists(ods_path):
+            print(f"❌ ODS file not found at: {ods_path}")
             return
     
-    print(f"\n📁 Reading Excel file: {excel_path}")
+    print(f"\n📁 Reading ODS file: {ods_path}")
     
     # Clear existing data if requested
     if clear_existing:
@@ -36,210 +43,121 @@ def import_common_course_structure(clear_existing=False):
         PGCommonCourseStructure.objects.all().delete()
         print("   Cleared all PGCommonCourseStructure records")
     
-    excel_file = pd.ExcelFile(excel_path)
-    print(f"   Available sheets: {excel_file.sheet_names}")
+    # Read ODS file
+    df = pd.read_excel(ods_path, engine='odf')
     
-    # Define sheet configurations for each semester
-    # semester_num is used for both semester field and old_code prefix
-    sheet_configs = [
-        {
-            'sheet': 'PG I SEMESTER (2)',
-            'semester_num': 1,
-            'header_row': 1,
-            'columns': {
-                'subject': 'Subject',
-                'paper': 'Paper ',
-                'title': 'Title',
-                'ese_max': 'Max_Marks',
-                'cia_max': 'Max_Marks.1',
-                'credit': 'Credit'
-            }
-        },
-        {
-            'sheet': 'PG II SEMESTER',
-            'semester_num': 2,
-            'header_row': 1,
-            'columns': {
-                'subject': 'Subject',
-                'paper': 'Paper',
-                'title': 'Paper Name',
-                'ese_max': 'Max Marks',
-                'cia_max': 'Unnamed: 7',
-                'credit': None
-            }
-        },
-        {
-            'sheet': 'PG III SEMESTER',
-            'semester_num': 3,
-            'header_row': 1,
-            'columns': {
-                'subject': 'Subjects',
-                'paper': 'Course Code',
-                'title': 'Papers',
-                'ese_max': 'Max Marks',
-                'cia_max': 'Unnamed: 7',
-                'credit': 'Credit'
-            }
-        },
-        {
-            'sheet': 'PG IV SEMESTER',
-            'semester_num': 4,
-            'header_row': 1,
-            'columns': {
-                'subject': 'Subject',
-                'paper': 'PAPER ',
-                'title': 'PAPER NAME',
-                'ese_max': 'Max Marks',
-                'cia_max': 'Unnamed: 6',
-                'credit': None
-            }
-        },
-    ]
+    print(f"   Total rows in ODS: {len(df)}")
+    print(f"   Columns: {list(df.columns)}")
+    
+    # Expected columns: Faculty, Semester, Course Code, Department, Course Name, etc.
+    required_cols = ['Semester', 'Course Code', 'Department', 'Course Name']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        print(f"❌ Missing required columns: {missing_cols}")
+        return
     
     total_created = 0
     total_updated = 0
     total_skipped = 0
     
-    for config in sheet_configs:
-        sheet_name = config['sheet']
-        semester_num = config['semester_num']
-        col_map = config['columns']
-        
-        if sheet_name not in excel_file.sheet_names:
-            print(f"\n⚠️  Sheet '{sheet_name}' not found, skipping...")
+    # Group by course code to identify common courses (courses taught across multiple departments)
+    course_groups = df.groupby(['Semester', 'Course Code'])
+    
+    print(f"\n📚 Found {len(course_groups)} unique Semester-Course Code combinations")
+    print("="*70)
+    
+    for (semester, course_code), group in course_groups:
+        # Skip if semester or course_code is NaN
+        if pd.isna(semester) or pd.isna(course_code):
+            total_skipped += 1
             continue
         
-        print(f"\n{'='*70}")
-        print(f"📚 Processing Semester {semester_num} from sheet: {sheet_name}")
-        print("="*70)
+        semester_str = str(semester).split('.')[0]  # Convert 1.0 to '1'
+        course_code_str = str(course_code).strip()
         
-        df = pd.read_excel(excel_file, sheet_name=sheet_name, header=config['header_row'])
+        # Get course name from the first row in group
+        # NOTE: Different departments have different course names for same code
+        # So we DON'T store department-specific course name here
+        first_row = group.iloc[0]
         
-        # Forward fill subject column (subjects span multiple rows)
-        if col_map['subject'] in df.columns:
-            df[col_map['subject']] = df[col_map['subject']].ffill()
+        # Determine course_type from course_code
+        # e.g., CC-I -> course_type = CC, AEC-I -> course_type = AEC
+        if '-' in course_code_str:
+            course_type = course_code_str.split('-')[0].strip()
+        else:
+            course_type = course_code_str
         
-        created_count = 0
-        updated_count = 0
-        skipped_count = 0
+        # Use course_code as course_name (generic, not department-specific)
+        course_name = course_code_str
         
-        # Reset old_code counter for each semester (e.g., 1001 for sem1, 2001 for sem2)
-        old_code_counter = semester_num * 1000 + 1
-        
-        for idx, row in df.iterrows():
-            # Get subject
-            subject = row.get(col_map['subject']) if col_map['subject'] else None
-            if pd.isna(subject) or str(subject).strip().lower() in ['nan', '', 'subjects', 'subject']:
-                skipped_count += 1
-                continue
-            subject = str(subject).strip()
-            
-            # Get paper code (this becomes course_type)
-            paper = row.get(col_map['paper']) if col_map['paper'] else None
-            if pd.isna(paper) or str(paper).strip().lower() in ['nan', '', 'paper', 'paper ', 'course code']:
-                skipped_count += 1
-                continue
-            paper = str(paper).strip()
-            
-            # Normalize course_type: convert Arabic numerals to Roman numerals for consistency
-            # e.g., AEC-1 -> AEC-I, CC-2 -> CC-II to avoid duplicates
-            def normalize_course_type(code):
-                # Map Arabic to Roman numerals
-                arabic_to_roman = {
-                    '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V',
-                    '6': 'VI', '7': 'VII', '8': 'VIII', '9': 'IX'
-                }
-                if '-' in code:
-                    parts = code.split('-')
-                    base = parts[0].strip()
-                    suffix = parts[1].strip()
-                    # If suffix is a single digit, convert to Roman
-                    if suffix in arabic_to_roman:
-                        suffix = arabic_to_roman[suffix]
-                    return f"{base}-{suffix}"
-                return code
-            
-            # course_type = normalized paper code (e.g., "CC-I", "AEC-I")
-            course_type = normalize_course_type(paper)
-            
-            # course_name = extract base name from paper code (e.g., "CC" from "CC-I" or "CC-1")
-            if '-' in paper:
-                course_name = paper.split('-')[0].strip()
-            else:
-                course_name = paper
-            
-            # Get title (for reference only, stored in json_data if needed)
-            title = row.get(col_map['title']) if col_map['title'] else None
-            if pd.isna(title) or str(title).strip().lower() in ['nan', '']:
-                title_str = f"{subject} - {paper}"
-            else:
-                title_str = str(title).strip()
-            
-            # Get marks
-            ese_max = row.get(col_map['ese_max']) if col_map['ese_max'] else 70
-            cia_max = row.get(col_map['cia_max']) if col_map['cia_max'] else 30
-            
+        # Get marks and credits from the ODS (if available)
+        credit = first_row.get('Credit', 5)
+        if pd.isna(credit):
+            credit = 5
+        else:
             try:
-                ese_marks = int(float(ese_max)) if not pd.isna(ese_max) else 70
+                credit = int(float(credit))
             except:
-                ese_marks = 70
-            
-            try:
-                cia_marks = int(float(cia_max)) if not pd.isna(cia_max) else 30
-            except:
-                cia_marks = 30
-            
-            total_marks = ese_marks + cia_marks
-            
-            # Get credit
-            credit_col = col_map.get('credit')
-            if credit_col and credit_col in df.columns:
-                credit = row.get(credit_col)
-                try:
-                    credit_value = int(float(credit)) if not pd.isna(credit) else 5
-                except:
-                    credit_value = 5
-            else:
-                credit_value = 5
-            
-            # Generate old_code based on semester (1001, 1002 for sem1; 2001, 2002 for sem2, etc.)
-            old_code = str(old_code_counter)
-            old_code_counter += 1
-            
-            
-            # new_code is left blank (to be filled later if needed)
-            new_code = None
-            
-            # Semester is just the number: "1", "2", "3", "4"
-            semester = str(semester_num)
-            
-            # Create or update PGCommonCourseStructure
-            # Unique key: semester + course_type (subject stored in json_data)
-            cs, created = PGCommonCourseStructure.objects.update_or_create(
-                semester=semester,
-                course_type=course_type,
-                defaults={
-                    'course_name': course_name,  # Just "CC", "AECC", etc.
-                    'credit': credit_value,
-                    'marks': total_marks,
-                    'old_code': old_code,
-                    'cia_marks': cia_marks,
-                    'ese_marks': ese_marks,
-                    'new_code': new_code,
-                    'json_data': {'title': title_str, 'subject': subject}
-                }
-            )
-            
-            if created:
-                created_count += 1
-                print(f"   ✅ Sem:{semester} | {course_name} | {course_type[:30]}... | old_code:{old_code}")
-            else:
-                updated_count += 1
+                credit = 5
         
-        print(f"\n   📊 Semester {semester_num}: Created={created_count}, Updated={updated_count}, Skipped={skipped_count}")
-        total_created += created_count
-        total_updated += updated_count
-        total_skipped += skipped_count
+        # Try to get marks from Theory Max Marks and C.I.A Max Marks columns
+        theory_max = first_row.get('Theory Max Marks', 70)
+        cia_max = first_row.get('C.I.A Max Marks', 30)
+        
+        try:
+            ese_marks = int(float(theory_max)) if not pd.isna(theory_max) else 70
+        except:
+            ese_marks = 70
+        
+        try:
+            cia_marks = int(float(cia_max)) if not pd.isna(cia_max) else 30
+        except:
+            cia_marks = 30
+        
+        total_marks = ese_marks + cia_marks
+        
+        # Get all departments offering this course
+        departments = []
+        for idx, row in group.iterrows():
+            dept_name = row.get('Department')
+            if pd.notna(dept_name):
+                dept_name_str = str(dept_name).strip()
+                # Try to find department in database
+                dept = PGDepartment.objects.filter(name=dept_name_str).first()
+                if dept and dept not in departments:
+                    departments.append(dept)
+        
+        # Create or update PGCommonCourseStructure
+        # Unique key: semester + course_code
+        cs, created = PGCommonCourseStructure.objects.update_or_create(
+            semester=semester_str,
+            course_code=course_code_str,
+            defaults={
+                'course_name': course_name,
+                'course_type': course_type,
+                'credit': credit,
+                'marks': total_marks,
+                'cia_marks': cia_marks,
+                'ese_marks': ese_marks,
+                'json_data': {
+                    'departments_count': len(departments),
+                    'departments_list': [d.name for d in departments]
+                }
+            }
+        )
+        
+        # Link departments via ManyToMany
+        if departments:
+            cs.departments.set(departments)
+        
+        if created:
+            total_created += 1
+            dept_names = ', '.join([d.name for d in departments[:3]])
+            if len(departments) > 3:
+                dept_names += f' +{len(departments)-3} more'
+            print(f"   ✅ Sem {semester_str} | {course_code_str:15} | {course_name[:40]:40} | Depts: {dept_names}")
+        else:
+            total_updated += 1
     
     print("\n" + "="*70)
     print("FINAL IMPORT SUMMARY")
@@ -252,4 +170,4 @@ def import_common_course_structure(clear_existing=False):
 
 
 if __name__ == '__main__':
-    import_common_course_structure()
+    import_common_course_structure(clear_existing=False)
