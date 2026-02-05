@@ -5,10 +5,7 @@ This script imports student marks (assessments) from the MCA Student Details Exc
 It maps END_TERM to 'ESE' and LAB/MID_TERM to 'CIA'.
 
 Usage:
-1. Run: poetry run python manage.py shell
-2. Paste:
-   >>> from scripts.mca.import_mca_student_assessments import run_import
-   >>> run_import(r"old_data/MCA_SEM_STUDENT_DETAILS_WITH_ASSESMENT.xlsx")
+1. Run: poetry run python scripts/mca/import_mca_student_assessments.py --file "path/to/excel.xlsx"
 """
 
 import os
@@ -24,7 +21,6 @@ if __name__ == '__main__':
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.path.append(project_root)
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
-    import django
     django.setup()
 
 from mca_sem.models import (
@@ -35,7 +31,8 @@ from mca_sem.models import (
     MCAExamSchedule,
     MCASemesterRegistration,
     MCABatch,
-    MCACourse
+    MCACourse,
+    MCASession
 )
 from colleges.models import College
 
@@ -43,19 +40,28 @@ User = get_user_model()
 
 def normalize_semester(sem):
     """Normalize semester values to simple digits (1, 2, 3...)"""
+    if pd.isna(sem): return None
     s = str(sem).strip().upper()
     if 'SEM' in s:
         s = s.replace('SEMESTER', '').replace('SEM', '').replace('-', '').strip()
     roman_map = {'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6', '1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4'}
-    return roman_map.get(s, s)
+    for k, v in roman_map.items():
+        if s == k: return v
+    # Handle cases like "1ST SEMESTER" -> "1"
+    import re
+    match = re.search(r'\d+', s)
+    if match: return match.group()
+    return s
 
 def get_or_create_user(reg_no, full_name):
     """
-    Get or create a User based on Registration Number.
+    Get or create a User based on Registration Number. Match import_mca_students.py logic.
     """
     user = User.objects.filter(username=reg_no).first()
     if user:
-        return user
+        user.first_name = full_name.strip()
+        user.save()
+        return user, False
     
     # Create new user
     user = User.objects.create_user(
@@ -63,11 +69,10 @@ def get_or_create_user(reg_no, full_name):
         first_name=full_name.strip(),
         last_name="",
         password=reg_no, 
-        current_profile="mca_sem",
-        user_type="student"
+        current_profile="mca_sem"
     )
     print(f"Created User: {reg_no}")
-    return user
+    return user, True
 
 def run_import(file_path):
     if not os.path.exists(file_path):
@@ -81,7 +86,58 @@ def run_import(file_path):
         print(f"Error reading Excel: {e}")
         return
 
-    print(f"Importing Student Assessments...")
+    # Clean column names
+    df.columns = [c.strip() for c in df.columns]
+    
+    # --- PHASE 1: VALIDATION & CACHING ---
+    print("\nStarting Validation & Caching Pass...")
+    errors = []
+    cache = {
+        'colleges': {}, 'sessions': {}, 'batches': {}, 'courses': {}
+    }
+
+    for index, row in df.iterrows():
+        row_num = index + 2
+        
+        # 1. College
+        inst_code = str(row.get('Institute code', '')).strip()
+        if inst_code and inst_code != 'nan' and inst_code not in cache['colleges']:
+            college = College.objects.filter(college_code=inst_code).first()
+            cache['colleges'][inst_code] = college
+            if not college:
+                errors.append(f"Row {row_num}: College '{inst_code}' not found.")
+
+        # 2. Session
+        sess_name = str(row.get('Session', '')).strip()
+        if sess_name and sess_name != 'nan' and sess_name not in cache['sessions']:
+            session = MCASession.objects.filter(name=sess_name).first()
+            cache['sessions'][sess_name] = session
+            if not session:
+                errors.append(f"Row {row_num}: Session '{sess_name}' not found.")
+
+        # 3. Batch
+        batch_name = str(row.get('Batch', '')).strip()
+        if batch_name and batch_name != 'nan' and batch_name not in cache['batches']:
+            batch = MCABatch.objects.filter(name=batch_name).first()
+            cache['batches'][batch_name] = batch
+            if not batch:
+                errors.append(f"Row {row_num}: Batch '{batch_name}' not found.")
+
+        # 4. Course
+        course_name = str(row.get('Course', 'MCA')).strip()
+        if course_name and course_name != 'nan' and course_name not in cache['courses']:
+            course = MCACourse.objects.filter(name__icontains=course_name).first()
+            cache['courses'][course_name] = course
+            if not course:
+                errors.append(f"Row {row_num}: Course '{course_name}' not found.")
+
+    if errors:
+        print(f"\nVALIDATION FAILED ({len(errors)} errors)!")
+        for err in errors[:20]:
+            print(f"  - {err}")
+        return
+
+    print("Validation Successful! Starting Import...")
 
     stats = {
         'rows_processed': 0,
@@ -89,7 +145,6 @@ def run_import(file_path):
         'records_updated': 0,
         'students_created': 0,
         'sem_registrations_created': 0,
-        'exam_schedules_created': 0,
         'subjects_not_found': 0,
         'errors': 0
     }
@@ -103,7 +158,7 @@ def run_import(file_path):
 
     for index, row in df.iterrows():
         stats['rows_processed'] += 1
-        if index % 20 == 0:
+        if index % 50 == 0:
             print(f"Processing row {index}/{len(df)}...")
 
         # Core Identity
@@ -144,18 +199,14 @@ def run_import(file_path):
 
         try:
             with transaction.atomic():
-                # 1. Get/Create Student Profile
+                # 1. Get/Create Student Profile (Match profiles script logic)
                 student = MCAStudentProfile.objects.filter(registration_no=reg_no).first()
                 if not student:
-                    user = get_or_create_user(reg_no, full_name)
+                    user, _ = get_or_create_user(reg_no, full_name)
                     
-                    # College Lookup
-                    inst_code = str(row.get('Institute code', '')).strip()
-                    college = College.objects.filter(college_code=inst_code).first() if inst_code else None
-
-                    # Batch & Course
-                    batch_obj = MCABatch.objects.filter(name=batch_col).first()
-                    mca_course = MCACourse.objects.filter(name__icontains=course_col).first()
+                    college = cache['colleges'].get(str(row.get('Institute code', '')).strip())
+                    batch_obj = cache['batches'].get(batch_col)
+                    mca_course = cache['courses'].get(course_col)
 
                     student = MCAStudentProfile.objects.create(
                         user=user,
@@ -168,7 +219,7 @@ def run_import(file_path):
                         batch=batch_obj,
                         session_str=session_col,
                         course=mca_course,
-                        current_semester=int(semester_val) if semester_val.isdigit() else None
+                        current_semester=int(semester_val) if semester_val and semester_val.isdigit() else None
                     )
                     stats['students_created'] += 1
 
@@ -208,7 +259,7 @@ def run_import(file_path):
                         'course_type': course_col,
                         'session': session_col,
                         'batch': student.batch,
-                        'college_code': student.college.college_code if student.college else inst_code,
+                        'college_code': student.college.college_code if student.college else str(row.get('Institute code', '')).strip(),
                         'attendance': attendance,
                         'ind_max_marks': int(max_marks_val),
                         'ind_pass_marks': pass_marks,
@@ -226,13 +277,14 @@ def run_import(file_path):
                 else: stats['records_updated'] += 1
 
                 # 5. Update Registration
-                if semester_val.isdigit():
-                    MCASemesterRegistration.objects.get_or_create(
+                if semester_val and semester_val.isdigit():
+                    _, r_created = MCASemesterRegistration.objects.get_or_create(
                         student=student,
                         sem=int(semester_val),
                         session=session_col,
                         defaults={'status': 'APPROVED', 'exam_eligible': True}
                     )
+                    if r_created: stats['sem_registrations_created'] += 1
 
         except Exception as e:
             print(f"Error on row {index} (Reg No: {reg_no}): {e}")
@@ -245,4 +297,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Import MCA Student Assessments')
     parser.add_argument('--file', type=str, required=True, help='Path to Excel file')
     args = parser.parse_args()
-    run_import(args.file)
+    
+    file_path = args.file
+    if not os.path.isabs(file_path):
+        file_path = os.path.abspath(file_path)
+        
+    run_import(file_path)
