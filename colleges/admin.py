@@ -6,9 +6,9 @@ from .models import College
 class CollegeAdmin(admin.ModelAdmin):
     list_display = (
         'name', 'college_name_hindi', 'college_name_krutidev', 
-        'short_name', 'college_code', 'principal', 'university', 'email'
+        'short_name', 'college_code', 'center_code', 'principal', 'university', 'email'
     )
-    search_fields = ('name', 'college_name_hindi', 'college_name_krutidev', 'short_name', 'college_code', 'email')
+    search_fields = ('name', 'college_name_hindi', 'college_name_krutidev', 'short_name', 'college_code', 'center_code', 'email')
     list_filter = ('university',)
     ordering = ('name',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
@@ -17,7 +17,7 @@ class CollegeAdmin(admin.ModelAdmin):
         ('Basic Information', {
             'fields': (
                 'uid', 'name', 'college_name_hindi', 'college_name_krutidev', 
-                'short_name', 'college_code', 'logo'
+                'short_name', 'college_code', 'center_code', 'logo'
             )
         }),
         ('Contact Information', {

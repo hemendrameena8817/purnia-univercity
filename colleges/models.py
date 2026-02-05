@@ -13,6 +13,7 @@ class College(models.Model):
     name = models.CharField(max_length=255, null=True, blank=True)
     short_name = models.CharField(max_length=100, null=True, blank=True)
     college_code = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    center_code = models.CharField(max_length=50, unique=True, null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     principal = models.CharField(max_length=255, null=True, blank=True)
     contact_no = models.CharField(max_length=15, null=True, blank=True)
