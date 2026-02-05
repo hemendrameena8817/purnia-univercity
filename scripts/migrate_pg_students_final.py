@@ -1,44 +1,19 @@
-"""
-ULTRA-FAST PG Student Migration Script
-
-Performance optimizations:
-- Uses bulk_create for 100x faster inserts
-- Pre-computed password hash (avoids CPU bottleneck)
-- Processes in batches of 500
-- Minimal database queries
-- Real-time progress updates
-
-Safe features:
-- Does NOT delete existing data
-- Checks for duplicates
-- Only creates missing students
-- Can run multiple times
-"""
-"poetry run python scripts/migrate_pg_students_from_results.py"
-"it set by default password password123"
 import os
 import sys
 import django
+import time
+import re
+from datetime import datetime
+from django.contrib.auth.hashers import make_password
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
 django.setup()
 
 from django.db import transaction
-from django.contrib.auth.hashers import make_password
-from staging.models import PGResultCurrent, RegisteredApplicantMaster
+from pg.models import PGStudentProfile
 from accounts.models import UserAccount
-from pg.models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGFaculty
-from colleges.models import College
-from university.models import University
-from datetime import datetime
-import time
-
-
-# Pre-compute a default password hash (for "password123")
-# This avoids hashing 11K+ passwords individually
-DEFAULT_PASSWORD_HASH = make_password("password123")
-
+from staging.models import PGResultCurrent, RegisteredApplicantMaster
 
 def parse_date(date_str):
     """Parse date string."""
@@ -53,246 +28,266 @@ def parse_date(date_str):
             continue
     return None
 
-
-def get_lookups():
-    """Pre-load all lookup data."""
-    university = University.objects.first()
-    default_faculty = None
-    
-    if university:
-        default_faculty, _ = PGFaculty.objects.get_or_create(
-            name='Default PG Faculty',
-            defaults={'university_id': university.uid, 'short_name': 'DEFAULT'}
-        )
-    
-    return {
-        'university': university,
-        'default_faculty': default_faculty,
-        'departments': {d.code: d for d in PGDepartment.objects.all()},
-        'degrees': {d.short_name: d for d in PGDegree.objects.all()},
-        'programs': {(p.degree_id, p.department_id if p.department_id else None): p 
-                     for p in PGProgram.objects.select_related('degree', 'department').all()},
-        'colleges': {c.college_code: c for c in College.objects.all()}
-    }
-
-
-def get_or_create_dept(code, lookups):
-    """Get or create department."""
-    if not code or code in lookups['departments']:
-        return lookups['departments'].get(code)
-    
-    if not lookups['default_faculty']:
+def parse_semester(sem_str):
+    """Parse semester string like 'SEM-1' or '1' to int."""
+    if not sem_str:
         return None
-    
-    dept = PGDepartment.objects.create(
-        name=f"PG Dept {code}",
-        code=code,
-        faculty=lookups['default_faculty']
-    )
-    lookups['departments'][code] = dept
-    return dept
-
-
-def get_or_create_deg(code, lookups):
-    """Get or create degree."""
-    if not code or code in lookups['degrees']:
-        return lookups['degrees'].get(code)
-    
-    deg = PGDegree.objects.create(
-        name=f"PG Degree {code}",
-        short_name=code,
-        total_semesters=4,
-        total_years=2
-    )
-    lookups['degrees'][code] = deg
-    return deg
-
-
-def get_or_create_prog(degree, department, lookups):
-    """Get or create program."""
-    if not degree:
-        return None
-    
-    key = (degree.uid, department.uid if department else None)
-    if key in lookups['programs']:
-        return lookups['programs'][key]
-    
-    prog = PGProgram.objects.create(
-        name=f"{degree.short_name}" + (f" - {department.name}" if department else ""),
-        short_name=degree.short_name,
-        degree=degree,
-        department=department
-    )
-    lookups['programs'][key] = prog
-    return prog
-
+    try:
+        # Extract first digit found
+        match = re.search(r'\d+', str(sem_str))
+        if match:
+            return int(match.group())
+    except:
+        pass
+    return None
 
 def migrate():
-    """Ultra-fast bulk migration."""
     print("\n" + "="*80)
-    print("ULTRA-FAST PG STUDENT MIGRATION")
+    print("PG STUDENT IMPORT & UPDATE (Source: PGResultCurrent)")
     print("="*80)
-    print("Performance: Pre-hashed passwords + bulk inserts")
-    print("="*80 + "\n")
     
     start = time.time()
     
-    # Get unique reg numbers from PGResultCurrent
-    print("📊 Getting unique registration numbers...")
-    all_reg_nos = set(PGResultCurrent.objects.filter(
-        college_reg_no__isnull=False
-    ).exclude(college_reg_no='').values_list('college_reg_no', flat=True).distinct())
-    print(f"   Total: {len(all_reg_nos):,}\n")
+    # 1. Identify Target Students (From PGResultCurrent)
+    print("📊 Fetching target students from PGResultCurrent...")
+    target_reg_nos = list(PGResultCurrent.objects.values_list('college_reg_no', flat=True).distinct())
+    target_set = set(r for r in target_reg_nos if r and str(r).strip())
+    print(f"   Found {len(target_set):,} unique student registration numbers.\n")
     
-    # Check existing
-    print("📊 Checking existing students...")
-    existing = set(UserAccount.objects.filter(
-        username__in=all_reg_nos
-    ).values_list('username', flat=True)) | set(PGStudentProfile.objects.filter(
-        registration_no__in=all_reg_nos
-    ).values_list('registration_no', flat=True))
-    
-    missing = all_reg_nos - existing
-    print(f"   Existing: {len(existing):,}")
-    print(f"   Missing:  {len(missing):,}\n")
-    
-    if not missing:
-        print("✅ All students migrated!")
+    if not target_set:
+        print("⚠️  No students found in PGResultCurrent. Aborting.")
         return
+
+    # 🔗 Fetch Staging Data Dictionary
+    print("📊 Loading Staging Data (PGResultCurrent)...")
+    staging_data = {}
+    qs_staging = PGResultCurrent.objects.filter(college_reg_no__in=target_set).values(
+        'college_reg_no', 'student_name', 'fathers_name', 'mothers_name',
+        'session_code', 'batch_code', 'student_name_hindi',
+        'course_code', 'college_roll_no', 'semester_code'
+    )
+    for item in qs_staging:
+        r = str(item['college_reg_no']).strip()
+        if r:
+            staging_data[r] = item
+    print(f"   Loaded {len(staging_data):,} records from Staging.")
+
+    # 2. Ensure UserAccounts Exist
+    print("\n📊 Checking UserAccounts...")
+    existing_users = UserAccount.objects.filter(username__in=target_set).values_list('username', flat=True)
+    existing_users_set = set(existing_users)
     
-    # Load applicant data
-    print("📊 Loading applicant data...")
-    applicants = {a.college_reg_no: a for a in RegisteredApplicantMaster.objects.filter(
-        college_reg_no__in=missing
-    )}
-    print(f"   Loaded: {len(applicants):,}\n")
+    missing_users = target_set - existing_users_set
     
-    # Load lookups
-    print("📊 Loading lookups...")
-    lookups = get_lookups()
-    print("   ✅ Done\n")
-    
-    # Bulk create in batches
-    print("📊 Creating students (batch size: 500)...")
-    print("   Progress: ", end='', flush=True)
-    
-    batch_size = 500
-    users_batch = []
-    profiles_batch = []
-    created_users = 0
-    created_profiles = 0
-    skipped_aadhar = 0
-    
-    missing_list = list(missing)
-    for idx, reg_no in enumerate(missing_list, 1):
-        if reg_no not in applicants:
-            continue
+    if missing_users:
+        print(f"   Creating {len(missing_users):,} missing UserAccounts...")
+        new_users = []
         
-        try:
-            app = applicants[reg_no]
-            name = (app.student_name or '').strip()
+        for reg_no in missing_users:
+            stg = staging_data.get(reg_no, {})
+            raw_cc = stg.get('course_code', '').strip()
             
-            # Create user with pre-hashed password
-            users_batch.append(UserAccount(
+            # User Mapping Logic: Map course_code to current_profile
+            if raw_cc.upper() == 'PG':
+                curr_profile = 'pg'
+            elif raw_cc.upper() == 'MCA':
+                curr_profile = 'mca_sem'
+            else:
+                 curr_profile = raw_cc[:20]
+
+            # Password = Registration Number
+            user_password = make_password(reg_no)
+
+            new_users.append(UserAccount(
                 username=reg_no,
-                first_name=name[:100],
-                last_name='',
-                email=None,
-                phone=app.phone or None,
+                password=user_password,
                 user_type='student',
-                is_active=True,
-                is_verified=False,
-                password=DEFAULT_PASSWORD_HASH  # Pre-computed!
+                current_profile=curr_profile, 
+                is_active=True
             ))
             
-        except Exception as e:
-            print(f"\n   Error {reg_no}: {e}")
-        
-        # Insert batch
-        if len(users_batch) >= batch_size or idx == len(missing_list):
-            with transaction.atomic():
-                # Bulk insert users
-                UserAccount.objects.bulk_create(users_batch, ignore_conflicts=True)
-                created_users += len(users_batch)
-                
-                # Get created users with their UIDs
-                usernames = [u.username for u in users_batch]
-                user_map = {u.username: u for u in UserAccount.objects.filter(
-                    username__in=usernames
-                )}
-                
-                # Build profiles
-                profiles_batch = []
-                for user_obj in users_batch:
-                    reg = user_obj.username
-                    if reg not in applicants or reg not in user_map:
-                        continue
-                    
-                    app = applicants[reg]
-                    dept = get_or_create_dept(app.discipline_code, lookups)
-                    deg = get_or_create_deg(app.course_code, lookups)
-                    prog = get_or_create_prog(deg, dept, lookups)
-                    
-                    aadhar = app.aadhar_card_no
-                    if aadhar and len(str(aadhar)) > 12:
-                        aadhar = None
-                        skipped_aadhar += 1
-                    
-                    profiles_batch.append(PGStudentProfile(
-                        user=user_map[reg],
-                        first_name=(app.student_name or '').strip(),
-                        last_name='',
-                        registration_no=reg,
-                        roll_no=app.roll_no or reg,
-                        father_name=(app.fathers_name or '')[:255],
-                        mother_name=(app.mothers_name or '')[:255],
-                        date_of_birth=parse_date(app.dob),
-                        gender=app.gender,
-                        caste=app.category,
-                        address=app.full_address,
-                        aadhar_no=aadhar,
-                        mobile_no=app.phone,
-                        college=lookups['colleges'].get(app.institute_code),
-                        department=dept,
-                        degree=deg,
-                        program=prog,
-                        status='Active',
-                        session=app.session_code,
-                        batch=app.batch_code
-                    ))
-                
-                # Bulk insert profiles
-                PGStudentProfile.objects.bulk_create(profiles_batch, ignore_conflicts=True)
-                created_profiles += len(profiles_batch)
-            
-            users_batch = []
-            print(f"{idx:,}/{len(missing_list):,}... ", end='', flush=True)
-    
-    elapsed = time.time() - start
-    
-    # Summary
-    print(f"\n\n" + "="*80)
-    print("MIGRATION COMPLETE")
-    print("="*80)
-    print(f"⏱️  Time:             {elapsed:.1f}s ({elapsed/60:.1f} min)")
-    print(f"📊 To migrate:       {len(missing_list):,}")
-    print(f"✅ Users created:    {created_users:,}")
-    print(f"✅ Profiles created: {created_profiles:,}")
-    print(f"⚠️  Aadhar skipped:   {skipped_aadhar}")
-    print("="*80)
-    
-    # Final state
-    final_users = UserAccount.objects.filter(user_type='student').count()
-    final_profiles = PGStudentProfile.objects.count()
-    print(f"\n📊 FINAL STATE:")
-    print(f"   Users:    {final_users:,}")
-    print(f"   PG Profiles: {final_profiles:,}")
-    print(f"   Expected: {len(all_reg_nos):,}")
-    print(f"   Success:  {(final_profiles/len(all_reg_nos)*100):.1f}%")
-    print("\n⚠️  NOTE: All passwords set to 'password123'")
-    print("   You can update individual passwords later if needed.")
-    print("="*80 + "\n")
+        # Bulk create users in chunks
+        batch_size = 2000
+        for i in range(0, len(new_users), batch_size):
+            UserAccount.objects.bulk_create(new_users[i:i+batch_size])
+            print(f"     Created {min(i+batch_size, len(new_users))}/{len(new_users)} users...")
 
+    # 3. Ensure PGStudentProfiles Exist
+    print("\n📊 Checking PGStudentProfiles...")
+    existing_profiles = PGStudentProfile.objects.filter(registration_no__in=target_set).values_list('registration_no', flat=True)
+    existing_profiles_set = set(existing_profiles)
+    
+    missing_profiles = target_set - existing_profiles_set
+    
+    if missing_profiles:
+        print(f"   Creating {len(missing_profiles):,} missing PGStudentProfiles...")
+        
+        users_map = {u.username: u for u in UserAccount.objects.filter(username__in=missing_profiles)}
+        
+        new_profiles = []
+        for reg_no in missing_profiles:
+            user = users_map.get(reg_no)
+            if user:
+                new_profiles.append(PGStudentProfile(
+                    user=user,
+                    registration_no=reg_no,
+                    status='Active'
+                ))
+        
+        batch_size = 2000
+        for i in range(0, len(new_profiles), batch_size):
+            PGStudentProfile.objects.bulk_create(new_profiles[i:i+batch_size])
+            print(f"     Created {min(i+batch_size, len(new_profiles))}/{len(new_profiles)} profiles...")
+
+    # 4. Load Applicant Data (Secondary)
+    print("\n📊 Loading applicant data (Secondary)...")
+    applicants = {a.college_reg_no: a for a in RegisteredApplicantMaster.objects.filter(
+        college_reg_no__in=target_set
+    )}
+    print(f"   Loaded {len(applicants):,} records from Applicants.")
+
+    # 5. Prepare Profile Updates
+    print("\n📊 Calculating profile updates...")
+    profiles_to_process = PGStudentProfile.objects.filter(registration_no__in=target_set)
+    updates = []
+    
+    # Fields to update
+    fields_to_update = [
+        'first_name', 'father_name', 'mother_name', 'date_of_birth',
+        'gender', 'caste', 'address', 'mobile_no', 'session', 'batch', 'hindi_name',
+        'roll_no', 'current_semester', 'aadhar_no'
+    ]
+    
+    for profile in profiles_to_process:
+        reg = profile.registration_no
+        staging = staging_data.get(reg)
+        applicant = applicants.get(reg)
+        
+        if not staging and not applicant:
+            continue
+            
+        # Defaults
+        new_fname = profile.first_name
+        new_father = profile.father_name
+        new_mother = profile.mother_name
+        new_session = profile.session
+        new_batch = profile.batch
+        new_hindi = profile.hindi_name
+        new_dob = profile.date_of_birth
+        new_gender = profile.gender
+        new_caste = profile.caste
+        new_addr = profile.address
+        new_mobile = profile.mobile_no
+        new_roll = profile.roll_no
+        new_sem = profile.current_semester
+        new_aadhar = profile.aadhar_no
+
+        if staging:
+            new_fname = (staging.get('student_name') or '').strip()
+            new_father = (staging.get('fathers_name') or '').strip()
+            new_mother = (staging.get('mothers_name') or '').strip()
+            new_session = staging.get('session_code')
+            val_batch = staging.get('batch_code')
+            if val_batch: new_batch = val_batch.strip()
+            val_hindi = staging.get('student_name_hindi')
+            if val_hindi: new_hindi = val_hindi.strip()
+            new_roll = staging.get('college_roll_no')
+            new_sem = parse_semester(staging.get('semester_code'))
+
+        if applicant:
+            if not staging:
+                new_fname = (applicant.student_name or '').strip()
+                new_father = (applicant.fathers_name or '').strip()
+                new_mother = (applicant.mothers_name or '').strip()
+                new_session = applicant.session_code
+                new_batch = applicant.batch_code
+            
+            parsed_dob = parse_date(applicant.dob)
+            if parsed_dob: new_dob = parsed_dob
+            if applicant.gender: new_gender = applicant.gender
+            if applicant.category: new_caste = applicant.category
+            if applicant.full_address: new_addr = applicant.full_address
+            if applicant.phone: new_mobile = applicant.phone
+            
+            val_aadhar = applicant.aadhar_card_no
+            if val_aadhar:
+                val_aadhar = str(val_aadhar).strip()
+                if len(val_aadhar) <= 12:
+                    new_aadhar = val_aadhar
+                else:
+                    new_aadhar = ""
+
+        # Detect Changes
+        changed = False
+        if profile.first_name != new_fname: profile.first_name = new_fname; changed = True
+        if profile.father_name != new_father: profile.father_name = new_father; changed = True
+        if profile.mother_name != new_mother: profile.mother_name = new_mother; changed = True
+        if profile.date_of_birth != new_dob: profile.date_of_birth = new_dob; changed = True
+        if profile.gender != new_gender: profile.gender = new_gender; changed = True
+        if profile.caste != new_caste: profile.caste = new_caste; changed = True
+        if profile.address != new_addr: profile.address = new_addr; changed = True
+        if profile.mobile_no != new_mobile: profile.mobile_no = new_mobile; changed = True
+        if profile.session != new_session: profile.session = new_session; changed = True
+        if profile.batch != new_batch: profile.batch = new_batch; changed = True
+        if profile.hindi_name != new_hindi: profile.hindi_name = new_hindi; changed = True
+        if profile.roll_no != new_roll: profile.roll_no = new_roll; changed = True
+        if profile.current_semester != new_sem: profile.current_semester = new_sem; changed = True
+        if profile.aadhar_no != new_aadhar: profile.aadhar_no = new_aadhar; changed = True
+        
+        if changed:
+            updates.append(profile)
+            
+    if updates:
+        print(f"\n   Committing {len(updates):,} profile updates...")
+        batch_size = 1000
+        for i in range(0, len(updates), batch_size):
+            PGStudentProfile.objects.bulk_update(updates[i:i+batch_size], fields_to_update)
+            print(f"     Updated {min(i+batch_size, len(updates))}/{len(updates)}")
+
+    # 6. Update User Passwords (Chunked)
+    print("\n📊 Updating User Passwords and Profile Types...")
+    print("   ⚠️  IMPORTANT: Setting password = username for ALL users. Writing in chunks...")
+    
+    all_users = UserAccount.objects.filter(username__in=target_set)
+    total_users = all_users.count()
+    
+    users_batch = []
+    processed_count = 0
+    t0 = time.time()
+    
+    for user in all_users:
+        processed_count += 1
+        
+        # 1. Update Profile Type (if needed)
+        stg = staging_data.get(user.username)
+        if stg:
+            raw_cc = stg.get('course_code', '').strip()
+            if raw_cc.upper() == 'PG': new_cp = 'pg'
+            elif raw_cc.upper() == 'MCA': new_cp = 'mca_sem'
+            else: new_cp = raw_cc[:20]
+            
+            if user.current_profile != new_cp:
+                user.current_profile = new_cp
+        
+        # 2. Update Password (Always)
+        user.password = make_password(user.username)
+        users_batch.append(user)
+        
+        # Commit every 1000 users
+        if len(users_batch) >= 1000:
+            UserAccount.objects.bulk_update(users_batch, ['password', 'current_profile'])
+            elapsed = time.time() - t0
+            rate = processed_count / elapsed
+            print(f"   Committed batch of 1000 users. Total: {processed_count}/{total_users} (Rate: {rate:.1f}/s)")
+            users_batch = []
+            
+    # Final batch
+    if users_batch:
+        UserAccount.objects.bulk_update(users_batch, ['password', 'current_profile'])
+        print(f"   Committed final batch of {len(users_batch)} users. Total: {processed_count}/{total_users}")
+    
+    total_elapsed = time.time() - start
+    print(f"\n✅ DONE. Total Time: {total_elapsed:.1f}s.")
 
 if __name__ == '__main__':
     migrate()
