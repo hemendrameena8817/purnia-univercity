@@ -16,21 +16,25 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
         dry_run (bool): If True, DOES NOT SAVE changes to DB. Default is True.
     """
     # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='190150300006', semester='1ST', session='2019-20', dry_run=True)"
-    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='2112B050184', semester='1ST', session='2024-25', dry_run=True)"/
-    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(batch_name='2019-21', semester='1ST', session='2019-20', dry_run=False)"
+    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='1934B090018', semester='1ST', session='2024-25', dry_run=True)"/
+    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(batch_name='2024-26', semester='1ST', session='2024-25', dry_run=False)"
     print("=" * 100)
     print(f"STARTING RESULT CALCULATION")
     print(f"Filter Criteria -> Batch: {batch_name} | Semester: {semester} | Session: {session} | RegNo: {registration_no}")
     print(f"Dry Run Mode: {dry_run} {'(NO DB CHANGES)' if dry_run else '(SAVING TO DB)'}")
     print("=" * 100)
 
-    # 1. Filter Students
+    # =========================================================================
+    # STEP 1: FILTER STUDENTS
+    # =========================================================================
     students = PGStudentProfile.objects.all()
     
+    # Priority 1: Filter by specific Registration Number
     if registration_no:
         students = students.filter(registration_no=registration_no)
         print(f"✅ Filtered by Registration No '{registration_no}': {students.count()} students found")
     
+    # Priority 2: Filter by Batch name (if no registration_no)
     if batch_name:
         batch = PGBatch.objects.filter(name=batch_name).first()
         if not batch:
@@ -41,11 +45,14 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
     elif not registration_no:
         print(f"⚠️ No Batch or Registration No specified. Searching all {students.count()} students.")
 
+    # Halt if no students found
     if students.count() == 0:
         print("No students found matching the criteria.")
         return
 
-    # 2. Process Students
+    # =========================================================================
+    # STEP 2: PROCESS STUDENTS & CALCULATE RESULTS
+    # =========================================================================
     count = 0
     success_count = 0
     error_count = 0
@@ -55,32 +62,36 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
     print("-" * 100)
 
     for idx, student in enumerate(students, 1):
-        # Find relevant assessments for this student matching filters
+        # We look for all assessment marks (PGStudentCourseAssessment) belonging to this student
         student_assessments = PGStudentCourseAssessment.objects.filter(student=student)
         
+        # Apply the user-provided Semester and Session filters to the assessment search
         if semester:
             student_assessments = student_assessments.filter(semester=semester)
         if session:
             student_assessments = student_assessments.filter(session=session)
             
-        # Get unique combinations of (semester, session) to process
-        # Using set() to ensure absolute uniqueness and avoid any DB-level distinct issues
+        # Extract unique (semester, session) pairs from the student's marks.
+        # This handles cases where a student might have backlogs or multiple registrations.
         combinations = set(student_assessments.values_list('semester', 'session'))
         
-        # If no assessments match, skip student
+        # Skip if no marks are found for the filters provided
         if not combinations:
             continue
             
         print(f"[{idx}/{total_students}] Processing: {student.first_name} {student.last_name} ({student.registration_no})")
         
+        # Loop through each semester/session combination found for this student
         for sem, sess in combinations:
+            # Session is mandatory for result calculation
             if not sess:
                 if session is None: 
                     print(f"    ⚠️ Skipping {sem} due to missing session in data")
                     continue
                 
             try:
-                # Process Result
+                # CALL THE CORE SERVICE: This is where the heavy lifting happens.
+                # It calculates marks, grades, SGPA, and creates next-semester registration.
                 result = PGResultService.process_student(
                     student_id=student.id,
                     semester=sem,
@@ -88,32 +99,37 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
                     dry_run=dry_run 
                 )
                 
-                # Check for explicit failure in return
+                # If the service returns success=False, something went wrong with the data lookup
                 if not result.get('success'):
                     print(f"    ❌ Sem {sem} (Session: {sess}) Failed: {result.get('error')}")
                     error_count += 1
                     continue
 
-                # Extract SGPA and Result for display
+                # -------------------------------------------------------------
+                # DISPLAY DETAILED RESULTS
+                # -------------------------------------------------------------
                 summary = result.get('summary', {})
                 sgpa = summary.get('sgpa')
                 res_status = summary.get('semester_result')
-                eff_credits = summary.get('total_max_credits')
+                max_credits = summary.get('total_max_credits')
+                earned_credits = summary.get('total_credits_earned')
                 
                 print(f"    ✅ Sem {sem} Result Calculated:")
-                print(f"       Status: {res_status} | SGPA: {sgpa} | Total Credits: {eff_credits}")
+                print(f"       Status: {res_status} | SGPA: {sgpa} | Max Credits: {max_credits} | Earned: {earned_credits}")
                 
-                # PRINT DETAILED COURSE BREAKDOWN
+                # COURSE BREAKDOWN HEADERS
                 print(f"       {'Course':<10} {'Marks':<10} {'Grade':<8} {'GP':<5} {'Cr.Earn':<10} {'Points':<8}")
                 print(f"       {'-'*10} {'-'*10} {'-'*8} {'-'*5} {'-'*10} {'-'*8}")
                 
+                # Loop through each course result in the summary
                 for course in summary.get('course_results', []):
                     code = course.get('paper_code', 'N/A')
+                    # total_marks = (CIA + ESE combined)
                     marks = f"{course.get('total_marks', 0)}/{course.get('total_max_marks', 0)}"
                     grade = course.get('final_grade', '-')
-                    gp = course.get('grade_point', 0)
-                    cr_earned = course.get('credits_earned', 0)
-                    points = course.get('course_grade_point', 0)
+                    gp = course.get('grade_point', 0)     # E.g. 7
+                    cr_earned = course.get('credits_earned', 0) # E.g. 5
+                    points = course.get('course_grade_point', 0) # GP * Cr.Earn
                     
                     print(f"       {code:<10} {marks:<10} {grade:<8} {gp:<5} {cr_earned:<10} {points:<8}")
                 print("\n")
@@ -126,6 +142,9 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
         
         count += 1
 
+    # =========================================================================
+    # STEP 3: FINAL SUMMARY REPORT
+    # =========================================================================
     print("\n" + "=" * 100)
     print("CALCULATION COMPLETE")
     print("=" * 100)

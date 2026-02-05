@@ -52,6 +52,10 @@ class PGResultService:
     # GRADING SYSTEM
     # =========================================================================
     
+    # =========================================================================
+    # GRADING SYSTEM (Choice-Based Credit System - CBCS)
+    # =========================================================================
+    # Tuple Format: (Percentage Threshold, Letter Grade, Grade Point, Description)
     GRADE_THRESHOLDS = [
         (91, 'O', 10, 'Outstanding'),
         (81, 'A++', 9, 'Excellent'),
@@ -98,7 +102,14 @@ class PGResultService:
     
     @staticmethod
     def calculate_grade(marks: Decimal, max_marks: Decimal, is_absent: bool = False) -> Tuple[str, int]:
-        """Calculate letter grade and grade point from marks"""
+        """
+        Calculate letter grade and grade point from marks.
+        
+        Logic:
+        1. If marked as absent -> 'Ab' (0 points)
+        2. Calculate percentage
+        3. Match against GRADE_THRESHOLDS list
+        """
         if is_absent:
             return ('Ab', 0)
         
@@ -107,6 +118,7 @@ class PGResultService:
         
         percentage = (Decimal(marks) / Decimal(max_marks)) * 100
         
+        # Iterate through thresholds (highest to lowest)
         for threshold, grade, points, _ in PGResultService.GRADE_THRESHOLDS:
             if percentage >= threshold:
                 return (grade, points)
@@ -134,11 +146,12 @@ class PGResultService:
     @staticmethod
     def check_individual_pass(assessment) -> bool:
         """
-        Check if individual assessment passed
+        Check if a single assessment record (e.g., just CIA Theory) is passed.
         
-        Criteria:
-        - Not absent
-        - Marks >= Pass marks
+        Logic:
+        - Must not be absent
+        - Must have marks_obtained
+        - If pass_marks is defined (e.g., 40% target), marks must be >= pass_marks
         """
         if assessment.ind_is_absent:
             return False
@@ -158,10 +171,11 @@ class PGResultService:
     @staticmethod
     def calculate_combined(cia_assessment, ese_assessment) -> Dict:
         """
-        Calculate combined CIA + ESE for a course
+        Combine CIA (Internal) and ESE (External) results for a single paper.
         
-        Returns:
-            Dict with combined marks and pass status
+        Rules:
+        - Total Marks = CIA + ESE
+        - Total Status = CIA Passed AND ESE Passed AND Combined Marks >= Combined Pass Marks
         """
         cia_marks = cia_assessment.ind_marks_obtained or Decimal(0)
         ese_marks = ese_assessment.ind_marks_obtained or Decimal(0)
@@ -176,9 +190,11 @@ class PGResultService:
         comb_max = cia_max + ese_max
         comb_pass_marks = cia_pass + ese_pass
         
+        # Verify individual pass status for both components
         cia_passed = PGResultService.check_individual_pass(cia_assessment)
         ese_passed = PGResultService.check_individual_pass(ese_assessment)
         
+        # Overall course-level pass requirement
         combined_passed = cia_passed and ese_passed and (comb_marks >= comb_pass_marks)
         
         return {
@@ -203,14 +219,19 @@ class PGResultService:
         assessments: Optional[List] = None
     ) -> Dict:
         """
-        Calculate complete course result
+        Aggregates multiple assessment labels (CIA-Theory, CIA-Practical, ESE-Theory, etc.)
+        into a final course-level result (Grade and Credits).
         
-        Returns:
-            Dict with grade, credits, pass status
+        Logic:
+        1. Identify the Course Structure to find "Max Credit" and "Effective Credit".
+        2. Identify if the course is non-credit (Environmental, etc.).
+        3. Determine if ALL CIA components and ALL ESE components were passed.
+        4. Calculate the letter grade based on total marks.
+        5. Award credits only if the course is passed (PASS = EARNED).
         """
         from pg.models import PGStudentCourseAssessment, PGCourseStructure
         
-        # Get assessments
+        # [Assessments Fetching] ...
         if assessments is None:
             filters = {
                 'student_id': student_id,
@@ -238,25 +259,22 @@ class PGResultService:
                 'is_non_credit': False
             }
         
-        # Get course structure
-        # Strip 'PG' or 'PG-' prefix from paper_code if present
-        # Assessment has 'PG105' but course structure has '105'
+        # [Normalizing Paper Code] for PGCourseStructure lookup
+        # Staging data often has 'PG-' prefixes or suffixes unlike the structure table.
         lookup_paper_code = paper_code
         if paper_code.startswith('PG-'):
             lookup_paper_code = paper_code[3:]  # Remove 'PG-'
         elif paper_code.startswith('PG'):
             lookup_paper_code = paper_code[2:]  # Remove 'PG'
         
-        # Normalize semester: '1ST' -> '1', '2ND' -> '2', etc.
+        # Normalize semester strings (e.g. '1ST' -> '1')
         lookup_semester = semester
         if semester.endswith('ST') or semester.endswith('ND') or semester.endswith('RD') or semester.endswith('TH'):
-            lookup_semester = semester[0]  # Get first character
+            lookup_semester = semester[0]
         
-        # Get department for filtering
+        # Lookup course structure (with department priority)
         department = assessment_list[0].department if assessment_list[0].department else None
         
-        # Lookup course structure with department filter
-        # Different departments may have different credits for same paper code
         course_structure = None
         if department:
             course_structure = PGCourseStructure.objects.filter(
@@ -265,14 +283,13 @@ class PGResultService:
                 department=department
             ).first()
         
-        # Fallback: try without department filter
         if not course_structure:
             course_structure = PGCourseStructure.objects.filter(
                 paper_code=lookup_paper_code,
                 semester=lookup_semester
             ).first()
         
-        # Check if non-credit
+        # Detect non-credit status
         department_name = None
         if assessment_list[0].department:
             department_name = assessment_list[0].department.name
@@ -281,67 +298,47 @@ class PGResultService:
             paper_code, semester, department_name
         )
         
-        # Separate CIA and ESE
-        cia_assessments = [
-            a for a in assessment_list 
-            if PGResultService._is_cia(a.label)
-        ]
-        ese_assessments = [
-            a for a in assessment_list 
-            if PGResultService._is_ese(a.label)
-        ]
+        # [Separating Components]
+        cia_assessments = [a for a in assessment_list if PGResultService._is_cia(a.label)]
+        ese_assessments = [a for a in assessment_list if PGResultService._is_ese(a.label)]
         
-        # Calculate total marks
         total_marks = sum(a.ind_marks_obtained or 0 for a in assessment_list)
         total_max_marks = sum(a.ind_max_marks or 0 for a in assessment_list)
         
-        # Check pass status
-        all_cia_passed = all(
-            PGResultService.check_individual_pass(a) for a in cia_assessments
-        ) if cia_assessments else True
-        
-        all_ese_passed = all(
-            PGResultService.check_individual_pass(a) for a in ese_assessments
-        ) if ese_assessments else True
+        # Pass status check: Must pass every separate CIA and every separate ESE
+        all_cia_passed = all(PGResultService.check_individual_pass(a) for a in cia_assessments) if cia_assessments else True
+        all_ese_passed = all(PGResultService.check_individual_pass(a) for a in ese_assessments) if ese_assessments else True
         
         course_passed = all_cia_passed and all_ese_passed
         
-        # Calculate grade
+        # CBCS Grade Calculation
         final_grade, grade_point = PGResultService.calculate_grade(
             total_marks,
             total_max_marks,
             is_absent=any(a.ind_is_absent for a in assessment_list)
         )
         
-        # Get credits from PGCourseStructure
-        # Use effective_credit (not max_credit) for actual credit calculation
-        # effective_credit = 0 means non-credit course (like Environmental)
-        # effective_credit = 5 means regular credit course
+        # [Credit Allocation]
+        # effective_credit = 0 for compulsory non-credit papers (like AEC/SEC)
         effective_credit = Decimal(0)
         max_credit = Decimal(0)
         
         if course_structure:
-            # Primary source: effective_credit from course structure
             if course_structure.effective_credit is not None:
                 effective_credit = Decimal(course_structure.effective_credit)
-            # Fallback: max_credit if effective_credit not set
             elif course_structure.max_credit:
                 effective_credit = Decimal(course_structure.max_credit)
             
-            # max_credit is for reference only
             if course_structure.max_credit:
                 max_credit = Decimal(course_structure.max_credit)
         elif assessment_list[0].comb_max_credits:
-            # Fallback to assessment data if no course structure
             effective_credit = Decimal(assessment_list[0].comb_max_credits)
             max_credit = Decimal(assessment_list[0].comb_max_credits)
         
-        # Award credits based on effective_credit
-        # If effective_credit = 0, no credits awarded (non-credit course)
-        # If effective_credit > 0, award credits only if course passed
+        # Core Rule: 0 credits if course failed (except non-credit which are always 0)
         credits_earned = effective_credit if course_passed else Decimal(0)
         
-        # Calculate grade point using effective_credit
+        # Course Grade Point = GP (7) * Credits Earned (5) = 35
         course_grade_point = Decimal(grade_point) * credits_earned
         
         return {
@@ -373,21 +370,21 @@ class PGResultService:
         assessments: Optional[List] = None
     ) -> Optional[Decimal]:
         """
-        Calculate semester SGPA
+        Calculate the Semester Grade Point Average (SGPA).
         
-        Formula: SGPA = Σ(grade_point × credit) / Σ(credits_earned)
-        Note: Excludes non-credit courses
+        Formula: SGPA = Σ(Grade Point × Credits) / Σ(Credits)
+        
+        Rules:
+        - Only passed courses contribute earned credits and points.
+        - Non-credit courses (effective_credit=0) are completely ignored.
+        - Result is rounded to 2 decimal places.
         """
         from pg.models import PGStudentCourseAssessment
         
+        # [Assessments Fetching] ...
         if assessments is None:
-            filters = {
-                'student_id': student_id,
-                'semester': semester
-            }
-            if session:
-                filters['session'] = session
-            
+            filters = {'student_id': student_id, 'semester': semester}
+            if session: filters['session'] = session
             assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         paper_codes = set(a.paper_code for a in assessments if a.paper_code)
@@ -395,7 +392,11 @@ class PGResultService:
         total_grade_points = Decimal(0)
         total_credits_earned = Decimal(0)
         
+        # Mandatory Rule: If student fails in ANY course, SGPA is 0
+        all_passed = True
+        
         for paper_code in paper_codes:
+            # Re-use the course level logic to get validated credits and grade points
             course_result = PGResultService.calculate_course_result(
                 student_id=student_id,
                 semester=semester,
@@ -404,21 +405,24 @@ class PGResultService:
                 assessments=assessments
             )
             
-            # Skip courses with effective_credit = 0 (non-credit courses)
-            # These courses must be passed but don't contribute to SGPA
+            if not course_result.get('passed', False):
+                all_passed = False
+            
+            # Non-credit courses do not affect SGPA calculation
             if course_result.get('effective_credit', 0) == 0:
                 continue
             
-            # Add grade points and credits earned (only for passed courses)
-            # If course failed, credits_earned = 0, so it won't contribute to SGPA
+            # Sum up points (GP * Credits) and Credits
             total_grade_points += course_result['course_grade_point']
             total_credits_earned += course_result['credits_earned']
         
+        if not all_passed:
+            return Decimal('0.00')
+            
         if total_credits_earned == 0:
             return None
         
-        # SGPA = Σ(grade_point × credits_earned) / Σ(credits_earned)
-        # Only passed courses contribute to SGPA
+        # Division to find average
         sgpa = total_grade_points / total_credits_earned
         return round(sgpa, 2)
     
@@ -430,78 +434,93 @@ class PGResultService:
         assessments: Optional[List] = None
     ) -> str:
         """
-        Determine semester result based on CIA and ESE performance
+        Determine the final Semester-level result status (PASS / PROMOTED / FAIL).
         
-        Rules:
-        1. PASS: All CIA passed AND All ESE passed
-           - Student successfully completed the semester
-           - Can move to next semester with all courses cleared
-        
-        2. PROMOTED: All CIA passed BUT Some/All ESE failed
-           - Student is promoted to next semester
-           - Must clear failed ESE papers later (backlog)
-           - CIA passing is mandatory for promotion
-        
-        3. FAIL: Some/All CIA failed
-           - Student cannot be promoted
-           - Must repeat the semester
-           - ESE status doesn't matter if CIA failed
-        
-        Important:
-        - CIA (Continuous Internal Assessment) is mandatory
-        - ESE (End Semester Exam) can be cleared later if CIA passed
-        - Absent in CIA = FAIL (no promotion)
-        - Absent in ESE = PROMOTED (if CIA passed)
+        New Logic (Based on Paper Counts):
+        - PASS: All courses passed.
+        - PROMOTED:
+            - If 6 Papers: Must pass at least 4.
+            - If 5 Papers: Must pass at least 3.
+            - If 4 Papers: Must pass at least 3.
+            - Otherwise FAIL.
+        - FAIL: If not satisfying above conditions.
         """
         from pg.models import PGStudentCourseAssessment
         
+        # [Assessments Fetching] ...
         if assessments is None:
-            filters = {
-                'student_id': student_id,
-                'semester': semester
-            }
-            if session:
-                filters['session'] = session
-            
+            filters = {'student_id': student_id, 'semester': semester}
+            if session: filters['session'] = session
             assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         if not assessments:
             return 'FAIL'
         
-        # Separate CIA and ESE assessments
-        cia_assessments = [
-            a for a in assessments 
-            if PGResultService._is_cia(a.label)
-        ]
-        ese_assessments = [
-            a for a in assessments 
-            if PGResultService._is_ese(a.label)
-        ]
+        # Group assessments by paper_code to count total courses
+        paper_codes = set(a.paper_code for a in assessments if a.paper_code)
         
-        # Check if ALL CIA assessments passed
-        # CIA is mandatory - if any CIA fails, student cannot be promoted
-        all_cia_passed = all(
-            PGResultService.check_individual_pass(a) 
-            for a in cia_assessments
-        ) if cia_assessments else False
+        total_courses = 0
+        passed_courses_count = 0
         
-        # Check if ALL ESE assessments passed
-        # ESE can fail - student will be promoted but must clear ESE later
-        all_ese_passed = all(
-            PGResultService.check_individual_pass(a) 
-            for a in ese_assessments
-        ) if ese_assessments else False
+        for paper_code in paper_codes:
+            # We need to Calculate course result for each paper to know if it's passed
+            # Re-using calculate_course_result logic or just checking pre-calculated values if available?
+            # Ideally, we should re-calculate to be safe, but this might be expensive if called repeatedly.
+            # However, calculate_semester_summary calls this, and inside process_student we call summary.
+            # IMPORTANT: process_student calls calculate_semester_summary which calls THIS method.
+            # So inside calculate_semester_summary, we already calculated course_results!
+            # But here we only have 'assessments' list.
+            
+            # Let's perform a lightweight check based on the assessments passed in.
+            # A course is passed if ALL its components (CIA/ESE) are passed and (Combined Total >= Passed).
+            # But wait, `calculate_course_result` does the exact complex logic (CBCS thresholds etc).
+            # We should probably use `calculate_course_result` to be consistent.
+            
+            result = PGResultService.calculate_course_result(
+                student_id=student_id,
+                semester=semester,
+                paper_code=paper_code,
+                session=session,
+                assessments=assessments
+            )
+            
+            # We only count credit/main courses? The user didn't specify excluding non-credit.
+            # But usually result status depends on all papers including AECC.
+            # User said "if there is 5 paper...".
+            
+            # Checking if the course is passed
+            if result['passed']:
+                passed_courses_count += 1
+            
+            total_courses += 1
+            
+        print(f"DEBUG: Student {student_id} Sem {semester}: Total {total_courses}, Passed {passed_courses_count}")
         
-        # Determine final result
-        if all_cia_passed and all_ese_passed:
-            # Perfect! All assessments cleared
+        # 1. PASS Condition
+        if passed_courses_count == total_courses:
             return 'PASS'
-        elif all_cia_passed and not all_ese_passed:
-            # CIA passed but ESE failed - promote with backlog
+            
+        # 2. PROMOTED Condition
+        is_promoted = False
+        
+        if total_courses == 6:
+            if passed_courses_count >= 4:
+                is_promoted = True
+        elif total_courses == 5:
+            if passed_courses_count >= 3:
+                is_promoted = True
+        elif total_courses == 4:
+             if passed_courses_count >= 4: # Wait user said "4 then pass in 3" but user prompt says "if ther is 4 then pass in 3 if not then fail"
+                 # Re-reading prompt: "if ther is 4 then pass in 3"
+                 pass
+             if passed_courses_count >= 3:
+                 is_promoted = True
+                 
+        if is_promoted:
             return 'PROMOTED'
-        else:
-            # CIA failed - cannot proceed to next semester
-            return 'FAIL'
+            
+        # 3. FAIL
+        return 'FAIL'
     
     @staticmethod
     def calculate_semester_summary(
@@ -541,9 +560,8 @@ class PGResultService:
             )
             course_results.append(result)
             
-            # Use effective_credit for total calculation
-            # This ensures non-credit courses (effective_credit=0) don't count
-            total_max_credits += result.get('effective_credit', result['max_credit'])
+            # Sum physical credits (max_credit) for the semester total
+            total_max_credits += result['max_credit']
             total_credits_earned += result['credits_earned']
         
         sgpa = PGResultService.calculate_sgpa(
@@ -587,39 +605,58 @@ class PGResultService:
         dry_run: bool = False
     ) -> Dict:
         """
-        Process and save results for one student
+        The Main Entry Point (Orchestrator) for result processing for a single student.
         
-        Updates:
-        - PGStudentCourseAssessment (all calculated fields)
-        - PGExamResult (semester summary)
+        This method performs a comprehensive calculation and update process for a student's
+        semester results, including individual assessment statuses, course-level aggregates,
+        and overall semester summary (SGPA, result status).
+        
+        Steps:
+        1. Calculates all course-level results (grades, credits earned, pass/fail status).
+        2. Aggregates these course results into a Semester-Level summary (SGPA, overall PASS/PROMOTED/FAIL).
+        3. Updates individual `PGStudentCourseAssessment` records with calculated values
+           (e.g., `ind_is_pass`, combined marks, grade points, credits).
+        4. Creates or updates the `PGExamResult` summary record for the semester.
+        5. Automatically creates a `PGSemesterRegistration` record for the next semester
+           if the student is eligible (PASS/PROMOTED).
+        
+        Args:
+            student_id (int): The ID of the student to process.
+            semester (str): The semester string (e.g., '1ST', '2ND').
+            session (str): The academic session string.
+            dry_run (bool, optional): If True, calculations are performed but no changes
+                                      are saved to the database. Defaults to False.
+        
+        Returns:
+            Dict: A dictionary containing processing status, student ID, and the calculated summary.
+                  Includes 'success' (bool), 'student_id' (int), and 'summary' (Dict) or 'error' (str).
         """
         from pg.models import PGStudentCourseAssessment, PGExamResult, PGStudentProfile
         
         try:
-            # Calculate summary
+            # Step A: Perform all necessary calculations for the semester summary
+            # This includes course-level results, SGPA, and the overall semester result.
             summary = PGResultService.calculate_semester_summary(
                 student_id=student_id,
                 semester=semester,
                 session=session
             )
             
-            # Get assessments
+            # Step B: Load all relevant PGStudentCourseAssessment records for the student and semester.
+            # These records will be updated with the calculated values.
             assessments = PGStudentCourseAssessment.objects.filter(
                 student_id=student_id,
                 semester=semester,
                 session=session
             )
             
-            # Update individual pass status
-            for assessment in assessments:
-                assessment.ind_is_pass = PGResultService.check_individual_pass(assessment)
-                if not dry_run:
-                    assessment.save(update_fields=['ind_is_pass'])
-            
-            # Update combined and course fields
+            # Step C: Iterate through each paper (course) and update its associated assessment records.
+            # This involves setting individual pass status, combined marks, grade points, and credits.
             paper_codes = set(a.paper_code for a in assessments if a.paper_code)
             
             for paper_code in paper_codes:
+                # 1. Isolate the binary components (CIA vs ESE) for this specific paper_code.
+                # We assume each paper has at least one CIA and one ESE component for combined calculation.
                 cia = assessments.filter(
                     Q(label__icontains='CIA') | Q(label='MID_TERM'),
                     paper_code=paper_code
@@ -630,117 +667,92 @@ class PGResultService:
                     paper_code=paper_code
                 ).first()
                 
-                if not cia or not ese:
-                    continue
+                # If either component is missing, we cannot calculate combined results for this paper.
+                if not cia or not ese: continue
                 
-                # Calculate combined
+                # 2. Retrieve the pre-calculated combined and course-level results for this paper.
                 combined = PGResultService.calculate_combined(cia, ese)
+                course_result = next((r for r in summary['course_results'] if r['paper_code'] == paper_code), None)
                 
-                # Get course result
-                course_result = next(
-                    (r for r in summary['course_results'] if r['paper_code'] == paper_code),
-                    None
-                )
+                # If course result is missing from summary, skip this paper.
+                if not course_result: continue
                 
-                if not course_result:
-                    continue
-                
-                # Update both CIA and ESE
+                # 3. Update both the CIA and ESE assessment records with combined and course-level data.
                 for assessment in [cia, ese]:
-                    # Combined fields
-                    assessment.comb_marks_obtained = combined['comb_marks_obtained']
-                    assessment.comb_max_marks = combined['comb_max_marks']
-                    assessment.comb_pass_marks = combined['comb_pass_marks']
+                    # Update individual pass status for the assessment component.
+                    assessment.ind_is_pass = PGResultService.check_individual_pass(assessment)
                     
-                    # Credit population logic requested by user:
-                    # - If Pass in CIA but Fail in ESE -> Credit = 0
-                    # - If Pass, credit = max_credit
-                    # This logic is already handled by 'course_passed' in calculate_course_result:
-                    # course_passed = all_cia_passed and all_ese_passed
-                    # credits_earned = effective_credit if course_passed else 0
+                    # Populate combined fields based on the `calculate_combined` result.
+                    assessment.comb_marks_obtained   = combined['comb_marks_obtained']
+                    assessment.comb_max_marks         = combined['comb_max_marks']
+                    assessment.comb_pass_marks        = combined['comb_pass_marks']
                     
-                    # Set comb_max_credits explicitly from course structure/effective credit
-                    assessment.comb_max_credits = course_result['effective_credit']
+                    # `comb_max_credits` stores the raw physical credit weight (e.g., 5.0)
+                    assessment.comb_max_credits      = course_result['max_credit']
                     
-                    # Set comb_credit_obtained explicitly based on earned credits
-                    assessment.comb_credit_obtained = course_result['credits_earned']
+                    # `comb_credit_obtained` stores the effective credit earned (e.g., 5.0 or 0.0)
+                    assessment.comb_credit_obtained   = course_result['credits_earned']
                     
-                    # GP mapping requested by user
-                    assessment.comb_numeric_grade = course_result['grade_point'] # GP (e.g. 7)
-                    assessment.comb_grade_point = course_result['course_grade_point'] # Course GP (e.g. 35)
+                    # Populate grade point fields. `comb_numeric_grade` is the raw GP (e.g., 7),
+                    # `comb_grade_point` is the weighted GP (GP * Credits).
+                    assessment.comb_numeric_grade    = course_result['grade_point'] # GP (e.g. 7)
+                    assessment.comb_grade_point      = course_result['course_grade_point'] # Course GP (e.g. 35)
 
-                    # Course fields
-                    assessment.course_max_marks = course_result['total_max_marks']
-                    assessment.course_max_credits = course_result['max_credit']
-                    assessment.course_marks_obtained = course_result['total_marks']
-                    assessment.course_credit_obtained = course_result['credits_earned']
-                    assessment.course_grade_point = course_result['course_grade_point']
-                    
-                    # Semester fields
-                    assessment.sem_max_credit = summary['total_max_credits']
-                    assessment.sem_credit_obtained = summary['total_credits_earned']
+                    # Semester Redundancy: Store SGPA and semester result directly on assessment records
+                    # for easier reporting and data access without needing to join to PGExamResult.
                     assessment.sgpa = summary['sgpa']
                     assessment.sem_result = summary['semester_result']
+
+                    # New Fields: Semester Max Credit and Earned Credit
+                    assessment.sem_max_credit = summary['total_max_credits'] 
+                    assessment.sem_credit_obtained = summary['total_credits_earned']
                     
+                    # Save the updated assessment record if not in dry-run mode.
                     if not dry_run:
                         assessment.save()
             
-            # Create/update PGExamResult
+            # Step D: Finalize the semester summary record in PGExamResult and handle next semester registration.
             if not dry_run:
+                # Fetch student profile for foreign key relationship.
                 student = PGStudentProfile.objects.get(id=student_id)
                 
-                cia_assessments = [a for a in assessments if PGResultService._is_cia(a.label)]
-                ese_assessments = [a for a in assessments if PGResultService._is_ese(a.label)]
-                
-                cia_pass = all(a.ind_is_pass for a in cia_assessments) if cia_assessments else None
-                ese_pass = all(a.ind_is_pass for a in ese_assessments) if ese_assessments else None
-                
-
-                # Calculate next semester value
+                # Determine the next semester value based on the current semester.
                 next_sem_val = PGResultService._get_next_semester(semester)
                 
-                # Determine next semester status
+                # Determine the student's eligibility status for the next semester.
+                # 'ELIGIBLE' if PASS/PROMOTED and a next semester exists.
+                # 'COMPLETED' if PASS/PROMOTED but no further semesters are defined (e.g., end of program).
+                # 'NOT_ELIGIBLE' if FAIL.
                 next_sem_status = 'NOT_ELIGIBLE'
                 if summary['semester_result'] in ['PASS', 'PROMOTED']:
-                    if next_sem_val:
-                         # Check if degree complete logic (optional, but good for validation)
-                         next_sem_status = 'ELIGIBLE'
-                    else:
-                         next_sem_status = 'COMPLETED' # Or similar if no next sem
+                    next_sem_status = 'ELIGIBLE' if next_sem_val else 'COMPLETED'
                 
+                # Create or update the PGExamResult record with the semester's overall summary.
                 PGExamResult.objects.update_or_create(
                     student=student,
                     semester=semester,
                     session=session,
                     defaults={
-                        'cia_pass': cia_pass,
-                        'ese_pass': ese_pass,
                         'semester_result': summary['semester_result'],
                         'semester_max_credit': int(summary['total_max_credits']),
                         'semester_credit_earned': int(summary['total_credits_earned']),
                         'sgpa': summary['sgpa'],
-                        'is_legacy': False,
                         'next_semester': next_sem_val if next_sem_status == 'ELIGIBLE' else None,
                         'next_sem_status': next_sem_status
                     }
                 )
                 
-                # Create Next Semester Registration if Eligible
+                # [Automation] If the student is eligible for the next semester,
+                # create a PGSemesterRegistration record to facilitate their enrollment.
                 if next_sem_status == 'ELIGIBLE' and next_sem_val:
                     PGResultService._create_next_sem_registration(student, next_sem_val, session, semester)
             
-            return {
-                'success': True,
-                'student_id': student_id,
-                'summary': summary
-            }
+            # Return success status and the calculated summary.
+            return {'success': True, 'student_id': student_id, 'summary': summary}
 
         except Exception as e:
-            return {
-                'success': False,
-                'student_id': student_id,
-                'error': str(e)
-            }
+            # If any error occurs during processing, return a failure status with the error message.
+            return {'success': False, 'student_id': student_id, 'error': str(e)}
 
     @staticmethod
     def _get_next_semester(current_sem_str):
