@@ -15,9 +15,9 @@ SEMESTER_RESULT_CHOICES = (
 
 # Student Status
 STUDENT_STATUS_CHOICES = (
-    ('Active', 'Active'),
-    ('Suspended', 'Suspended'),
-    ('Alumni', 'Alumni'),
+    ('REGULAR', 'Regular'),
+    ('SUSPENDED', 'Suspended'),
+    ('ALUMNI', 'Alumni'),
 )
 
 # Gender Choices
