@@ -226,10 +226,14 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
 
 @admin.register(SemesterRegistration)
 class SemesterRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'status', 'exam_eligible', 'is_open')
-    list_filter = ('sem', 'status', 'exam_eligible', 'is_open')
-    search_fields = ('student__registration_no', 'student__first_name')
-    ordering = ('student', 'sem')
+    list_display = ('student', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date')
+    list_filter = ('sem', 'status', 'exam_eligible', 'is_open', 'student__batch')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__batch')
+    ordering = ('-sem', 'student')
+    list_per_page = 50
+    raw_id_fields = ('student',)
+    list_select_related = ('student',)
+    show_full_result_count = False
 
 
 @admin.register(ExamRegistration)

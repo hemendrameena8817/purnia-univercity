@@ -13,7 +13,11 @@ from .serializers import (
 )
 from .permissions import IsUniversityAdmin, IsCollegeUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from .models import UserAccount
+from .services import DashboardService
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -92,3 +96,53 @@ class CreateCollegeUserView(APIView):
             )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DashboardView(APIView):
+    """
+    Common Dashboard API for all student types.
+    
+    GET /api/accounts/dashboard/?current_profile=ug
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        current_profile = request.GET.get('current_profile')
+        valid_profiles = [choice[0] for choice in UserAccount.PROFILE_TYPE_CHOICES]
+        
+        # Validation
+        if not current_profile:
+            return Response(
+                {'success': False, 'error': 'current_profile parameter is required', 'valid_options': valid_profiles},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if current_profile not in valid_profiles:
+            return Response(
+                {'success': False, 'error': f'Invalid profile type. Must be one of: {valid_profiles}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get data from service
+            data = DashboardService.get_dashboard_data(user, current_profile)
+            
+            return Response({
+                'success': True,
+                'profile_type': current_profile,
+                'user': {
+                    'uid': str(user.uid),
+                    'username': user.username,
+                    'full_name': user.get_full_name(),
+                    'email': user.email,
+                },
+                **data
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.exception(f"Dashboard error for user {user.id}, profile {current_profile}")
+            error_msg = f'{current_profile.upper()} profile not found' if 'DoesNotExist' in str(type(e).__name__) else 'An unexpected error occurred'
+            status_code = status.HTTP_404_NOT_FOUND if 'DoesNotExist' in str(type(e).__name__) else status.HTTP_500_INTERNAL_SERVER_ERROR
+            return Response({'success': False, 'error': error_msg}, status=status_code)

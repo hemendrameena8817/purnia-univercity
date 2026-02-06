@@ -22,7 +22,7 @@ from ug.models import (
     StudentCourseAssessment,
     UGDepartment
 )
-
+from django.utils import timezone
 
 class SemesterRegistrationService:
     """Service for handling semester registration operations"""
@@ -44,31 +44,31 @@ class SemesterRegistrationService:
             Dict with eligibility status and details
         """
         # 1. Get the latest registration record (by sem mainly)
-        last_registration = SemesterRegistration.objects.filter(
+        registration = SemesterRegistration.objects.filter(
             student=student
         ).order_by('-sem').first()
         
-        if not last_registration:
+        if not registration:
             return {
                 'eligible': False,
                 'reason': 'No registration record found. Please contact admin.',
                 'current_semester': student.current_semester,
             }
             
-        current_semester = last_registration.sem ## created entry first in semesterregistration then open it
+        current_semester = registration.sem ## created entry first in semesterregistration then open it
         # current_semester = next_semester - 1 if next_semester > 1 else 1 # Infer current sem
 
         # 2. Check simple eligibility (record exists = eligible contextually)
         # But we need to check if it represents an OPEN registration window
         
-        is_open = last_registration.is_open
+        is_open = registration.is_open
         now = timezone.now()
         
         # Check date validity if dates are present
         date_valid = True
-        if last_registration.start_date and now < last_registration.start_date:
+        if registration.start_date and now < registration.start_date:
             date_valid = False
-        if last_registration.end_date and now > last_registration.end_date:
+        if registration.end_date and now > registration.end_date:
             date_valid = False
             
         if is_open and date_valid:
@@ -78,8 +78,8 @@ class SemesterRegistrationService:
                 'next_semester': current_semester,
                 'registration_open': True,
                 'registration_window': {
-                    'start_date': last_registration.start_date.isoformat() if last_registration.start_date else None,
-                    'end_date': last_registration.end_date.isoformat() if last_registration.end_date else None,
+                    'start_date': registration.start_date.isoformat() if registration.start_date else None,
+                    'end_date': registration.end_date.isoformat() if registration.end_date else None,
                     'is_open': True
                 },  
                 'message': f'You are eligible to register for Semester {current_semester}'
@@ -93,8 +93,8 @@ class SemesterRegistrationService:
             'current_semester': int(current_semester) - 1,
             'next_semester': current_semester,
             'registration_window': {
-                'start_date': last_registration.start_date.isoformat() if last_registration.start_date else None,
-                'end_date': last_registration.end_date.isoformat() if last_registration.end_date else None,
+                'start_date': registration.start_date.isoformat() if registration.start_date else None,
+                'end_date': registration.end_date.isoformat() if registration.end_date else None,
                 'is_open': False
             }
         }
