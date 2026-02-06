@@ -24,14 +24,15 @@
       /* Header Section */
       .header {
         text-align: center;
-        margin-bottom: 8px;
+        border-bottom: 1px solid #00000057;
+        margin-bottom: 5px;
       }
 
       .header h1 {
         font-size: 14pt;
         margin: 0;
-        text-decoration: underline;
         font-weight: bold;
+        text-decoration: underline;
       }
 
       /* Meta Information */
@@ -188,7 +189,10 @@
     <div class="container">
       <!-- Header -->
       <div class="header">
-        <h1>Exam Roll Sheet</h1>
+        <h1>{{ center_name|upper }}</h1>
+        <p style="font-size: 10pt; margin: 5px 0 10px; font-weight: normal">
+          Exam Roll Sheet
+        </p>
       </div>
 
       <!-- Meta Information -->
@@ -203,10 +207,9 @@
             </td> -->
             <td><span class="label">Course:</span> {{ course_name }}</td>
             <td><span class="label">Discipline:</span> {{ branch_name }}</td>
+            <td><span class="label">Year:</span> {{ year|default:"-" }}</td>
           </tr>
           <tr>
-            <td><span class="label">Year:</span> {{ year|default:"-" }}</td>
-            <td><span class="label">Center:</span> {{ center_name }}</td>
             <td colspan="2">
               <span class="label">College:</span> {{ college_name }}
             </td>
@@ -268,7 +271,7 @@
       <div class="footer">
         <table>
           <tr>
-            <td
+            <!-- <td
               class="sig-box"
               style="text-align: left; vertical-align: bottom"
             >
@@ -278,7 +281,7 @@
             <td class="sig-box" style="vertical-align: bottom">
               <div style="height: 40px"></div>
               <div class="sig-line">Signature of Center Supdt.</div>
-            </td>
+            </td> -->
             <td
               class="sig-box"
               style="text-align: right; vertical-align: bottom"
@@ -290,7 +293,7 @@
                   display: flex;
                   align-items: flex-end;
                   justify-content: center;
-                  margin-left: 200px;
+                  margin-left: 870px;
                 "
               >
                 <img
