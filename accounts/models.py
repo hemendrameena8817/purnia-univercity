@@ -65,6 +65,8 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
         ("plw", "Pre-Law"),
         ("ug", "Undergraduate"),
         ("pg", "Postgraduate"),
+        ("btech", "B.Tech"),
+        ("mba", "MBA"),
     ]
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
@@ -75,7 +77,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=15, blank=True, null=True)
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default="student")
     current_profile = models.CharField(max_length=20, choices=PROFILE_TYPE_CHOICES, blank=True, null=True)
-
+    college = models.ForeignKey('colleges.College', on_delete=models.CASCADE, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(_("staff status"), default=False)
     is_active = models.BooleanField(_("active"), default=True)

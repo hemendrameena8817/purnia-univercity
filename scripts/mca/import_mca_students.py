@@ -14,6 +14,7 @@ Required Excel Columns:
 - Session (e.g., 2022-23)
 - Course (e.g., MCA)
 - Institute code (College Code)
+- Status (e.g., REGULAR, SUSPENDED, ALUMNI)
 - Profile Picture (optional, local path)
 - Signature (optional, local path)
 
@@ -116,6 +117,21 @@ def clean_file_path(path_str):
     # Handle forward/backward slash consistency
     return os.path.normpath(path_str)
 
+def parse_status(status_str):
+    """
+    Convert Regular/Suspended/Alumni to REGULAR/SUSPENDED/ALUMNI
+    """
+    if pd.isna(status_str):
+        return 'REGULAR'
+    val = str(status_str).strip().upper()
+    if val in ['REGULAR', 'REG', 'ACTIVE']:
+        return 'REGULAR'
+    if val in ['SUSPENDED', 'SUSP']:
+        return 'SUSPENDED'
+    if val in ['ALUMNI', 'ALUM']:
+        return 'ALUMNI'
+    return 'REGULAR'
+
 def run_import(file_path):
     if not os.path.exists(file_path):
         print(f"Error: File not found at {file_path}")
@@ -209,6 +225,7 @@ def run_import(file_path):
                 mother_name = str(row.get('Mother Name', '')).strip() if not pd.isna(row.get('Mother Name')) else ""
                 gender = parse_gender(row.get('Gender'))
                 current_sem = parse_semester(row.get('Current Semester'))
+                status_val = parse_status(row.get('Status'))
                 
                 # User creation/update
                 user, u_created = get_or_create_user(reg_no, name)
@@ -229,7 +246,8 @@ def run_import(file_path):
                         'course': course,
                         'batch': batch_obj,
                         'session_str': session_obj.name if session_obj else "",
-                        'current_semester': current_sem
+                        'current_semester': current_sem,
+                        'status': status_val
                     }
                 )
                 

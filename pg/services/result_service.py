@@ -496,7 +496,7 @@ class PGResultService:
             
         print(f"DEBUG: Student {student_id} Sem {semester}: Total {total_courses}, Passed {passed_courses_count}")
         
-        # 1. PASS Condition
+        # 1. PASS Condition: All courses passed
         if passed_courses_count == total_courses:
             return 'PASS'
             
@@ -510,9 +510,6 @@ class PGResultService:
             if passed_courses_count >= 3:
                 is_promoted = True
         elif total_courses == 4:
-             if passed_courses_count >= 4: # Wait user said "4 then pass in 3" but user prompt says "if ther is 4 then pass in 3 if not then fail"
-                 # Re-reading prompt: "if ther is 4 then pass in 3"
-                 pass
              if passed_courses_count >= 3:
                  is_promoted = True
                  
@@ -578,6 +575,18 @@ class PGResultService:
             assessments=assessments
         )
         
+        
+        # Calculate semester-level CIA/ESE pass status
+        # A student passes CIA/ESE for the semester if they pass it in ALL courses.
+        # Note: We only consider courses that HAVE a pass/fail status (i.e., not just 'passed'=False due to missing assessments)
+        # However, for simplicity and strictness:
+        # cia_passed = ALL courses have cia_passed=True
+        # ese_passed = ALL courses have ese_passed=True
+        
+        # We need to leverage the boolean flags returned by calculate_course_result
+        all_cia_passed = all(r['cia_passed'] for r in course_results) if course_results else False
+        all_ese_passed = all(r['ese_passed'] for r in course_results) if course_results else False
+
         return {
             'student_id': student_id,
             'semester': semester,
@@ -589,7 +598,9 @@ class PGResultService:
             'total_max_credits': total_max_credits,
             'total_credits_earned': total_credits_earned,
             'sgpa': sgpa,
-            'semester_result': semester_result
+            'semester_result': semester_result,
+            'cia_passed': all_cia_passed,
+            'ese_passed': all_ese_passed
         }
     
     # =========================================================================
@@ -634,8 +645,62 @@ class PGResultService:
         from pg.models import PGStudentCourseAssessment, PGExamResult, PGStudentProfile
         
         try:
+            # =================================================================
+            # 0. PRE-CALCULATION CHECKS
+            # =================================================================
+            
+            sem_map_int = {'1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4}
+            current_sem_num = sem_map_int.get(semester.upper())
+            
+            # CHECK 1: PREVIOUS SEMESTER PROMOTION (For Sem > 1)
+            if current_sem_num and current_sem_num > 1:
+                prev_sem_num = current_sem_num - 1
+                prev_sem_str = next((k for k, v in sem_map_int.items() if v == prev_sem_num), None)
+                
+                if prev_sem_str:
+                    # Filter by student & prev semester, order by updated_at desc to get latest
+                    prev_result = PGExamResult.objects.filter(
+                        student_id=student_id,
+                        semester=prev_sem_str
+                    ).order_by('-updated_at').first()
+                    
+                    if not prev_result:
+                        return {
+                            'success': False,
+                            'error': f"SKIPPING: No result record found for previous semester {prev_sem_str}"
+                        }
+                    
+                    if prev_result.semester_result not in ['PASS', 'PROMOTED']:
+                        return {
+                            'success': False,
+                            'error': f"SKIPPING: Student not promoted from {prev_sem_str} (Status: {prev_result.semester_result})"
+                        }
+
+            # CHECK 2: CURRENT SEMESTER CIA PASS STATUS
+            # The PGExamResult record should have been created by Step 1 (CIA Processing)
+            current_result_pre = PGExamResult.objects.filter(
+                student_id=student_id,
+                semester=semester,
+                session=session
+            ).first()
+            
+            if not current_result_pre:
+                return {
+                    'success': False,
+                    'error': f"SKIPPING: No CIA/Initial result record found for current semester {semester}. Run CIA Step 1 first."
+                }
+                
+            if not current_result_pre.cia_pass:
+                return {
+                    'success': False,
+                    'error': f"SKIPPING: Student failed in CIA for current semester {semester}."
+                }
+
+            # =================================================================
+            # END CHECKS
+            # =================================================================
+            
             # Step A: Perform all necessary calculations for the semester summary
-            # This includes course-level results, SGPA, and the overall semester result.
             summary = PGResultService.calculate_semester_summary(
                 student_id=student_id,
                 semester=semester,
@@ -738,7 +803,9 @@ class PGResultService:
                         'semester_credit_earned': int(summary['total_credits_earned']),
                         'sgpa': summary['sgpa'],
                         'next_semester': next_sem_val if next_sem_status == 'ELIGIBLE' else None,
-                        'next_sem_status': next_sem_status
+                        'next_sem_status': next_sem_status,
+                        'cia_pass': summary['cia_passed'],
+                        'ese_pass': summary['ese_passed']
                     }
                 )
                 
@@ -766,9 +833,49 @@ class PGResultService:
         return mapping.get(current_sem_str.upper())
 
     @staticmethod
+    def _get_next_session(current_session, current_sem_val, next_sem_val):
+        """
+        Calculate the next session based on semester transition.
+        
+        For 2-year PG courses (4 semesters):
+        - Year 1: Sem 1 (2024-25), Sem 2 (2024-25)
+        - Year 2: Sem 3 (2025-26), Sem 4 (2025-26)
+        
+        Session increments when moving from even semester to odd semester (new year).
+        
+        Args:
+            current_session (str): Current session like '2024-25'
+            current_sem_val (int): Current semester number (1-4)
+            next_sem_val (int): Next semester number (2-5)
+        
+        Returns:
+            str: Next session string
+        """
+        # If moving from even semester to odd semester (e.g., 2→3, 4→5), increment year
+        # This represents moving to a new academic year
+        if current_sem_val % 2 == 0 and next_sem_val % 2 == 1:
+            # Parse current session (e.g., '2024-25')
+            try:
+                parts = current_session.split('-')
+                if len(parts) == 2:
+                    start_year = int(parts[0])
+                    end_year = int(parts[1])
+                    
+                    # Increment both years
+                    new_start = start_year + 1
+                    new_end = end_year + 1
+                    
+                    return f"{new_start}-{new_end:02d}"
+            except (ValueError, AttributeError):
+                pass
+        
+        # Otherwise, keep the same session
+        return current_session
+
+    @staticmethod
     def _create_next_sem_registration(student, next_sem_val, session, current_sem_str):
         """
-        Create PGSemesterRegistration for next semester.
+        Create PGSemesterRegistration for next semester with correct session.
         """
         from pg.models import PGSemesterRegistration, PGDegree
         
@@ -782,15 +889,23 @@ class PGResultService:
                     if next_sem_val > student.degree.total_semesters:
                         return
 
+            # Calculate the correct session for next semester
+            # Get current semester number
+            sem_map = {'1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4}
+            current_sem_val = sem_map.get(current_sem_str.upper(), 1)
+            
+            # Determine next session based on year transition
+            next_session = PGResultService._get_next_session(session, current_sem_val, next_sem_val)
+
             PGSemesterRegistration.objects.get_or_create(
                 student=student,
                 sem=next_sem_val,
-                session=session, # Kept same session as per instruction/UG logic
+                session=next_session,  # Use calculated next session
                 defaults={
                     'status': 'PENDING',
                     'is_open': True,
                     'exam_eligible': False,
-                    'remarks': f'Promoted from {current_sem_str}'
+                    'remarks': f'Promoted from {current_sem_str} ({session}) to Sem {next_sem_val} ({next_session})'
                 }
             )
         except Exception as e:

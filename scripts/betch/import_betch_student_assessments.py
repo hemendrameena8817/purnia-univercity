@@ -1,11 +1,11 @@
 """
-MCA Student Assessment Import Script
+BTech Student Assessment Import Script
 ====================================
-This script imports student marks (assessments) from the MCA Student Details Excel file.
+This script imports student marks (assessments) from the BTech Student Details Excel file.
 It maps END_TERM to 'ESE' and LAB/MID_TERM to 'CIA'.
 
 Usage:
-1. Run: poetry run python scripts/mca/import_mca_student_assessments.py --file "path/to/excel.xlsx"
+1. Run: poetry run python scripts/betch/import_betch_student_assessments.py --file "path/to/excel.xlsx"
 """
 
 import os
@@ -23,16 +23,16 @@ if __name__ == '__main__':
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
     django.setup()
 
-from mca_sem.models import (
-    MCAStudentProfile, 
-    MCACourseStructure, 
-    MCAStudentAssessment, 
-    MCAExam,
-    MCAExamSchedule,
-    MCASemesterRegistration,
-    MCABatch,
-    MCACourse,
-    MCASession
+from btech.models import (
+    BTechStudentProfile, 
+    BTechCourseStructure, 
+    BTechStudentAssessment, 
+    BTechExam,
+    BTechExamSchedule,
+    BTechSemesterRegistration,
+    BTechBatch,
+    BTechCourse,
+    BTechSession
 )
 from colleges.models import College
 
@@ -69,7 +69,7 @@ def get_or_create_user(reg_no, full_name):
         first_name=full_name.strip(),
         last_name="",
         password=reg_no, 
-        current_profile="mca_sem"
+        current_profile="btech"
     )
     print(f"Created User: {reg_no}")
     return user, True
@@ -110,7 +110,7 @@ def run_import(file_path):
         # 2. Session
         sess_name = str(row.get('Session', '')).strip()
         if sess_name and sess_name != 'nan' and sess_name not in cache['sessions']:
-            session = MCASession.objects.filter(name=sess_name).first()
+            session = BTechSession.objects.filter(name=sess_name).first()
             cache['sessions'][sess_name] = session
             if not session:
                 errors.append(f"Row {row_num}: Session '{sess_name}' not found.")
@@ -118,15 +118,15 @@ def run_import(file_path):
         # 3. Batch
         batch_name = str(row.get('Batch', '')).strip()
         if batch_name and batch_name != 'nan' and batch_name not in cache['batches']:
-            batch = MCABatch.objects.filter(name=batch_name).first()
+            batch = BTechBatch.objects.filter(name=batch_name).first()
             cache['batches'][batch_name] = batch
             if not batch:
                 errors.append(f"Row {row_num}: Batch '{batch_name}' not found.")
 
         # 4. Course
-        course_name = str(row.get('Course', 'MCA')).strip()
+        course_name = str(row.get('Course', 'BTech')).strip()
         if course_name and course_name != 'nan' and course_name not in cache['courses']:
-            course = MCACourse.objects.filter(name__icontains=course_name).first()
+            course = BTechCourse.objects.filter(name__icontains=course_name).first()
             cache['courses'][course_name] = course
             if not course:
                 errors.append(f"Row {row_num}: Course '{course_name}' not found.")
@@ -180,7 +180,7 @@ def run_import(file_path):
         exam_name = str(row.get('Exam', '')).strip()
         batch_col = str(row.get('Batch', '')).strip()
         session_col = str(row.get('Session', '')).strip()
-        course_col = str(row.get('Course', 'MCA')).strip()
+        course_col = str(row.get('Course', 'BTech')).strip()
         final_result = str(row.get('Final Results', '')).strip().upper()
         
         # Marks
@@ -200,15 +200,15 @@ def run_import(file_path):
         try:
             with transaction.atomic():
                 # 1. Get/Create Student Profile (Match profiles script logic)
-                student = MCAStudentProfile.objects.filter(registration_no=reg_no).first()
+                student = BTechStudentProfile.objects.filter(registration_no=reg_no).first()
                 if not student:
                     user, _ = get_or_create_user(reg_no, full_name)
                     
                     college = cache['colleges'].get(str(row.get('Institute code', '')).strip())
                     batch_obj = cache['batches'].get(batch_col)
-                    mca_course = cache['courses'].get(course_col)
+                    btech_course = cache['courses'].get(course_col)
 
-                    student = MCAStudentProfile.objects.create(
+                    student = BTechStudentProfile.objects.create(
                         user=user,
                         registration_no=reg_no,
                         roll_no=roll_no if roll_no != 'nan' else None,
@@ -218,13 +218,13 @@ def run_import(file_path):
                         college=college,
                         batch=batch_obj,
                         session_str=session_col,
-                        course=mca_course,
+                        course=btech_course,
                         current_semester=int(semester_val) if semester_val and semester_val.isdigit() else None
                     )
                     stats['students_created'] += 1
 
                 # 2. Get Course Structure (Syllabus) for Pass Marks
-                course_struct = MCACourseStructure.objects.filter(
+                course_struct = BTechCourseStructure.objects.filter(
                     course_code=subject_code,
                     semester=semester_val,
                     label=label
@@ -248,7 +248,7 @@ def run_import(file_path):
                     attendance = "Absent"
 
                 # 4. Create/Update Assessment
-                assessment, created = MCAStudentAssessment.objects.update_or_create(
+                assessment, created = BTechStudentAssessment.objects.update_or_create(
                     student=student,
                     course_code=subject_code,
                     semester=semester_val,
@@ -278,7 +278,7 @@ def run_import(file_path):
 
                 # 5. Update Registration
                 if semester_val and semester_val.isdigit():
-                    _, r_created = MCASemesterRegistration.objects.get_or_create(
+                    _, r_created = BTechSemesterRegistration.objects.get_or_create(
                         student=student,
                         sem=int(semester_val),
                         session=session_col,
@@ -294,7 +294,7 @@ def run_import(file_path):
     print(f"Final Statistics: {stats}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Import MCA Student Assessments')
+    parser = argparse.ArgumentParser(description='Import BTech Student Assessments')
     parser.add_argument('--file', type=str, required=True, help='Path to Excel file')
     args = parser.parse_args()
     

@@ -1,14 +1,19 @@
 from rest_framework import serializers
 from .models import (
-    BTechCourse, BTechSession, BTechBatch, BTechStudentProfile, 
+    BTechCourse, BTechBranch, BTechSession, BTechBatch, BTechStudentProfile, 
     BTechCourseStructure, BTechCommonCourseStructure,
-    BTechExam, BTechExamSchedule, BTechSemesterRegistration, 
+    BTechExam, BTechExamSchedule, BTechYearRegistration, 
     BTechExamRegistration, BTechStudentAssessment, BTechExamResult
 )
 
 class BTechCourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = BTechCourse
+        fields = '__all__'
+
+class BTechBranchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BTechBranch
         fields = '__all__'
 
 class BTechSessionSerializer(serializers.ModelSerializer):
@@ -47,6 +52,7 @@ class BTechStudentProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField(source='get_full_name')
     college_name = serializers.ReadOnlyField(source='college.name')
     batch_name = serializers.ReadOnlyField(source='batch.name')
+    branch_name = serializers.ReadOnlyField(source='branch.name')
 
     class Meta:
         model = BTechStudentProfile
@@ -63,9 +69,9 @@ class BTechExamResultSerializer(serializers.ModelSerializer):
         model = BTechExamResult
         fields = '__all__'
 
-class BTechSemesterRegistrationSerializer(serializers.ModelSerializer):
+class BTechYearRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = BTechSemesterRegistration
+        model = BTechYearRegistration
         fields = '__all__'
 
 class BTechExamRegistrationSerializer(serializers.ModelSerializer):
