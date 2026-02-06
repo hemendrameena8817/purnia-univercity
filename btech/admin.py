@@ -52,9 +52,10 @@ class BTechCommonCourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(BTechExam)
 class BTechExamAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'session', 'exam_month_year', 'publication_date')
+    list_display = ('uid', 'name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date')
     readonly_fields = ('uid',)
-    search_fields = ('name', 'session')
+    search_fields = ('name', 'session', 'batch')
+    list_filter = ('year', 'session', 'batch')
 
 @admin.register(BTechExamCenterMapping)
 class BTechExamCenterMappingAdmin(admin.ModelAdmin):

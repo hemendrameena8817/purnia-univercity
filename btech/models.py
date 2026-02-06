@@ -248,6 +248,7 @@ class BTechExam(models.Model):
     name = models.CharField(max_length=255, null=True, blank=True)            # BTech 4th Semester Examination
     year = models.PositiveIntegerField(null=True, blank=True)         # 4
     session = models.CharField(max_length=20, null=True, blank=True)        # 2022-24
+    batch = models.CharField(max_length=20, null=True, blank=True)  
     exam_month_year = models.CharField(max_length=20, null=True, blank=True) # June 2024
     publication_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

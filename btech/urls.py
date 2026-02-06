@@ -10,7 +10,7 @@ from .views import (
     BTechStudentAssessmentListView, BTechStudentAssessmentDetailView,
     BTechExamResultListView, BTechExamResultDetailView,
     BTechYearRegistrationListView, BTechExamRegistrationListView,
-    BTechAdmitCardPDFView, BTechBulkAdmitCardPDFView
+    BTechAdmitCardPDFView, BTechBulkAdmitCardPDFView, BTechRollSheetPDFView
 )
 
 urlpatterns = [
@@ -58,4 +58,7 @@ urlpatterns = [
     # Admit Card
     path('admit-card/pdf/', BTechAdmitCardPDFView.as_view(), name='btech-admit-card-pdf'),
     path('bulk-admit-card/pdf/', BTechBulkAdmitCardPDFView.as_view(), name='btech-bulk-admit-card-pdf'),
+
+    # Roll Sheet
+    path('roll-sheet/pdf/', BTechRollSheetPDFView.as_view(), name='btech-roll-sheet-pdf'),
 ]

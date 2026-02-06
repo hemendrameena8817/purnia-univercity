@@ -4,14 +4,15 @@ from django.views.generic import View
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .utils.pdf_generator import generate_btech_admit_card_pdf
+from .utils.pdf_generator import generate_btech_admit_card_pdf, generate_btech_roll_sheet_pdf
 from .models import (
-    BTechCourse, BTechSession, BTechBatch, BTechStudentProfile, 
+    BTechCourse, BTechBranch, BTechSession, BTechBatch, BTechStudentProfile, 
     BTechCourseStructure, BTechCommonCourseStructure,
     BTechExam, BTechExamSchedule, BTechYearRegistration, 
     BTechExamRegistration, BTechStudentAssessment, BTechExamResult,
     BTechExamCenterMapping
 )
+from colleges.models import College
 import os
 from django.conf import settings
 from .serializers import (
@@ -481,3 +482,35 @@ class BTechBulkAdmitCardPDFView(APIView):
             "save_directory": save_dir,
             "results": results
         })
+
+class BTechRollSheetPDFView(View):
+    """
+    Generates and returns Exam Roll Sheet PDF.
+    Query params: exam_uid, college_uid, branch_uid
+    """
+    def get(self, request):
+        exam_uid = request.GET.get("exam_uid")
+        college_uid = request.GET.get("college_uid")
+        branch_uid = request.GET.get("branch_uid")
+
+        if not all([exam_uid, college_uid, branch_uid]):
+            return HttpResponse("exam_uid, college_uid, and branch_uid are required", status=400, content_type='text/plain')
+
+        exam = get_object_or_404(BTechExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+        branch = get_object_or_404(BTechBranch, uid=branch_uid)
+
+        pdf_content = generate_btech_roll_sheet_pdf(exam, college, branch)
+
+        if not pdf_content:
+            return HttpResponse(f"Failed to generate Roll Sheet for {college.name} - {branch.name}. Ensure students are registered for this exam.", status=404, content_type='text/plain')
+
+        # Check if user wants to force download or view inline
+        download = request.GET.get('download', 'false').lower() == 'true'
+        disposition = 'attachment' if download else 'inline'
+
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
+        safe_branch_name = "".join([c if c.isalnum() else "_" for c in branch.name])
+        response["Content-Disposition"] = f'{disposition}; filename="Roll_Sheet_{safe_college_name}_{safe_branch_name}_Year_{exam.year}.pdf"'
+        return response
