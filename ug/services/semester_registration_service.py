@@ -567,10 +567,6 @@ class SemesterRegistrationService:
         if registration.status == 'REGISTERED':
             raise ValueError(f"Already registered for semester {semester}")
         
-        # Check if student is eligible
-        if not registration.exam_eligible:
-            raise ValueError("Student is not eligible for registration. Please check with administration.")
-        
         # Get session and batch (optimize batch query)
         session = registration.session or student.session
         batch_obj = None
@@ -629,8 +625,8 @@ class SemesterRegistrationService:
         total_credits = 0
         
         # Get college and degree codes once
-        college_code = student.college.code if student.college else None
-        degree_code = student.degree.code if student.degree else None
+        college_code = student.college.college_code if student.college else None
+        degree_code = student.degree.short_name or student.degree.name if student.degree else None
         
         for course_structure in course_structures:
             paper_code = course_structure.paper_code or course_structure.course_code
@@ -695,12 +691,15 @@ class SemesterRegistrationService:
         
         # 5. BULK INSERT IN TRANSACTION (Much faster than individual creates)
         with transaction.atomic():
-            if assessments_to_create:
-                # Use bulk_create for massive performance improvement
-                StudentCourseAssessment.objects.bulk_create(
-                    assessments_to_create,
-                    batch_size=500  # Process in batches of 500
-                )
+            # If no assessments to create, it means all were duplicates (already registered)
+            if not assessments_to_create:
+                raise ValueError(f"All selected assessments are already registered for semester {semester}")
+            
+            # Use bulk_create for massive performance improvement
+            StudentCourseAssessment.objects.bulk_create(
+                assessments_to_create,
+                batch_size=500  # Process in batches of 500
+            )
             
             # Update registration status
             registration.status = 'REGISTERED'
