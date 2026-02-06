@@ -71,7 +71,7 @@ class MCASemesterRegistrationAdmin(admin.ModelAdmin):
 class MCAExamRegistrationAdmin(admin.ModelAdmin):
     list_display = ('student', 'exam', 'exam_type', 'sem', 'session', 'status', 'is_open')
     list_filter = ('exam', 'exam_type', 'sem', 'session', 'status', 'is_open')
-    filter_horizontal = ('backlog_subjects',)
+    filter_horizontal = ('subjects',)
 
 @admin.register(MCAStudentAssessment)
 class MCAStudentAssessmentAdmin(admin.ModelAdmin):

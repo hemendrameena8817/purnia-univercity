@@ -319,10 +319,10 @@ class MCAExamRegistration(models.Model):
         choices=EXAM_TYPE_CHOICES,
         default='REGULAR'
     )
-    backlog_subjects = models.ManyToManyField(
+    subjects = models.ManyToManyField(
         'MCACommonCourseStructure',
         blank=True,
-        related_name='backlog_registrations'
+        related_name='registered_subjects'
     )
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
