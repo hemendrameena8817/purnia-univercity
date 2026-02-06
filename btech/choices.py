@@ -2,8 +2,8 @@
 BTech App - Choices and Enums
 """
 
-# Semester Result Status
-SEMESTER_RESULT_CHOICES = (
+# Year Result Status
+YEAR_RESULT_CHOICES = (
     ('PASS', 'Pass'),
     ('PROMOTED', 'Promoted'),
     ('FAIL', 'Fail'),
@@ -15,9 +15,9 @@ SEMESTER_RESULT_CHOICES = (
 
 # Student Status
 STUDENT_STATUS_CHOICES = (
-    ('Active', 'Active'),
-    ('Suspended', 'Suspended'),
-    ('Alumni', 'Alumni'),
+    ('REGULAR', 'Regular'),
+    ('SUSPENDED', 'Suspended'),
+    ('ALUMNI', 'Alumni'),
 )
 
 # Gender Choices
@@ -36,8 +36,12 @@ EXAM_TYPE_CHOICES = (
 
 # Assessment Labels (Standardized)
 ASSESSMENT_LABEL_CHOICES = (
-    ('CIA', 'CIA'),
-    ('ESE', 'ESE'),
+    ('THEORY', 'Theory'),
+    ('PERIODICAL', 'Periodical Exam'),
+    ('SESSIONAL', 'Sessional'),
+    ('PRACTICAL', 'Practical'),
+    ('PROJECT', 'Project'),
+    ('SEMINAR', 'Seminar'),
 )
 
 # Promotion Status

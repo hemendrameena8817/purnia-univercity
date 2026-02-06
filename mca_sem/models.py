@@ -115,7 +115,7 @@ class MCAStudentProfile(models.Model):
     
     current_semester = models.PositiveIntegerField(null=True, blank=True)
     session_str = models.CharField(max_length=50, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='Active')
+    status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='REGULAR')
 
     profile_image = models.ImageField(upload_to='mca_students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='mca_students/signatures/', null=True, blank=True)

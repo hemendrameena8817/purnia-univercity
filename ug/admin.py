@@ -8,18 +8,20 @@ from .models import (
 
 @admin.register(UGFaculty)
 class UGFacultyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'short_name', 'university', 'created_at')
-    list_filter = ('university',)
+    list_display = ('name', 'short_name', 'university', 'is_publish', 'created_at')
+    list_editable = ('is_publish',)
+    list_filter = ('university', 'is_publish')
     search_fields = ('name', 'short_name')
     ordering = ('name',)
 
 
 @admin.register(UGDepartment)
 class UGDepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'faculty', 'head_of_department', 'created_at')
-    list_filter = ('faculty',)
-    search_fields = ('name', 'code', 'faculty__name')
-    ordering = ('faculty', 'name')
+    list_display = ('name', 'code', 'head_of_department', 'is_publish', 'created_at')
+    list_editable = ('is_publish',)
+    list_filter = ('is_publish',)
+    search_fields = ('name', 'code')
+    ordering = ('name',)
 
 
 @admin.register(UGDegree)
@@ -32,7 +34,7 @@ class UGDegreeAdmin(admin.ModelAdmin):
 @admin.register(UGProgram)
 class UGProgramAdmin(admin.ModelAdmin):
     list_display = ('name', 'short_name', 'degree', 'department', 'created_at')
-    list_filter = ('degree', 'department__faculty')
+    list_filter = ('degree',)
     search_fields = ('name', 'short_name', 'degree__name', 'department__name')
     ordering = ('name',)
 
@@ -97,10 +99,12 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(CourseStructure)
 class CourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('course_name', 'course_short_name', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks', 'max_credit')
-    list_filter = ('course_type', 'semester', 'course_code', 'department__faculty', 'department', )
+    list_display = ('id','course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
+    list_editable = ('course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
+    list_filter = ('course_type', 'semester', 'course_code', 'department', )
     search_fields = ('course_name', 'course_short_name', 'course_code', 'department__name')
     ordering = ('department', 'semester', 'course_code')
+    raw_id_fields = ('department',)
 
 
 @admin.register(StudentCourseAssessment)
@@ -222,10 +226,14 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
 
 @admin.register(SemesterRegistration)
 class SemesterRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'status', 'exam_eligible', 'is_open')
-    list_filter = ('sem', 'status', 'exam_eligible', 'is_open')
-    search_fields = ('student__registration_no', 'student__first_name')
-    ordering = ('student', 'sem')
+    list_display = ('student', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date')
+    list_filter = ('sem', 'status', 'exam_eligible', 'is_open', 'student__batch')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__batch')
+    ordering = ('-sem', 'student')
+    list_per_page = 50
+    raw_id_fields = ('student',)
+    list_select_related = ('student',)
+    show_full_result_count = False
 
 
 @admin.register(ExamRegistration)

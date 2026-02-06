@@ -1,36 +1,28 @@
 """
-MCA Course Structure Import Script
-=================================
-This script imports the global MCA Course Structure (Syllabus) from an Excel file.
-It creates multiple assessment records (ESE-Theory, CIA-Theory, Practical) for each paper 
-based on the columns provided in the Excel sheet.
+BTech Course Structure Import Script
+===================================
+This script imports the BTech Course Structure (Syllabus) from an Excel file.
+It adds a strict validation pass before any database writes.
 
 Command to run:
 1. Run: poetry run python manage.py shell
 2. Paste:
-   >>> from scripts.mca.import_mca_course_structure import run_import
-   >>> run_import(r"old_data/MCA Course Structure Google Sheet.xlsx")
+   from scripts.betch.import_betch_course_structure import run_import
+run_import(r"old_data/btech/BTECH_COURSE_STRUCTURE.xlsx")
 
-Required Excel Columns:
-- Semester
-- Paper code
-- Subject code
-- Paper Name
-- ESE (FM)
-- ESE (PM)
-- CIA (FM)
-- CIA (PM)
-- Practical (FM)
-- Practical (PM)
+Excel Column Mapping (Positional):
+0: Branch
+1: Year
+2: Subject code
+3: Paper Name
+4: Theory Full Marks
+5: Theory Pass Marks
+6: Periodical Exam Full Marks
+7: Periodical Exam Pass Marks
+8: Sessional Full Marks
+9: Sessional Pass Marks
 """
 
-def normalize_semester(sem):
-    """Normalize semester values to simple digits (1, 2, 3...)"""
-    s = str(sem).strip().upper()
-    if 'SEM' in s:
-        s = s.replace('SEMESTER', '').replace('SEM', '').replace('-', '').strip()
-    roman_map = {'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5', 'VI': '6'}
-    return roman_map.get(s, s)
 import os
 import django
 import pandas as pd
@@ -40,7 +32,17 @@ import argparse
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
 django.setup()
 
-from mca_sem.models import MCACourseStructure, MCACommonCourseStructure
+from btech.models import (
+    BTechCourse, BTechBranch, BTechCourseStructure, BTechCommonCourseStructure
+)
+
+def normalize_year_to_sem(year_str):
+    s = str(year_str).strip().upper()
+    if '1' in s: return "1"
+    if '2' in s: return "2"
+    if '3' in s: return "3"
+    if '4' in s: return "4"
+    return s
 
 def run_import(file_path):
     if not os.path.exists(file_path):
@@ -54,92 +56,132 @@ def run_import(file_path):
         print(f"Error reading Excel: {e}")
         return
 
-    print(f"Importing Global MCA Course Structure...")
+    # --- PHASE 1: VALIDATION PASS ---
+    print("\nStarting Validation Pass...")
+    validation_errors = []
+    rows_to_process = []
 
-    stats = {
-        'rows_in_excel': len(df),
-        'records_created': 0,
-        'records_updated': 0,
-        'errors': 0
-    }
-
-    # Iterate over rows
     for index, row in df.iterrows():
-        if index % 5 == 0:
-            print(f"Processing row {index}/{len(df)}...")
+        row_num = index + 2  # Excel row number
         
-        semester = normalize_semester(row['Semester'])
-        
-        # Use .get() to handle potential case variations in headers
-        paper_code_excel = str(row.get('Paper code') or row.get('Paper Code') or '').strip()
-        course_code = str(row.get('Subject code') or row.get('Subject Code') or '').strip()
-        
-        # Use Subject code as base; fall back to Paper code if Subject code is empty
-        base_code = course_code if course_code else paper_code_excel
-        paper_name = str(row['Paper Name']).strip()
-        
-        # Determine Course Type 
-        course_type = "CC"
-        if "CE" in base_code: course_type = "CE"
-        elif "SEC" in base_code: course_type = "SEC"
-        elif "AECC" in base_code: course_type = "AECC"
+        # 1. Skip obvious headers or empty rows
+        branch_val = str(row.iloc[0]).strip()
+        if branch_val == 'Branch' or branch_val == 'nan' or not branch_val:
+            continue
+            
+        course_code = str(row.iloc[2]).strip()
+        if not course_code or course_code == 'nan' or course_code == 'Subject code':
+            continue
 
+        paper_name = str(row.iloc[3]).strip()
+        if not paper_name or paper_name == 'nan':
+            validation_errors.append(f"Row {row_num}: Paper Name is missing.")
+            continue
+
+        # 2. Check for at least one valid mark component
+        has_marks = False
         components = [
-            {'label': 'ESE', 'fm_col': 'ESE (FM)', 'pm_col': 'ESE (PM)'},
-            {'label': 'CIA', 'fm_col': 'CIA (FM)', 'pm_col': 'CIA (PM)'},
-            {'label': 'CIA', 'fm_col': 'Practical (FM)', 'pm_col': 'Practical (PM)'},
+            {'label': 'THEORY', 'fm': row.iloc[4], 'pm': row.iloc[5]},
+            {'label': 'PERIODICAL', 'fm': row.iloc[6], 'pm': row.iloc[7]},
+            {'label': 'SESSIONAL', 'fm': row.iloc[8], 'pm': row.iloc[9]},
         ]
-
+        
+        valid_components = []
         for comp in components:
-            fm_val = row.get(comp['fm_col'])
-            pm_val = row.get(comp['pm_col'])
+            fm = comp['fm']
+            if not pd.isna(fm) and str(fm).strip() != "":
+                try:
+                    fm_val = float(fm)
+                    if fm_val > 0:
+                        has_marks = True
+                        pm = comp['pm']
+                        pm_val = float(pm) if not pd.isna(pm) else 0
+                        valid_components.append({
+                            'label': comp['label'],
+                            'fm': fm_val,
+                            'pm': pm_val
+                        })
+                except (ValueError, TypeError):
+                    validation_errors.append(f"Row {row_num}: Invalid Full Marks '{fm}' for {comp['label']}.")
 
-            # Only create record if FM exists and is > 0
-            if pd.isna(fm_val) or fm_val <= 0:
-                continue
+        if not has_marks:
+            validation_errors.append(f"Row {row_num}: No valid marks (Theory/Periodical/Sessional) found for {course_code}.")
+        else:
+            rows_to_process.append({
+                'branch': branch_val,
+                'year': normalize_year_to_sem(row.iloc[1]),
+                'code': course_code,
+                'name': paper_name,
+                'components': valid_components
+            })
 
-            # Handle Pass Marks
-            if pd.isna(pm_val):
-                pm_val = 0
+    if validation_errors:
+        print("\n!!! VALIDATION FAILED - IMPORT ABORTED !!!")
+        print(f"Total Errors Found: {len(validation_errors)}")
+        for err in validation_errors[:20]:
+            print(f"  - {err}")
+        if len(validation_errors) > 20:
+            print(f"  ... and {len(validation_errors) - 20} more errors.")
+        return
 
-            try:
-                # 1. Update/Create the Paper-level summary (Common Course Structure)
-                MCACommonCourseStructure.objects.update_or_create(
-                    code=base_code,
-                    semester=semester,
-                    defaults={
-                        'course_name': paper_name,
-                        'course_type': course_type,
-                        'marks': int(row.get('Total FM', 100)),
-                    }
+    print(f"Validation Successful! Found {len(rows_to_process)} papers to import.\n")
+
+    # --- PHASE 2: IMPORT PASS ---
+    print("Starting Database Update...")
+    from django.db import transaction
+    
+    stats = {'created': 0, 'updated': 0}
+
+    # Get/Create default BTech Course
+    btech_course, _ = BTechCourse.objects.get_or_create(
+        name="BTech", defaults={'duration_years': 4}
+    )
+
+    try:
+        with transaction.atomic():
+            for data in rows_to_process:
+                # 1. Branch
+                branch, _ = BTechBranch.objects.get_or_create(
+                    name=data['branch'], course=btech_course
                 )
 
-                # 2. Update/Create the detailed component (ESE/CIA/Prac)
-                # Uniqueness is now: base_code + label + semester
-                obj, created = MCACourseStructure.objects.update_or_create(
-                    course_code=base_code,
-                    label=comp['label'],
-                    semester=semester,
+                total_fm = 0
+                for comp in data['components']:
+                    total_fm += int(comp['fm'])
+                    
+                    # 2. Detailed Structure
+                    obj, created = BTechCourseStructure.objects.update_or_create(
+                        course_code=data['code'],
+                        label=comp['label'],
+                        year=data['year'],
+                        branch=branch,
+                        defaults={
+                            'course_name': data['name'],
+                            'max_marks': comp['fm'],
+                            'min_marks': comp['pm'],
+                        }
+                    )
+                    if created: stats['created'] += 1
+                    else: stats['updated'] += 1
+
+                # 3. Common Structure
+                BTechCommonCourseStructure.objects.update_or_create(
+                    code=data['code'],
+                    year=data['year'],
+                    branch=branch,
                     defaults={
-                        'course_name': paper_name,
-                        'course_type': course_type,
-                        'max_marks': fm_val,
-                        'min_marks': pm_val,
+                        'course_name': data['name'],
+                        'marks': total_fm,
                     }
                 )
-
-                if created: stats['records_created'] += 1
-                else: stats['records_updated'] += 1
-            except Exception as e:
-                print(f"Error on row {index} ({base_code}): {e}")
-                stats['errors'] += 1
-
-    print("\nImport completed!")
-    print(f"Final Statistics: {stats}")
+        
+        print(f"Import Finished! Components Created: {stats['created']}, Updated: {stats['updated']}")
+    
+    except Exception as e:
+        print(f"FATAL ERROR during DB write: {e}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Import Global MCA Course Structure')
+    parser = argparse.ArgumentParser(description='Import BTech Course Structure (Strict)')
     parser.add_argument('--file', type=str, required=True, help='Path to Excel file')
-
     args = parser.parse_args()
     run_import(args.file)

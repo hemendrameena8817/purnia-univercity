@@ -11,7 +11,7 @@ from ug.api.semester_registration import (
 app_name = 'ug'
 
 urlpatterns = [
-    # Semester Registration APIs
+    # Semester Registration APIs (Student)
     path(
         'semester-registration/eligibility/',
         RegistrationEligibilityView.as_view(),

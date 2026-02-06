@@ -26,7 +26,13 @@ class UGFaculty(models.Model):
         on_delete=models.CASCADE,
         related_name='ug_faculties'
     )
-
+    departments = models.ManyToManyField(
+        'ug.UGDepartment',
+        related_name='faculties',
+        null=True,
+        blank=True
+    )
+    is_publish = models.BooleanField(default=False)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -50,12 +56,12 @@ class UGDepartment(models.Model):
     code = models.CharField(max_length=50, null=True, blank=True)
     head_of_department = models.CharField(max_length=255, blank=True, null=True)
 
-    faculty = models.ForeignKey(
-        UGFaculty,
-        on_delete=models.CASCADE,
-        related_name='departments'
-    )
-
+    # faculty = models.ForeignKey(
+    #     UGFaculty,
+    #     on_delete=models.CASCADE,
+    #     related_name='departments'
+    # )
+    is_publish = models.BooleanField(default=False)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -65,7 +71,7 @@ class UGDepartment(models.Model):
         verbose_name_plural = 'UG Departments'
 
     def __str__(self):
-        return f"{self.name} ({self.faculty.short_name or self.faculty.name})"
+        return f"{self.name} ({self.code})" if self.code else self.name
 
 
 class UGDegree(models.Model):
@@ -236,9 +242,12 @@ class UGStudentProfile(models.Model):
     )
 
     # UG-specific course selections (CBCS)
-    major_course = models.CharField(max_length=250, null=True, blank=True, help_text="Major Core Course (MJC)")
-    minor_course = models.CharField(max_length=250, null=True, blank=True, help_text="Minor Core Course (MIC)")
-    mdc_course = models.CharField(max_length=250, null=True, blank=True, help_text="Multi-Disciplinary Course (MDC)")
+    major_course = models.ForeignKey(UGDepartment, on_delete=models.CASCADE, related_name='major_courses', null=True, blank=True)
+    minor_course = models.ForeignKey(UGDepartment, on_delete=models.CASCADE, related_name='minor_courses', null=True, blank=True)
+    mdc_course = models.ForeignKey(UGDepartment, on_delete=models.CASCADE, related_name='mdc_courses', null=True, blank=True)
+    # major_course = models.CharField(max_length=250, null=True, blank=True, help_text="Major Core Course (MJC)")
+    # minor_course = models.CharField(max_length=250, null=True, blank=True, help_text="Minor Core Course (MIC)")
+    # mdc_course = models.CharField(max_length=250, null=True, blank=True, help_text="Multi-Disciplinary Course (MDC)")
 
     # Documents
     profile_image = models.ImageField(upload_to='ug_students/profiles/', null=True, blank=True)
