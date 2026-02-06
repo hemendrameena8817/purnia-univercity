@@ -2,7 +2,7 @@ from django.db import models
 import uuid
 from django.conf import settings
 from .choices import (
-    SEMESTER_RESULT_CHOICES,
+    YEAR_RESULT_CHOICES,
     STUDENT_STATUS_CHOICES,
     GENDER_CHOICES,
     EXAM_TYPE_CHOICES,
@@ -23,6 +23,29 @@ class BTechCourse(models.Model):
 
     def __str__(self):
         return self.name if self.name else "Unnamed Course"
+
+class BTechBranch(models.Model):
+    """
+    Represents a branch in BTech (e.g., Mechanical Engineering, CSE, etc.)
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255)  # Mechanical Engineering
+    code = models.CharField(max_length=20, null=True, blank=True) # ME, CSE
+    course = models.ForeignKey(
+        BTechCourse,
+        on_delete=models.CASCADE,
+        related_name='branches'
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'BTech Branch'
+        verbose_name_plural = 'BTech Branches'
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
 
 class BTechSession(models.Model):
     """
@@ -47,6 +70,13 @@ class BTechBatch(models.Model):
     name = models.CharField(max_length=255, help_text='Batch name e.g., 2022-2024')
     session = models.ForeignKey(
         BTechSession,
+        on_delete=models.PROTECT,
+        related_name='batches',
+        null=True,
+        blank=True
+    )
+    branch = models.ForeignKey(
+        BTechBranch,
         on_delete=models.PROTECT,
         related_name='batches',
         null=True,
@@ -83,7 +113,6 @@ class BTechStudentProfile(models.Model):
     hindi_name = models.CharField(max_length=250, null=True, blank=True)
     registration_no = models.CharField(max_length=50, unique=True, db_index=True, null=True, blank=True)
     roll_no = models.CharField(max_length=50, null=True, blank=True)
-    
     father_name = models.CharField(max_length=255, null=True, blank=True)
     mother_name = models.CharField(max_length=255, null=True, blank=True)
     
@@ -92,6 +121,9 @@ class BTechStudentProfile(models.Model):
     mobile_no = models.CharField(max_length=15, null=True, blank=True)
     address = models.TextField(null=True, blank=True)
     aadhar_no = models.CharField(max_length=12, null=True, blank=True)
+    apaar_id = models.CharField(max_length=20, null=True, blank=True)
+    category = models.CharField(max_length=50, null=True, blank=True)
+    admission_date = models.DateField(null=True, blank=True)
     
     college = models.ForeignKey(
         'colleges.College',
@@ -112,10 +144,17 @@ class BTechStudentProfile(models.Model):
         null=True,
         blank=True
     )
+    branch = models.ForeignKey(
+        BTechBranch,
+        on_delete=models.PROTECT,
+        related_name='students',
+        null=True,
+        blank=True
+    )
     
-    current_semester = models.PositiveIntegerField(null=True, blank=True)
+    current_year = models.PositiveIntegerField(null=True, blank=True)
     session_str = models.CharField(max_length=50, null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='Active')
+    status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='REGULAR')
 
     profile_image = models.ImageField(upload_to='btech_students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='btech_students/signatures/', null=True, blank=True)
@@ -150,7 +189,14 @@ class BTechCourseStructure(models.Model):
     description = models.TextField(null=True, blank=True, help_text="Course Description")
     label = models.CharField(max_length=100, null=True, blank=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
     
-    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester")
+    year = models.CharField(max_length=20, null=True, blank=True, help_text="Year")
+    branch = models.ForeignKey(
+        BTechBranch,
+        on_delete=models.CASCADE,
+        related_name='course_structures',
+        null=True,
+        blank=True
+    )
     
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -161,19 +207,26 @@ class BTechCourseStructure(models.Model):
         verbose_name_plural = 'BTech Course Structures'
 
     def __str__(self):
-        return f"{self.course_name} ({self.course_code}) - {self.semester}"
+        return f"{self.course_name} ({self.course_code}) - {self.year}"
 
 class BTechCommonCourseStructure(models.Model):
     """
     Common structure template for BTech.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    semester = models.CharField(max_length=50)
+    year = models.CharField(max_length=50)
     course_name = models.CharField(max_length=255)
     course_type = models.CharField(max_length=50)
     ltp = models.CharField(max_length=20, null=True, blank=True)
     marks = models.PositiveIntegerField(default=100)
     code  = models.CharField(max_length=20, null=True, blank=True)
+    branch = models.ForeignKey(
+        BTechBranch,
+        on_delete=models.CASCADE,
+        related_name='common_course_structures',
+        null=True,
+        blank=True
+    )
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -181,10 +234,10 @@ class BTechCommonCourseStructure(models.Model):
     class Meta:
         verbose_name = 'BTech Common Course Structure'
         verbose_name_plural = 'BTech Common Course Structures'
-        ordering = ['semester', 'course_name']
+        ordering = ['year', 'course_name']
 
     def __str__(self):
-        return f"{self.semester} - {self.course_name}"
+        return f"{self.year} - {self.course_name}"
 
 class BTechExam(models.Model):
     """
@@ -193,8 +246,9 @@ class BTechExam(models.Model):
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255, null=True, blank=True)            # BTech 4th Semester Examination
-    semester = models.PositiveIntegerField(null=True, blank=True)         # 4
+    year = models.PositiveIntegerField(null=True, blank=True)         # 4
     session = models.CharField(max_length=20, null=True, blank=True)        # 2022-24
+    batch = models.CharField(max_length=20, null=True, blank=True)  
     exam_month_year = models.CharField(max_length=20, null=True, blank=True) # June 2024
     publication_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -208,9 +262,8 @@ class BTechExamCenterMapping(models.Model):
     Center Fixation: Maps an Exam + Center to one or more Colleges.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    exam = models.ForeignKey(
+    exams = models.ManyToManyField(
         BTechExam,
-        on_delete=models.CASCADE,
         related_name='center_mappings'
     )
     center = models.ForeignKey(
@@ -229,10 +282,10 @@ class BTechExamCenterMapping(models.Model):
     class Meta:
         verbose_name = 'BTech Exam Center Mapping'
         verbose_name_plural = 'BTech Exam Center Mappings'
-        unique_together = ('exam', 'center')
 
     def __str__(self):
-        return f"{self.exam.name} @ {self.center.name}"
+        exam_count = self.exams.count()
+        return f"{self.center.name} ({exam_count} Exams)"
 
 
 class BTechExamSchedule(models.Model):
@@ -268,31 +321,31 @@ class BTechExamSchedule(models.Model):
     def __str__(self):
         return f"{self.exam.name} - {self.common_course_structure.code if self.common_course_structure else 'N/A'} ({self.exam_date})"
 
-class BTechSemesterRegistration(models.Model):
+class BTechYearRegistration(models.Model):
     """
-    Semester Registration for BTech Students.
+    Year Registration for BTech Students.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     student = models.ForeignKey(
         BTechStudentProfile,
         on_delete=models.CASCADE,
-        related_name='semester_registrations'
+        related_name='year_registrations'
     )
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     is_open = models.BooleanField(default=False)
-    sem = models.IntegerField(null=True, blank=True)
-    status = models.CharField(max_length=10, null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
+    status = models.CharField(max_length=20, null=True, blank=True)
     exam_eligible = models.BooleanField(default=False)
     remarks = models.TextField(null=True, blank=True)
-    session = models.CharField(max_length=10, null=True, blank=True)
+    session = models.CharField(max_length=20, null=True, blank=True)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'BTech Semester Registration'
-        verbose_name_plural = 'BTech Semester Registrations'
+        verbose_name = 'BTech Year Registration'
+        verbose_name_plural = 'BTech Year Registrations'
 
     def __str__(self):
         return f"{self.student}"
@@ -307,11 +360,28 @@ class BTechExamRegistration(models.Model):
         on_delete=models.CASCADE,
         related_name='exam_registrations'
     )
+    exam = models.ForeignKey(
+        'BTechExam',
+        on_delete=models.CASCADE,
+        related_name='registrations',
+        null=True,
+        blank=True
+    )
+    exam_type = models.CharField(
+        max_length=20,
+        choices=EXAM_TYPE_CHOICES,
+        default='REGULAR'
+    )
+    backlog_subjects = models.ManyToManyField(
+        'BTechCommonCourseStructure',
+        blank=True,
+        related_name='backlog_registrations'
+    )
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     is_open = models.BooleanField(default=False)
     fees = models.IntegerField(null=True, blank=True)
-    sem = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField(null=True, blank=True)
     status = models.CharField(max_length=10, null=True, blank=True)
     session = models.CharField(max_length=10, null=True, blank=True)
     json_data = models.JSONField(null=True, blank=True)
@@ -324,7 +394,7 @@ class BTechExamRegistration(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.student}"
+        return f"{self.student} - {self.exam_type} - Year {self.year}"
 
 # 4. Result & Assessment Models
 class BTechStudentAssessment(models.Model):
@@ -340,7 +410,7 @@ class BTechStudentAssessment(models.Model):
     course_name = models.CharField(max_length=250, null=True, blank=True)
     course_type = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     course_code = models.CharField(max_length=200, null=True, blank=True, db_index=True)
-    semester = models.CharField(max_length=200, null=True, blank=True, db_index=True)
+    year = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     label = models.CharField(max_length=200, db_index=True, choices=ASSESSMENT_LABEL_CHOICES)
     session = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     batch = models.ForeignKey(
@@ -377,8 +447,8 @@ class BTechStudentAssessment(models.Model):
     course_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
     #### Semester Summary ####
-    sem_result = models.CharField(max_length=20, null=True, blank=True, choices=SEMESTER_RESULT_CHOICES)
-    next_sem_status = models.CharField(max_length=20, null=True, blank=True, choices=PROMOTION_STATUS_CHOICES)
+    year_result = models.CharField(max_length=20, null=True, blank=True, choices=YEAR_RESULT_CHOICES)
+    next_year_status = models.CharField(max_length=20, null=True, blank=True, choices=PROMOTION_STATUS_CHOICES)
 
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -389,9 +459,9 @@ class BTechStudentAssessment(models.Model):
         verbose_name_plural = 'BTech Student Assessments'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['student', 'semester'], name='idx_btech_stud_sem'),
-            models.Index(fields=['batch', 'semester'], name='idx_btech_batch_sem'),
-            models.Index(fields=['course_code', 'semester'], name='idx_btech_course_sem'),
+            models.Index(fields=['student', 'year'], name='idx_btech_stud_year'),
+            models.Index(fields=['batch', 'year'], name='idx_btech_batch_year'),
+            models.Index(fields=['course_code', 'year'], name='idx_btech_course_year'),
         ]
         
     def save(self, *args, **kwargs):
@@ -403,7 +473,7 @@ class BTechStudentAssessment(models.Model):
         super().save(*args, **kwargs)
         
     def __str__(self):
-        return f"{self.student} | {self.semester} | {self.label}"
+        return f"{self.student} | {self.year} | {self.label}"
 
 class BTechExamResult(models.Model):
     """
@@ -415,19 +485,19 @@ class BTechExamResult(models.Model):
         on_delete=models.CASCADE,
         related_name='exam_results'
     )
-    semester = models.CharField(max_length=10, db_index=True)
+    year = models.CharField(max_length=10, db_index=True)
     session = models.CharField(max_length=10, db_index=True)
     cia_pass = models.BooleanField(null=True, blank=True)
     ese_pass = models.BooleanField(null=True, blank=True)
-    semester_result = models.CharField(
+    year_result = models.CharField(
         max_length=20,
         db_index=True,
-        choices=SEMESTER_RESULT_CHOICES
+        choices=YEAR_RESULT_CHOICES
     )
     total_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    next_semester = models.PositiveIntegerField(null=True, blank=True)
-    next_sem_status = models.CharField(max_length=15, null=True, blank=True, choices=PROMOTION_STATUS_CHOICES)
+    next_year = models.PositiveIntegerField(null=True, blank=True)
+    next_year_status = models.CharField(max_length=15, null=True, blank=True, choices=PROMOTION_STATUS_CHOICES)
     is_legacy = models.BooleanField(default=False)
     published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -436,11 +506,11 @@ class BTechExamResult(models.Model):
     class Meta:
         verbose_name = 'BTech Exam Result'
         verbose_name_plural = 'BTech Exam Results'
-        unique_together = ('student', 'semester', 'session')
+        unique_together = ('student', 'year', 'session')
         indexes = [
-            models.Index(fields=['student', 'semester']),
-            models.Index(fields=['semester_result']),
+            models.Index(fields=['student', 'year']),
+            models.Index(fields=['year_result']),
         ]
 
     def __str__(self):
-        return f"{self.student} | Sem {self.semester} | {self.semester_result}"
+        return f"{self.student} | Year {self.year} | {self.year_result}"

@@ -1,11 +1,17 @@
 from django.contrib import admin
 from .models import (
-    BTechCourse, BTechSession, BTechBatch, BTechStudentProfile, 
+    BTechCourse, BTechBranch, BTechSession, BTechBatch, BTechStudentProfile, 
     BTechCourseStructure, BTechCommonCourseStructure,
-    BTechExam, BTechExamSchedule, BTechSemesterRegistration, 
+    BTechExam, BTechExamSchedule, BTechYearRegistration, 
     BTechExamRegistration, BTechStudentAssessment, BTechExamResult,
     BTechExamCenterMapping
 )
+
+@admin.register(BTechBranch)
+class BTechBranchAdmin(admin.ModelAdmin):
+    list_display = ('uid', 'name', 'code', 'course', 'is_active')
+    readonly_fields = ('uid',)
+    list_filter = ('course', 'is_active')
 
 @admin.register(BTechCourse)
 class BTechCourseAdmin(admin.ModelAdmin):
@@ -34,27 +40,32 @@ class BTechStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(BTechCourseStructure)
 class BTechCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('course_name', 'course_code', 'course_type', 'semester')
-    list_filter = ('semester', 'course_type')
+    list_display = ('course_name', 'course_code', 'course_type', 'year')
+    list_filter = ('year', 'course_type')
     search_fields = ('course_name', 'course_code')
 
 @admin.register(BTechCommonCourseStructure)
 class BTechCommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('semester', 'course_name', 'course_type', 'marks')
-    list_filter = ('semester', 'course_type')
+    list_display = ('year', 'course_name', 'course_type', 'marks')
+    list_filter = ('year', 'course_type')
     search_fields = ('course_name', 'code')
 
 @admin.register(BTechExam)
 class BTechExamAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'session', 'exam_month_year', 'publication_date')
+    list_display = ('uid', 'name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date')
     readonly_fields = ('uid',)
-    search_fields = ('name', 'session')
+    search_fields = ('name', 'session', 'batch')
+    list_filter = ('year', 'session', 'batch')
 
 @admin.register(BTechExamCenterMapping)
 class BTechExamCenterMappingAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'center')
-    list_filter = ('exam', 'center')
-    filter_horizontal = ('attached_colleges',)
+    list_display = ('uid', 'get_exams', 'center')
+    list_filter = ('exams', 'center')
+    filter_horizontal = ('attached_colleges', 'exams')
+
+    def get_exams(self, obj):
+        return ", ".join([str(exam) for exam in obj.exams.all()])
+    get_exams.short_description = 'Exams'
 
 @admin.register(BTechExamSchedule)
 class BTechExamScheduleAdmin(admin.ModelAdmin):
@@ -62,24 +73,26 @@ class BTechExamScheduleAdmin(admin.ModelAdmin):
     list_filter = ('exam', 'exam_date', 'sitting')
     search_fields = ('common_course_structure__course_name', 'common_course_structure__code')
 
-@admin.register(BTechSemesterRegistration)
-class BTechSemesterRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'session', 'status', 'exam_eligible')
-    list_filter = ('sem', 'session', 'status', 'exam_eligible')
+@admin.register(BTechYearRegistration)
+class BTechYearRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('student', 'year', 'session', 'status', 'exam_eligible')
+    list_filter = ('year', 'session', 'status', 'exam_eligible')
 
 @admin.register(BTechExamRegistration)
 class BTechExamRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'session', 'status', 'is_open')
-    list_filter = ('sem', 'session', 'status', 'is_open')
+    list_display = ('student', 'exam', 'exam_type', 'year', 'session', 'status', 'is_open')
+    list_filter = ('exam', 'exam_type', 'year', 'session', 'status', 'is_open')
+    filter_horizontal = ('backlog_subjects',)
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name')
 
 @admin.register(BTechStudentAssessment)
 class BTechStudentAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'course_code', 'semester', 'label', 'ind_marks_obtained', 'ind_is_pass')
-    list_filter = ('semester', 'label', 'exam_type', 'batch')
+    list_display = ('student', 'course_code', 'year', 'label', 'ind_marks_obtained', 'ind_is_pass')
+    list_filter = ('year', 'label', 'exam_type', 'batch')
     search_fields = ('student__roll_no', 'course_name', 'course_code')
 
 @admin.register(BTechExamResult)
 class BTechExamResultAdmin(admin.ModelAdmin):
-    list_display = ('student', 'semester', 'session', 'semester_result', 'total_marks_obtained', 'percentage')
-    list_filter = ('semester', 'session', 'semester_result')
+    list_display = ('student', 'year', 'session', 'year_result', 'total_marks_obtained', 'percentage')
+    list_filter = ('year', 'session', 'year_result')
     search_fields = ('student__roll_no',)

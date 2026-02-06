@@ -32,6 +32,7 @@ def generate_mca_admit_card_pdf(student, exam):
         "center_mapping": mapping,
         "center_name": exam_center.name if exam_center else "-",
         "center_code": exam_center.center_code if exam_center else "-",
+        "status": student.get_status_display() if student else "-",
         "schedules": schedules,
         "university_logo": image_to_base64(os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")),
         "watermark_logo": image_to_base64(os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")),
