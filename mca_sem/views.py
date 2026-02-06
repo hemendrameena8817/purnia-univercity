@@ -425,14 +425,11 @@ class MCABulkAdmitCardPDFView(APIView):
 
         exam = get_object_or_404(MCAExam, uid=exam_uid)
         
-        # Find students sharing the same semester and session as the exam
-        students = MCAStudentProfile.objects.filter(
-            current_semester=exam.semester,
-            session_str=exam.session
-        )
-
-        if not students.exists():
-            return Response({"message": f"No students found for Semester {exam.semester}, Session {exam.session}"}, status=status.HTTP_404_NOT_FOUND)
+        # Find students who are actually registered for this specific exam
+        registrations = MCAExamRegistration.objects.filter(exam=exam).select_related('student')
+        
+        if not registrations.exists():
+            return Response({"message": f"No registrations found for Exam: {exam.name}"}, status=status.HTTP_404_NOT_FOUND)
 
         # Create directory for saving PDFs
         # Use a safe name for the directory
@@ -447,7 +444,8 @@ class MCABulkAdmitCardPDFView(APIView):
         failure_count = 0
         results = []
 
-        for student in students:
+        for reg in registrations:
+            student = reg.student
             if not student:
                 continue
                 
@@ -477,9 +475,41 @@ class MCABulkAdmitCardPDFView(APIView):
         return Response({
             "message": "Bulk generation completed",
             "exam_name": exam.name,
-            "total_attempted": students.count(),
+            "total_attempted": registrations.count(),
             "success_count": success_count,
             "failure_count": failure_count,
             "save_directory": save_dir,
             "results": results
         })
+
+class MCARollSheetPDFView(View):
+    """
+    Generates and returns Exam Roll Sheet PDF for MCA.
+    Query params: exam_uid, college_uid
+    """
+    def get(self, request):
+        from colleges.models import College
+        from .utils.pdf_generator import generate_mca_roll_sheet_pdf
+        
+        exam_uid = request.GET.get("exam_uid")
+        college_uid = request.GET.get("college_uid")
+
+        if not all([exam_uid, college_uid]):
+            return HttpResponse("exam_uid and college_uid are required", status=400, content_type='text/plain')
+
+        exam = get_object_or_404(MCAExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+
+        pdf_content = generate_mca_roll_sheet_pdf(exam, college)
+
+        if not pdf_content:
+            return HttpResponse(f"Failed to generate Roll Sheet for {college.name}. Ensure students are enrolled for this exam.", status=404, content_type='text/plain')
+
+        # Check if user wants to force download or view inline
+        download = request.GET.get('download', 'false').lower() == 'true'
+        disposition = 'attachment' if download else 'inline'
+
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
+        response["Content-Disposition"] = f'{disposition}; filename="Roll_Sheet_{safe_college_name}_SEM_{exam.semester}.pdf"'
+        return response

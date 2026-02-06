@@ -307,6 +307,23 @@ class MCAExamRegistration(models.Model):
         on_delete=models.CASCADE,
         related_name='exam_registrations'
     )
+    exam = models.ForeignKey(
+        'MCAExam',
+        on_delete=models.CASCADE,
+        related_name='registrations',
+        null=True,
+        blank=True
+    )
+    exam_type = models.CharField(
+        max_length=20,
+        choices=EXAM_TYPE_CHOICES,
+        default='REGULAR'
+    )
+    backlog_subjects = models.ManyToManyField(
+        'MCACommonCourseStructure',
+        blank=True,
+        related_name='backlog_registrations'
+    )
     start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     is_open = models.BooleanField(default=False)
