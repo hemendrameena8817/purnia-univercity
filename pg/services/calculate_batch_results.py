@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from pg.models import PGStudentProfile, PGBatch, PGStudentCourseAssessment
+from pg.models import PGStudentProfile, PGBatch, PGStudentCourseAssessment, PGExamResult
 from pg.services.result_service import PGResultService
 import sys
 import argparse
@@ -89,6 +89,22 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
                     print(f"    ⚠️ Skipping {sem} due to missing session in data")
                     continue
                 
+            # Validating CIA Pass status before calling the heavy service
+            # This avoids "Errors" in the output for students who simply haven't passed CIA yet.
+            exam_result = PGExamResult.objects.filter(
+                student=student,
+                semester=sem,
+                session=sess
+            ).first()
+            
+            if not exam_result:
+                print(f"    ⚠️ Skipping {sem}: CIA Result (Step 1) not found. Please run Step 1 CIA Processing first.")
+                continue
+                
+            if not exam_result.cia_pass:
+                print(f"    ⚠️ Skipping {sem}: Student has NOT passed all CIA assessments.")
+                continue
+
             try:
                 # CALL THE CORE SERVICE: This is where the heavy lifting happens.
                 # It calculates marks, grades, SGPA, and creates next-semester registration.
