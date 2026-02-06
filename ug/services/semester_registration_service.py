@@ -20,12 +20,19 @@ from ug.models import (
     CourseStructure,
     CommonCourseStructure,
     StudentCourseAssessment,
-    UGDepartment
+    UGDepartment,
+    UGBatch
 )
 from django.utils import timezone
 
 class SemesterRegistrationService:
     """Service for handling semester registration operations"""
+    
+    # Semester mapping constant
+    SEMESTER_MAP = {
+        '1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4,
+        '5TH': 5, '6TH': 6, '7TH': 7, '8TH': 8
+    }
     
     @staticmethod
     def check_registration_eligibility(student: UGStudentProfile) -> Dict:
@@ -70,11 +77,30 @@ class SemesterRegistrationService:
             date_valid = False
         if registration.end_date and now > registration.end_date:
             date_valid = False
+        
+        # Convert semester number to text format
+        semester_text_map = {
+            1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH',
+            5: '5TH', 6: '6TH', 7: '7TH', 8: '8TH'
+        }
+        semester_name = semester_text_map.get(int(current_semester), f'{current_semester}TH')
+        
+        # Check if already registered
+        if registration.status == 'REGISTERED':
+            return {
+                'eligible': False,
+                'already_registered': True,
+                'current_semester': int(current_semester) - 1,
+                'next_semester': current_semester,
+                'registration_open': False,
+                'message': f'You are already registered for Semester {semester_name}',
+                'reason': f'Already registered for Semester {semester_name}'
+            }
             
         if is_open and date_valid:
              return {
                 'eligible': True,
-                'current_semester': int(current_semester) -1,
+                'current_semester': int(current_semester) - 1,
                 'next_semester': current_semester,
                 'registration_open': True,
                 'registration_window': {
@@ -82,7 +108,7 @@ class SemesterRegistrationService:
                     'end_date': registration.end_date.isoformat() if registration.end_date else None,
                     'is_open': True
                 },  
-                'message': f'You are eligible to register for Semester {current_semester}'
+                'message': f'You are eligible to register for Semester {semester_name}'
             }
         
         # Record exists but closed
@@ -289,10 +315,11 @@ class SemesterRegistrationService:
         common_courses = CommonCourseStructure.objects.filter(
             semester__icontains=semester
         )
-        
+        print(common_courses, 'this is common courses for 3rd semester')
         requirements = {}
         for course in common_courses:
             course_type = course.course_type
+            print(course_type, 'this is course type')
             if course_type:
                 # Extract type prefix (e.g., 'MJC' from 'MJC-1')
                 type_prefix = course_type.split('-')[0] if '-' in course_type else course_type
@@ -301,6 +328,52 @@ class SemesterRegistrationService:
         return requirements
     
     @staticmethod
+    def _consolidate_courses_by_type(courses_queryset):
+        """
+        Consolidate courses by course_type (course_code).
+        Returns a dictionary keyed by course_type with unique course info
+        and all assessment entries (CIA, ESE, Theory, Practical).
+        
+        Returns:
+            Dictionary where keys are course_types (e.g., MJC-3, AEC-3)
+        """
+        courses_dict = {}
+        
+        for course in courses_queryset:
+            course_type = course.course_code  # e.g., MJC-3, AEC-3
+            
+            if course_type:
+                if course_type not in courses_dict:
+                    # First entry for this course type - initialize the structure
+                    courses_dict[course_type] = {
+                        'uid': str(course.uid),
+                        'code': course.paper_code or course.course_code,
+                        'name': course.course_name,
+                        'department': course.department.name if course.department else None,
+                        'total_credit': course.max_credit or 0,
+                        'assessments': []
+                    }
+                
+                # Add assessment entry
+                assessment = {
+                    'uid': str(course.uid),
+                    'label': course.label or 'Assessment',
+                    'type': course.course_type or 'General',
+                    'marks': float(course.max_marks) if course.max_marks else 0,
+                    'min_marks': float(course.min_marks) if course.min_marks else 0,
+                }
+                courses_dict[course_type]['assessments'].append(assessment)
+        
+        # Calculate total marks for each course
+        for course_data in courses_dict.values():
+            course_data['total_marks'] = sum(a['marks'] for a in course_data['assessments'])
+        
+        return courses_dict
+
+
+    
+    @staticmethod
+
     def get_available_courses(student: UGStudentProfile, semester: str) -> Dict:
         """
         Get all available courses for student registration
@@ -312,125 +385,106 @@ class SemesterRegistrationService:
         Returns:
             Dict with categorized course options
         """
-        # Get all courses for this semester and batch
-        all_courses = CourseStructure.objects.filter(
-            semester=semester,
-            batch=student.batch
+        # Get the UGBatch object from student's batch string
+        batch_obj = None
+        if student.batch:
+            batch_obj = UGBatch.objects.filter(name=student.batch).first()
+        
+        # Map semester name to number using class constant
+        semester_num = SemesterRegistrationService.SEMESTER_MAP.get(semester, 3)
+        semester_num_str = str(semester_num)  # CourseStructure uses '1', '2', '3'
+
+        
+        # Get session from SemesterRegistration
+        registration = SemesterRegistration.objects.filter(
+            student=student,
+            sem=semester_num,
+            is_open=True
+        ).order_by('-created_at').first()
+        
+        session = registration.session if registration and registration.session else student.session
+        
+        # Get course types from CommonCourseStructure for this semester
+        common_courses = CommonCourseStructure.objects.filter(
+            semester__icontains=semester
         )
+        # Extract course type patterns (e.g., MJC-3, MIC-3, MDC-3, AEC-3, SEC-3)
+        course_types_in_semester = set()
+        for cc in common_courses:
+            if cc.course_type:
+                course_types_in_semester.add(cc.course_type.upper())
+        # Base query for CourseStructure - filter by semester only (no batch filter)
+        base_query = CourseStructure.objects.filter(semester=semester_num_str)
+
         
-        # Get major courses (filtered by student's major_course department)
-        major_courses_qs = all_courses.filter(
-            course_type__icontains='MJC'
-        )
-        if student.major_course:
-            major_courses_qs = major_courses_qs.filter(department=student.major_course)
+        # === MAJOR COURSES (MJC) ===
+        mjc_patterns = [ct for ct in course_types_in_semester if ct.startswith('MJC')]
         
-        major_courses = []
-        for course in major_courses_qs:
-            major_courses.append({
-                'code': course.paper_code or course.course_code,
-                'name': course.course_name,
-                'course_type': course.course_type,
-                'credit': course.max_credit,
-                'marks': float(course.max_marks) if course.max_marks else 100,
-                'department': course.department.name if course.department else None
-            })
+        if mjc_patterns:
+            mjc_query = base_query.filter(course_code__in=mjc_patterns)
+            if student.major_course:
+                mjc_query = mjc_query.filter(
+                    department=student.major_course,
+                    department__is_publish=True
+                )
+            
+            major_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(mjc_query)
+        else:
+            major_courses_dict = {}
         
-        # Get minor courses (filtered by student's minor_course department)
-        minor_courses_qs = all_courses.filter(
-            course_type__icontains='MIC'
-        )
-        if student.minor_course:
-            minor_courses_qs = minor_courses_qs.filter(department=student.minor_course)
+        # === MINOR COURSES (MIC) ===
+        mic_patterns = [ct for ct in course_types_in_semester if ct.startswith('MIC')]
         
-        minor_courses = []
-        for course in minor_courses_qs:
-            minor_courses.append({
-                'code': course.paper_code or course.course_code,
-                'name': course.course_name,
-                'course_type': course.course_type,
-                'credit': course.max_credit,
-                'marks': float(course.max_marks) if course.max_marks else 100,
-                'department': course.department.name if course.department else None
-            })
+        if mic_patterns:
+            mic_query = base_query.filter(course_code__in=mic_patterns)
+            if student.minor_course:
+                mic_query = mic_query.filter(
+                    department=student.minor_course,
+                    department__is_publish=True
+                )
+            
+            minor_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(mic_query)
+        else:
+            minor_courses_dict = {}
         
-        # Get MDC courses (filtered by student's mdc_course department)
-        mdc_courses_qs = all_courses.filter(
-            course_type__icontains='MDC'
-        )
-        if student.mdc_course:
-            mdc_courses_qs = mdc_courses_qs.filter(department=student.mdc_course)
+        # === MDC COURSES ===
+        mdc_patterns = [ct for ct in course_types_in_semester if ct.startswith('MDC')]
         
-        mdc_courses = []
-        for course in mdc_courses_qs:
-            mdc_courses.append({
-                'code': course.paper_code or course.course_code,
-                'name': course.course_name,
-                'course_type': course.course_type,
-                'credit': course.max_credit,
-                'marks': float(course.max_marks) if course.max_marks else 100,
-                'department': course.department.name if course.department else None
-            })
+        if mdc_patterns:
+            mdc_query = base_query.filter(course_code__in=mdc_patterns)
+            if student.mdc_course:
+                mdc_query = mdc_query.filter(
+                    department=student.mdc_course,
+                    department__is_publish=True
+                )
+            mdc_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(mdc_query)
+        else:
+            mdc_courses_dict = {}
         
-        # Get department-agnostic courses (courses without department)
-        other_courses_qs = all_courses.filter(
-            department__isnull=True
-        ).exclude(
-            course_type__icontains='MJC'
-        ).exclude(
-            course_type__icontains='MIC'
-        ).exclude(
-            course_type__icontains='MDC'
-        )
+        # === OTHER COURSES (AEC, SEC, GE, etc.) ===
+        other_patterns = [ct for ct in course_types_in_semester 
+                         if not ct.startswith('MJC') 
+                         and not ct.startswith('MIC') 
+                         and not ct.startswith('MDC')]
         
-        other_courses = []
-        for course in other_courses_qs:
-            other_courses.append({
-                'code': course.paper_code or course.course_code,
-                'name': course.course_name,
-                'course_type': course.course_type,
-                'credit': course.max_credit,
-                'marks': float(course.max_marks) if course.max_marks else 100
-            })
+        if other_patterns:
+            other_query = base_query.filter(course_code__in=other_patterns)
+            other_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(other_query)
+        else:
+            other_courses_dict = {}
         
-        # Determine auto_assign
-        # MJC, MIC, MDC are ALWAYS auto_assigned as per requirements
-        mjc_auto_assign = True
-        mic_auto_assign = True
-        mdc_auto_assign = True
-        
-        # Other courses: Auto-assign only if there is exactly one option
-        # If more than one, user must select
-        other_auto_assign = len(other_courses) == 1
+        # Merge all courses into a single dictionary
+        all_courses = {}
+        all_courses.update(major_courses_dict)
+        all_courses.update(minor_courses_dict)
+        all_courses.update(mdc_courses_dict)
+        all_courses.update(other_courses_dict)
         
         return {
+            'batch': student.batch,
             'semester': semester,
-            'session': student.session,
-            'courses': {
-                'major_courses': {
-                    'type': 'MJC',
-                    'description': 'Major Core Courses',
-                    'auto_assigned': mjc_auto_assign,
-                    'options': major_courses
-                },
-                'minor_courses': {
-                    'type': 'MIC',
-                    'description': 'Minor Core Courses',
-                    'auto_assigned': mic_auto_assign,
-                    'options': minor_courses
-                },
-                'mdc_courses': {
-                    'type': 'MDC',
-                    'description': 'Multi-Disciplinary Courses',
-                    'auto_assigned': mdc_auto_assign,
-                    'options': mdc_courses
-                },
-                'other_courses': {
-                    'description': 'Other Courses (SEC, AEC, etc.)',
-                    'auto_assigned': other_auto_assign,
-                    'options': other_courses
-                }
-            }
+            'session': session,
+            'courses': all_courses,
         }
     
     @staticmethod
@@ -469,115 +523,156 @@ class SemesterRegistrationService:
             for code in selected_codes:
                 if code not in valid_codes:
                     return False, f'Invalid course code selected: {code}'
-        
         return True, None
     
     @staticmethod
-    def create_course_registrations(student: UGStudentProfile, semester: str, 
-                                    selections: Dict) -> Dict:
+    def create_course_registrations(student: UGStudentProfile, semester: str,
+                                    assessment_uids: list) -> Dict:
         """
-        Create StudentCourseAssessment entries for selected courses
+        Create StudentCourseAssessment entries from assessment UIDs
         
         Args:
             student: UGStudentProfile instance
-            semester: Target semester
-            selections: Dict with selected course codes
+            semester: Target semester (e.g., '3RD')
+            assessment_uids: List of CourseStructure UIDs from the payload
+                Example: ["uuid1", "uuid2", "uuid3", ...]
             
         Returns:
             Dict with registration details
         """
         from django.db import transaction
         
-        # Validate selections first
-        is_valid, error_msg = SemesterRegistrationService.validate_course_selections(
-            student, semester, selections
-        )
+        if not assessment_uids:
+            raise ValueError("No assessment UIDs provided")
         
-        if not is_valid:
-            raise ValueError(error_msg)
+        # Get semester number using class constant
+        semester_num = SemesterRegistrationService.SEMESTER_MAP.get(semester, 3)
+
         
-        # Get all available courses
-        available = SemesterRegistrationService.get_available_courses(student, semester)
+        # 1. VALIDATE ELIGIBILITY FIRST
+        registration = SemesterRegistration.objects.filter(
+            student=student,
+            sem=semester_num,
+            is_open=True
+            
+        ).first()
         
-        # Collect all courses to register
-        courses_to_register = []
+        if not registration:
+            raise ValueError(f"No open registration window for semester {semester}")
         
-        # 1. MJC (Always auto-assigned)
-        courses_to_register.extend(available['courses']['major_courses']['options'])
+        if registration.status == 'REGISTERED':
+            raise ValueError(f"Already registered for semester {semester}")
         
-        # 2. MIC (Always auto-assigned)
-        courses_to_register.extend(available['courses']['minor_courses']['options'])
+        # Check if student is eligible
+        if not registration.exam_eligible:
+            raise ValueError("Student is not eligible for registration. Please check with administration.")
         
-        # 3. MDC (Always auto-assigned)
-        courses_to_register.extend(available['courses']['mdc_courses']['options'])
+        # Get session and batch
+        session = registration.session or student.session
+        batch_obj = UGBatch.objects.filter(name=student.batch).first() if student.batch else None
         
-        # 4. Other Courses
-        other_info = available['courses']['other_courses']
-        if other_info['auto_assigned']:
-            # Auto-assign all options (there should be only 1)
-            courses_to_register.extend(other_info['options'])
-        else:
-            # User selected courses from options
-            selected_codes = selections.get('other_courses', [])
-            for code in selected_codes:
-                course = next(
-                    (c for c in other_info['options'] if c['code'] == code),
-                    None
-                )
-                if course:
-                    courses_to_register.append(course)
+        # 2. FETCH COURSESTRUCTURE DATA FROM UIDs
+        course_structures = CourseStructure.objects.filter(
+            uid__in=assessment_uids,
+            semester=str(semester_num)
+        ).select_related('department')
         
-        # Create assessment entries in transaction
-        registered_courses = []
+        if not course_structures.exists():
+            raise ValueError("No valid course structures found for provided UIDs")
+        
+        # Validate that all UIDs were found
+        found_uids = set(str(cs.uid) for cs in course_structures)
+        requested_uids = set(assessment_uids)
+        missing_uids = requested_uids - found_uids
+        
+        if missing_uids:
+            raise ValueError(f"Invalid assessment UIDs: {', '.join(list(missing_uids)[:5])}")
+        
+        # 3. CREATE STUDENTCOURSEASSESSMENT ENTRIES
+        registered_assessments = []
+        courses_registered = set()  # Track unique courses
         total_credits = 0
         
         with transaction.atomic():
-            for course in courses_to_register:
-                # Check if already registered
+            for course_structure in course_structures:
+                paper_code = course_structure.paper_code or course_structure.course_code
+                
+                # Check if this assessment already exists
                 existing = StudentCourseAssessment.objects.filter(
                     student=student,
-                    semester=semester,
-                    session=student.session,
-                    paper_code=course['code']
-                ).exists()
+                    semester=str(semester_num),
+                    session=session,
+                    paper_code=paper_code,
+                    label=course_structure.label
+                ).first()
                 
                 if existing:
+                    # Skip if already registered
                     continue
                 
-                # Create assessment entry
+                # Create StudentCourseAssessment entry
+                # Extract course_type from course_code (e.g., MJC from MJC-3)
+                course_code_value = course_structure.course_code  # e.g., MJC-3, MDC-3, AEC-3
+                course_type_value = course_code_value.split('-')[0] if course_code_value and '-' in course_code_value else course_structure.course_type
+                
                 StudentCourseAssessment.objects.create(
                     student=student,
-                    semester=semester,
-                    session=student.session,
-                    batch=student.batch,
-                    paper_code=course['code'],
-                    course_name=course['name'],
-                    course_type=course['course_type'],
-                    course_max_credits=course['credit'],
-                    course_max_marks=course['marks'],
-                    department_id=None, # Will be filled by mapper script or null for common
-                    label='REGISTRATION',
+                    semester=str(semester_num),
+                    session=session,
+                    batch=batch_obj,
+                    
+                    # Course info from CourseStructure
+                    paper_code=paper_code,
+                    course_name=course_structure.course_name,
+                    course_short_name=course_structure.course_short_name,
+                    course_code=course_code_value,  # Full code: MJC-3, MJC-4, MDC-3, AEC-3, etc.
+                    course_type=course_type_value,  # Prefix only: MJC, MDC, AEC, etc.
+                    department=course_structure.department,
+                    
+                    # Assessment label (CIA-Theory, ESE-Theory, etc.)
+                    label=course_structure.label,
+                    
+                    # Individual assessment marks
+                    ind_max_marks=int(course_structure.max_marks) if course_structure.max_marks else 0,
+                    ind_pass_marks=float(course_structure.min_marks) if course_structure.min_marks else 0,
+                    # ind_is_absent=False,  # Default to present during registration
+                    
+                    # Course-level info
+                    # course_max_credits=course_structure.max_credit,
+                    # course_max_marks=course_structure.max_marks,
+                    
+                    # Student info
+                    college_code=student.college.code if student.college else None,
+                    degree=student.degree.code if student.degree else None,
                 )
                 
-                registered_courses.append({
-                    'code': course['code'],
-                    'name': course['name'],
-                    'type': course['course_type'],
-                    'auto_assigned': True # Effectively true for most
+                # Track for response
+                registered_assessments.append({
+                    'uid': str(course_structure.uid),
+                    'paper_code': paper_code,
+                    'course_name': course_structure.course_name,
+                    'label': course_structure.label,
+                    'max_marks': course_structure.max_marks,
+                    'pass_marks': course_structure.min_marks
                 })
                 
-                total_credits += course['credit'] or 0
+                # Track unique courses and credits
+                if paper_code not in courses_registered:
+                    courses_registered.add(paper_code)
+                    total_credits += course_structure.max_credit or 0
             
             # Update semester registration status
-            SemesterRegistration.objects.filter(
-                student=student,
-                sem=semester
-            ).update(status='REGISTERED')
+            registration.status = 'REGISTERED'
+            registration.save()
         
         return {
             'success': True,
             'message': f'Successfully registered for Semester {semester}',
-            'registered_courses': registered_courses,
+            'semester': semester,
+            'session': session,
+            'batch': student.batch,
+            'registered_assessments': registered_assessments,
+            'total_courses': len(courses_registered),
             'total_credits': total_credits,
-            'total_courses': len(registered_courses)
+            'total_assessments': len(registered_assessments)
         }

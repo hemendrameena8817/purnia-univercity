@@ -245,11 +245,12 @@ class ExamRegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(CommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
+    list_display = ('id','semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
+
     list_filter = ('semester', 'course_type')
     search_fields = ('semester', 'course_name', 'course_type')
     ordering = ('semester', 'course_type')
-    list_editable = ('code', 'course_name', 'ltp', 'credit', 'marks')
+    list_editable = ('semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
 
 
 @admin.register(UGExamResult)

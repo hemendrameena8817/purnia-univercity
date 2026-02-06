@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from ug.services.semester_registration_service import SemesterRegistrationService
-from ug.serializers.registration_serializers import (
+from ug.serializers import (
     EligibilityResponseSerializer,
     AvailableCoursesResponseSerializer,
     CourseSelectionRequestSerializer,
@@ -151,7 +151,7 @@ class SubmitRegistrationView(APIView):
             "aecc_courses": ["AECC301"]
         }
     }
-    
+
     Creates StudentCourseAssessment entries for:
     - Selected major courses
     - Auto-assigned minor courses (from 1st semester)
@@ -212,6 +212,6 @@ class SubmitRegistrationView(APIView):
             )
         except Exception as e:
             return Response(
-                {'error': str(e)},
+                {'error': str(e)},s
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
