@@ -559,6 +559,7 @@ SEMESTER_RESULT_CHOICES = [
     ('PROMOTED', 'Promoted'),
     ('ABSENT', 'Absent'),
     ('DISQUALIFIED', 'Disqualified'),
+    ('PARTIALDISQUALIFIED', 'Partial Disqualified'),
     ('PENDING', 'Pending'),
 ]
 

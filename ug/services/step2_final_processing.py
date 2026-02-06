@@ -318,6 +318,8 @@ class FinalResultProcessingService:
                     component_max_credit = 4 if type_str == 'Theory' else 2
                 elif course_max_credit == 5:
                     component_max_credit = 3 if type_str == 'Theory' else 2
+                elif course_max_credit == 4:
+                    component_max_credit = 3 if type_str == 'Theory' else 1
                 elif course_max_credit == 3:
                     component_max_credit = 2 if type_str == 'Theory' else 1
                 else:

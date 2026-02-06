@@ -166,3 +166,53 @@ class CollegeUserCreateSerializer(serializers.Serializer):
         )
         
         return user
+
+
+# ==================== Dashboard Serializers ====================
+
+class RegistrationWindowSerializer(serializers.Serializer):
+    """Registration window details"""
+    start_date = serializers.CharField(allow_null=True)
+    end_date = serializers.CharField(allow_null=True)
+    is_open = serializers.BooleanField()
+
+
+class RegistrationStatusSerializer(serializers.Serializer):
+    """Registration eligibility and status"""
+    eligible = serializers.BooleanField()
+    registration_open = serializers.BooleanField(required=False, default=False)
+    current_semester = serializers.IntegerField(required=False, allow_null=True)
+    next_semester = serializers.IntegerField(required=False, allow_null=True)
+    reason = serializers.CharField(required=False, allow_null=True)
+    message = serializers.CharField(required=False, allow_null=True)
+    registration_window = RegistrationWindowSerializer(required=False, allow_null=True)
+
+
+class StudentInfoSerializer(serializers.Serializer):
+    """Basic student information"""
+    registration_no = serializers.CharField(allow_null=True)
+    roll_no = serializers.CharField(required=False, allow_null=True)
+    name = serializers.CharField()
+    program = serializers.CharField(allow_null=True)
+    department = serializers.CharField(required=False, allow_null=True)
+    college = serializers.CharField(allow_null=True)
+    batch = serializers.CharField(required=False, allow_null=True)
+    current_semester = serializers.IntegerField(allow_null=True)
+    session = serializers.CharField(required=False, allow_null=True)
+
+
+class DashboardUserSerializer(serializers.Serializer):
+    """User info for dashboard"""
+    uid = serializers.UUIDField()
+    username = serializers.CharField()
+    full_name = serializers.CharField()
+    email = serializers.EmailField(allow_null=True)
+
+
+class DashboardResponseSerializer(serializers.Serializer):
+    """Complete dashboard response"""
+    success = serializers.BooleanField()
+    profile_type = serializers.CharField()
+    user = DashboardUserSerializer()
+    student_info = StudentInfoSerializer(allow_null=True)
+    registration = RegistrationStatusSerializer(allow_null=True)

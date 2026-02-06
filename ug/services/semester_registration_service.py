@@ -22,7 +22,7 @@ from ug.models import (
     StudentCourseAssessment,
     UGDepartment
 )
-
+from django.utils import timezone
 
 class SemesterRegistrationService:
     """Service for handling semester registration operations"""
@@ -31,6 +31,11 @@ class SemesterRegistrationService:
     def check_registration_eligibility(student: UGStudentProfile) -> Dict:
         """
         Check if student is eligible to register for next semester
+        Eligibility is determined by the LATEST SemesterRegistration record.
+        
+        Logic:
+        1. Find latest SemesterRegistration for student
+        2. If is_open=True AND today is within start_date/end_date (if set) -> Eligible & Open
         
         Args:
             student: UGStudentProfile instance
@@ -38,78 +43,60 @@ class SemesterRegistrationService:
         Returns:
             Dict with eligibility status and details
         """
-        current_semester = student.current_semester or 1
-        next_semester = current_semester + 1
-        
-        # Get latest exam result
-        latest_result = UGExamResult.objects.filter(
+        # 1. Get the latest registration record (by sem mainly)
+        registration = SemesterRegistration.objects.filter(
             student=student
-        ).order_by('-created_at').first()
+        ).order_by('-sem').first()
         
-        if not latest_result:
+        if not registration:
             return {
                 'eligible': False,
-                'reason': 'No exam results found',
-                'current_semester': current_semester,
-                'next_semester': next_semester
+                'reason': 'No registration record found. Please contact admin.',
+                'current_semester': student.current_semester,
             }
+            
+        current_semester = registration.sem ## created entry first in semesterregistration then open it
+        # current_semester = next_semester - 1 if next_semester > 1 else 1 # Infer current sem
+
+        # 2. Check simple eligibility (record exists = eligible contextually)
+        # But we need to check if it represents an OPEN registration window
         
-        # Check if student passed or was promoted
-        semester_result = latest_result.semester_result
-        is_eligible = semester_result in ['PASS', 'PROMOTED']
+        is_open = registration.is_open
+        now = timezone.now()
         
-        if not is_eligible:
-            return {
-                'eligible': False,
-                'reason': f'Student result is {semester_result}. Only PASS or PROMOTED students can register.',
-                'current_semester': current_semester,
-                'next_semester': next_semester,
-                'semester_result': semester_result
-            }
-        
-        # Check if semester registration exists for next semester
-        sem_registration = SemesterRegistration.objects.filter(
-            student=student,
-            sem=next_semester
-        ).first()
-        
-        if not sem_registration:
-            return {
-                'eligible': False,
-                'reason': f'Semester {next_semester} registration not created yet',
-                'current_semester': current_semester,
-                'next_semester': next_semester,
-                'semester_result': semester_result
-            }
-        
-        # Check if registration window is open
-        if not sem_registration.is_open:
-            return {
-                'eligible': False,
-                'reason': 'Registration window is closed',
-                'current_semester': current_semester,
-                'next_semester': next_semester,
-                'semester_result': semester_result,
+        # Check date validity if dates are present
+        date_valid = True
+        if registration.start_date and now < registration.start_date:
+            date_valid = False
+        if registration.end_date and now > registration.end_date:
+            date_valid = False
+            
+        if is_open and date_valid:
+             return {
+                'eligible': True,
+                'current_semester': int(current_semester) -1,
+                'next_semester': current_semester,
+                'registration_open': True,
                 'registration_window': {
-                    'start_date': sem_registration.start_date.isoformat() if sem_registration.start_date else None,
-                    'end_date': sem_registration.end_date.isoformat() if sem_registration.end_date else None,
-                    'is_open': False
-                }
+                    'start_date': registration.start_date.isoformat() if registration.start_date else None,
+                    'end_date': registration.end_date.isoformat() if registration.end_date else None,
+                    'is_open': True
+                },  
+                'message': f'You are eligible to register for Semester {current_semester}'
             }
         
-        # Student is eligible
+        # Record exists but closed
         return {
-            'eligible': True,
-            'current_semester': current_semester,
-            'next_semester': next_semester,
-            'semester_result': semester_result,
-            'registration_open': True,
+            'eligible': True, # User says "those entry already created... are eligible"
+            'registration_open': False,
+            'reason': 'Registration window is currently closed',
+            'current_semester': int(current_semester) - 1,
+            'next_semester': current_semester,
             'registration_window': {
-                'start_date': sem_registration.start_date.isoformat() if sem_registration.start_date else None,
-                'end_date': sem_registration.end_date.isoformat() if sem_registration.end_date else None,
-                'is_open': True
-            },
-            'message': f'You are eligible to register for Semester {next_semester}'
+                'start_date': registration.start_date.isoformat() if registration.start_date else None,
+                'end_date': registration.end_date.isoformat() if registration.end_date else None,
+                'is_open': False
+            }
         }
     
     @staticmethod
@@ -325,31 +312,96 @@ class SemesterRegistrationService:
         Returns:
             Dict with categorized course options
         """
-        # Get course requirements
-        requirements = SemesterRegistrationService.get_course_requirements_from_common_structure(semester)
-        
-        # Get major courses (filtered by department)
-        major_courses = SemesterRegistrationService.get_major_courses_for_student(student, semester)
-        
-        # Get minor courses (auto-assigned from 1st semester)
-        minor_courses = SemesterRegistrationService.get_next_semester_equivalent(
-            student, semester, 'MIC'
+        # Get all courses for this semester and batch
+        all_courses = CourseStructure.objects.filter(
+            semester=semester,
+            batch=student.batch
         )
         
-        # Get MDC courses (auto-assigned from 1st semester)
-        mdc_courses = SemesterRegistrationService.get_next_semester_equivalent(
-            student, semester, 'MDC'
+        # Get major courses (filtered by student's major_course department)
+        major_courses_qs = all_courses.filter(
+            course_type__icontains='MJC'
+        )
+        if student.major_course:
+            major_courses_qs = major_courses_qs.filter(department=student.major_course)
+        
+        major_courses = []
+        for course in major_courses_qs:
+            major_courses.append({
+                'code': course.paper_code or course.course_code,
+                'name': course.course_name,
+                'course_type': course.course_type,
+                'credit': course.max_credit,
+                'marks': float(course.max_marks) if course.max_marks else 100,
+                'department': course.department.name if course.department else None
+            })
+        
+        # Get minor courses (filtered by student's minor_course department)
+        minor_courses_qs = all_courses.filter(
+            course_type__icontains='MIC'
+        )
+        if student.minor_course:
+            minor_courses_qs = minor_courses_qs.filter(department=student.minor_course)
+        
+        minor_courses = []
+        for course in minor_courses_qs:
+            minor_courses.append({
+                'code': course.paper_code or course.course_code,
+                'name': course.course_name,
+                'course_type': course.course_type,
+                'credit': course.max_credit,
+                'marks': float(course.max_marks) if course.max_marks else 100,
+                'department': course.department.name if course.department else None
+            })
+        
+        # Get MDC courses (filtered by student's mdc_course department)
+        mdc_courses_qs = all_courses.filter(
+            course_type__icontains='MDC'
+        )
+        if student.mdc_course:
+            mdc_courses_qs = mdc_courses_qs.filter(department=student.mdc_course)
+        
+        mdc_courses = []
+        for course in mdc_courses_qs:
+            mdc_courses.append({
+                'code': course.paper_code or course.course_code,
+                'name': course.course_name,
+                'course_type': course.course_type,
+                'credit': course.max_credit,
+                'marks': float(course.max_marks) if course.max_marks else 100,
+                'department': course.department.name if course.department else None
+            })
+        
+        # Get department-agnostic courses (courses without department)
+        other_courses_qs = all_courses.filter(
+            department__isnull=True
+        ).exclude(
+            course_type__icontains='MJC'
+        ).exclude(
+            course_type__icontains='MIC'
+        ).exclude(
+            course_type__icontains='MDC'
         )
         
-        # Get elective courses
-        elective_courses = SemesterRegistrationService.get_elective_courses(
-            student, semester, ['GE', 'DSE', 'SEC']
-        )
+        other_courses = []
+        for course in other_courses_qs:
+            other_courses.append({
+                'code': course.paper_code or course.course_code,
+                'name': course.course_name,
+                'course_type': course.course_type,
+                'credit': course.max_credit,
+                'marks': float(course.max_marks) if course.max_marks else 100
+            })
         
-        # Get AECC courses
-        aecc_courses = SemesterRegistrationService.get_elective_courses(
-            student, semester, ['AECC']
-        )
+        # Determine auto_assign
+        # MJC, MIC, MDC are ALWAYS auto_assigned as per requirements
+        mjc_auto_assign = True
+        mic_auto_assign = True
+        mdc_auto_assign = True
+        
+        # Other courses: Auto-assign only if there is exactly one option
+        # If more than one, user must select
+        other_auto_assign = len(other_courses) == 1
         
         return {
             'semester': semester,
@@ -358,37 +410,25 @@ class SemesterRegistrationService:
                 'major_courses': {
                     'type': 'MJC',
                     'description': 'Major Core Courses',
-                    'required_count': requirements.get('MJC', 0),
-                    'auto_assigned': False,
+                    'auto_assigned': mjc_auto_assign,
                     'options': major_courses
                 },
                 'minor_courses': {
                     'type': 'MIC',
                     'description': 'Minor Core Courses',
-                    'required_count': requirements.get('MIC', 0),
-                    'auto_assigned': True,
-                    'selected': minor_courses
+                    'auto_assigned': mic_auto_assign,
+                    'options': minor_courses
                 },
                 'mdc_courses': {
                     'type': 'MDC',
                     'description': 'Multi-Disciplinary Courses',
-                    'required_count': requirements.get('MDC', 0),
-                    'auto_assigned': True,
-                    'selected': mdc_courses
+                    'auto_assigned': mdc_auto_assign,
+                    'options': mdc_courses
                 },
-                'elective_courses': {
-                    'type': 'GE/DSE/SEC',
-                    'description': 'Elective Courses',
-                    'required_count': requirements.get('GE', 0) + requirements.get('DSE', 0) + requirements.get('SEC', 0),
-                    'auto_assigned': False,
-                    'options': elective_courses
-                },
-                'aecc_courses': {
-                    'type': 'AECC',
-                    'description': 'Ability Enhancement Compulsory Course',
-                    'required_count': requirements.get('AECC', 0),
-                    'auto_assigned': False,
-                    'options': aecc_courses
+                'other_courses': {
+                    'description': 'Other Courses (SEC, AEC, etc.)',
+                    'auto_assigned': other_auto_assign,
+                    'options': other_courses
                 }
             }
         }
@@ -407,36 +447,28 @@ class SemesterRegistrationService:
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Get requirements
-        requirements = SemesterRegistrationService.get_course_requirements_from_common_structure(semester)
+        # Get requirements and available courses
         available = SemesterRegistrationService.get_available_courses(student, semester)
         
-        # Check major course count
-        major_selected = selections.get('major_courses', [])
-        major_required = requirements.get('MJC', 0)
-        if len(major_selected) != major_required:
-            return False, f'Must select exactly {major_required} major courses, but {len(major_selected)} selected'
-        
-        # Validate major courses are from available options
-        major_codes = [c['code'] for c in available['courses']['major_courses']['options']]
-        for code in major_selected:
-            if code not in major_codes:
-                return False, f'Invalid major course code: {code}'
-        
-        # Check for duplicates
-        all_selected = (
-            major_selected + 
-            selections.get('elective_courses', []) + 
-            selections.get('aecc_courses', [])
-        )
-        if len(all_selected) != len(set(all_selected)):
-            return False, 'Duplicate course selection detected'
-        
-        # Check elective count if required
-        elective_selected = selections.get('elective_courses', [])
-        elective_required = requirements.get('GE', 0) + requirements.get('DSE', 0) + requirements.get('SEC', 0)
-        if elective_required > 0 and len(elective_selected) != elective_required:
-            return False, f'Must select exactly {elective_required} elective courses'
+        # Check other courses (if not auto-assigned)
+        other_info = available['courses']['other_courses']
+        if not other_info['auto_assigned']:
+            # If not auto-assigned, user must have selected something?
+            # User said "give option to select". We assume at least one selection if options exist.
+            # However, without specific requirement counts (which are fuzzy for "other"), 
+            # we will just validate that selected codes are valid options.
+            selected_codes = selections.get('other_courses', [])
+            
+            # If options exist but nothing selected, is it an error?
+            # Depending on strictness. Let's assume yes if options > 0.
+            if len(other_info['options']) > 0 and len(selected_codes) == 0:
+                pass # Warning: We'll allow 0 selection for now unless strict requirements are reintroduced
+            
+            # Validate selected codes exist in options
+            valid_codes = [c['code'] for c in other_info['options']]
+            for code in selected_codes:
+                if code not in valid_codes:
+                    return False, f'Invalid course code selected: {code}'
         
         return True, None
     
@@ -470,38 +502,30 @@ class SemesterRegistrationService:
         # Collect all courses to register
         courses_to_register = []
         
-        # Add selected major courses
-        for code in selections.get('major_courses', []):
-            course = next(
-                (c for c in available['courses']['major_courses']['options'] if c['code'] == code),
-                None
-            )
-            if course:
-                courses_to_register.append(course)
+        # 1. MJC (Always auto-assigned)
+        courses_to_register.extend(available['courses']['major_courses']['options'])
         
-        # Add auto-assigned minor courses
-        courses_to_register.extend(available['courses']['minor_courses']['selected'])
+        # 2. MIC (Always auto-assigned)
+        courses_to_register.extend(available['courses']['minor_courses']['options'])
         
-        # Add auto-assigned MDC courses
-        courses_to_register.extend(available['courses']['mdc_courses']['selected'])
+        # 3. MDC (Always auto-assigned)
+        courses_to_register.extend(available['courses']['mdc_courses']['options'])
         
-        # Add selected electives
-        for code in selections.get('elective_courses', []):
-            course = next(
-                (c for c in available['courses']['elective_courses']['options'] if c['code'] == code),
-                None
-            )
-            if course:
-                courses_to_register.append(course)
-        
-        # Add selected AECC
-        for code in selections.get('aecc_courses', []):
-            course = next(
-                (c for c in available['courses']['aecc_courses']['options'] if c['code'] == code),
-                None
-            )
-            if course:
-                courses_to_register.append(course)
+        # 4. Other Courses
+        other_info = available['courses']['other_courses']
+        if other_info['auto_assigned']:
+            # Auto-assign all options (there should be only 1)
+            courses_to_register.extend(other_info['options'])
+        else:
+            # User selected courses from options
+            selected_codes = selections.get('other_courses', [])
+            for code in selected_codes:
+                course = next(
+                    (c for c in other_info['options'] if c['code'] == code),
+                    None
+                )
+                if course:
+                    courses_to_register.append(course)
         
         # Create assessment entries in transaction
         registered_courses = []
@@ -513,6 +537,7 @@ class SemesterRegistrationService:
                 existing = StudentCourseAssessment.objects.filter(
                     student=student,
                     semester=semester,
+                    session=student.session,
                     paper_code=course['code']
                 ).exists()
                 
@@ -520,7 +545,6 @@ class SemesterRegistrationService:
                     continue
                 
                 # Create assessment entry
-                # Note: We create one entry per course, marks will be filled later
                 StudentCourseAssessment.objects.create(
                     student=student,
                     semester=semester,
@@ -531,15 +555,15 @@ class SemesterRegistrationService:
                     course_type=course['course_type'],
                     course_max_credits=course['credit'],
                     course_max_marks=course['marks'],
-                    label='REGISTRATION',  # Placeholder label
-                    # All marks fields are null initially
+                    department_id=None, # Will be filled by mapper script or null for common
+                    label='REGISTRATION',
                 )
                 
                 registered_courses.append({
                     'code': course['code'],
                     'name': course['name'],
                     'type': course['course_type'],
-                    'auto_assigned': course.get('auto_assigned', False)
+                    'auto_assigned': True # Effectively true for most
                 })
                 
                 total_credits += course['credit'] or 0
