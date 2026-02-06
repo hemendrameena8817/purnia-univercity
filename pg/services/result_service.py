@@ -833,9 +833,49 @@ class PGResultService:
         return mapping.get(current_sem_str.upper())
 
     @staticmethod
+    def _get_next_session(current_session, current_sem_val, next_sem_val):
+        """
+        Calculate the next session based on semester transition.
+        
+        For 2-year PG courses (4 semesters):
+        - Year 1: Sem 1 (2024-25), Sem 2 (2024-25)
+        - Year 2: Sem 3 (2025-26), Sem 4 (2025-26)
+        
+        Session increments when moving from even semester to odd semester (new year).
+        
+        Args:
+            current_session (str): Current session like '2024-25'
+            current_sem_val (int): Current semester number (1-4)
+            next_sem_val (int): Next semester number (2-5)
+        
+        Returns:
+            str: Next session string
+        """
+        # If moving from even semester to odd semester (e.g., 2→3, 4→5), increment year
+        # This represents moving to a new academic year
+        if current_sem_val % 2 == 0 and next_sem_val % 2 == 1:
+            # Parse current session (e.g., '2024-25')
+            try:
+                parts = current_session.split('-')
+                if len(parts) == 2:
+                    start_year = int(parts[0])
+                    end_year = int(parts[1])
+                    
+                    # Increment both years
+                    new_start = start_year + 1
+                    new_end = end_year + 1
+                    
+                    return f"{new_start}-{new_end:02d}"
+            except (ValueError, AttributeError):
+                pass
+        
+        # Otherwise, keep the same session
+        return current_session
+
+    @staticmethod
     def _create_next_sem_registration(student, next_sem_val, session, current_sem_str):
         """
-        Create PGSemesterRegistration for next semester.
+        Create PGSemesterRegistration for next semester with correct session.
         """
         from pg.models import PGSemesterRegistration, PGDegree
         
@@ -849,15 +889,23 @@ class PGResultService:
                     if next_sem_val > student.degree.total_semesters:
                         return
 
+            # Calculate the correct session for next semester
+            # Get current semester number
+            sem_map = {'1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4}
+            current_sem_val = sem_map.get(current_sem_str.upper(), 1)
+            
+            # Determine next session based on year transition
+            next_session = PGResultService._get_next_session(session, current_sem_val, next_sem_val)
+
             PGSemesterRegistration.objects.get_or_create(
                 student=student,
                 sem=next_sem_val,
-                session=session, # Kept same session as per instruction/UG logic
+                session=next_session,  # Use calculated next session
                 defaults={
                     'status': 'PENDING',
                     'is_open': True,
                     'exam_eligible': False,
-                    'remarks': f'Promoted from {current_sem_str}'
+                    'remarks': f'Promoted from {current_sem_str} ({session}) to Sem {next_sem_val} ({next_session})'
                 }
             )
         except Exception as e:
