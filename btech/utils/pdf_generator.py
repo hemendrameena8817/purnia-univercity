@@ -3,7 +3,7 @@ def generate_btech_admit_card_pdf(student, exam):
     import io, base64, os
     from django.conf import settings
     from django.template.loader import get_template
-    from btech.models import BTechExamCenterMapping, BTechExamSchedule
+    from btech.models import BTechExamCenterMapping, BTechExamSchedule, BTechExamRegistration
     from pup_umis_backend.utils.file_utils import image_to_base64
     import logging
 
@@ -13,22 +13,38 @@ def generate_btech_admit_card_pdf(student, exam):
     exam_center = None
     if student.college:
         mapping = BTechExamCenterMapping.objects.filter(
-            exam=exam,
+            exams=exam,
             attached_colleges=student.college
         ).first()
         if mapping:
             exam_center = mapping.center
     
+    # Get the latest exam registration for this student and exam
+    registration = BTechExamRegistration.objects.filter(
+        student=student,
+        exam=exam
+    ).order_by('-created_at').first()
+
     # Get exam schedules
-    schedules = BTechExamSchedule.objects.filter(
+    schedules_query = BTechExamSchedule.objects.filter(
         exam=exam
     ).select_related('common_course_structure')
+
+    if registration and registration.exam_type in ['BACK', 'IMPROVEMENT']:
+        # Filter schedules to only include subjects selected for backlog/improvement
+        backlog_ids = registration.backlog_subjects.values_list('id', flat=True)
+        schedules = schedules_query.filter(common_course_structure_id__in=backlog_ids)
+    else:
+        # Default behavior: show all schedules for the exam
+        schedules = schedules_query
 
 
     # Prepare context for template
     context = {
         "exam": exam,
         "student": student,
+        "registration": registration,
+        "exam_type": registration.exam_type if registration else "REGULAR",
         "center_mapping": mapping,
         "center_name": exam_center.name if exam_center else "-",
         "center_code": exam_center.center_code if exam_center else "-",

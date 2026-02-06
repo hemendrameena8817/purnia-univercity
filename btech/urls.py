@@ -9,7 +9,7 @@ from .views import (
     BTechExamScheduleListView, BTechExamScheduleDetailView,
     BTechStudentAssessmentListView, BTechStudentAssessmentDetailView,
     BTechExamResultListView, BTechExamResultDetailView,
-    BTechSemesterRegistrationListView, BTechExamRegistrationListView,
+    BTechYearRegistrationListView, BTechExamRegistrationListView,
     BTechAdmitCardPDFView, BTechBulkAdmitCardPDFView
 )
 
@@ -52,7 +52,7 @@ urlpatterns = [
     path('exam-results/<uuid:uid>/', BTechExamResultDetailView.as_view(), name='btech-exam-result-detail'),
 
     # Registrations
-    path('semester-registrations/', BTechSemesterRegistrationListView.as_view(), name='btech-sem-reg-list'),
+    path('year-registrations/', BTechYearRegistrationListView.as_view(), name='btech-year-reg-list'),
     path('exam-registrations/', BTechExamRegistrationListView.as_view(), name='btech-exam-reg-list'),
 
     # Admit Card

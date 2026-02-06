@@ -8,7 +8,7 @@ from .utils.pdf_generator import generate_btech_admit_card_pdf
 from .models import (
     BTechCourse, BTechSession, BTechBatch, BTechStudentProfile, 
     BTechCourseStructure, BTechCommonCourseStructure,
-    BTechExam, BTechExamSchedule, BTechSemesterRegistration, 
+    BTechExam, BTechExamSchedule, BTechYearRegistration, 
     BTechExamRegistration, BTechStudentAssessment, BTechExamResult,
     BTechExamCenterMapping
 )
@@ -19,7 +19,7 @@ from .serializers import (
     BTechBatchSerializer, BTechStudentProfileSerializer,
     BTechCourseStructureSerializer, BTechCommonCourseStructureSerializer,
     BTechExamSerializer, BTechExamScheduleSerializer, 
-    BTechSemesterRegistrationSerializer, BTechExamRegistrationSerializer,
+    BTechYearRegistrationSerializer, BTechExamRegistrationSerializer,
     BTechStudentAssessmentSerializer, BTechExamResultSerializer
 )
 
@@ -359,14 +359,14 @@ class BTechExamResultDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 # Registration Views
-class BTechSemesterRegistrationListView(APIView):
+class BTechYearRegistrationListView(APIView):
     def get(self, request):
-        registrations = BTechSemesterRegistration.objects.all()
-        serializer = BTechSemesterRegistrationSerializer(registrations, many=True)
+        registrations = BTechYearRegistration.objects.all()
+        serializer = BTechYearRegistrationSerializer(registrations, many=True)
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = BTechSemesterRegistrationSerializer(data=request.data)
+        serializer = BTechYearRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -410,7 +410,7 @@ class BTechAdmitCardPDFView(View):
         disposition = 'attachment' if download else 'inline'
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
-        response["Content-Disposition"] = f'{disposition}; filename="Admit_Card_{registration_no}_SEM_{exam.semester}.pdf"'
+        response["Content-Disposition"] = f'{disposition}; filename="Admit_Card_{registration_no}_YEAR_{exam.year}.pdf"'
         return response
 
 class BTechBulkAdmitCardPDFView(APIView):
@@ -425,14 +425,11 @@ class BTechBulkAdmitCardPDFView(APIView):
 
         exam = get_object_or_404(BTechExam, uid=exam_uid)
         
-        # Find students sharing the same semester and session as the exam
-        students = BTechStudentProfile.objects.filter(
-            current_semester=exam.semester,
-            session_str=exam.session
-        )
-
-        if not students.exists():
-            return Response({"message": f"No students found for Semester {exam.semester}, Session {exam.session}"}, status=status.HTTP_404_NOT_FOUND)
+        # Find students who are actually registered for this specific exam
+        registrations = BTechExamRegistration.objects.filter(exam=exam).select_related('student')
+        
+        if not registrations.exists():
+            return Response({"message": f"No registrations found for Exam: {exam.name}"}, status=status.HTTP_404_NOT_FOUND)
 
         # Create directory for saving PDFs
         # Use a safe name for the directory
@@ -447,12 +444,13 @@ class BTechBulkAdmitCardPDFView(APIView):
         failure_count = 0
         results = []
 
-        for student in students:
+        for reg in registrations:
+            student = reg.student
             if not student:
                 continue
                 
             reg_no = student.registration_no or f"unknown_{student.uid}"
-            filename = f"Admit_Card_{reg_no}_SEM_{exam.semester}.pdf"
+            filename = f"Admit_Card_{reg_no}_YEAR_{exam.year}.pdf"
             file_path = os.path.join(save_dir, filename)
 
             try:
@@ -477,7 +475,7 @@ class BTechBulkAdmitCardPDFView(APIView):
         return Response({
             "message": "Bulk generation completed",
             "exam_name": exam.name,
-            "total_attempted": students.count(),
+            "total_attempted": registrations.count(),
             "success_count": success_count,
             "failure_count": failure_count,
             "save_directory": save_dir,
