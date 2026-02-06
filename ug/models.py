@@ -430,7 +430,14 @@ class StudentCourseAssessment(models.Model):
             # Course-based queries
             models.Index(fields=['paper_code', 'semester'], name='idx_paper_sem'),
             models.Index(fields=['semester', 'label'], name='idx_sem_label'),
+            
+            # CRITICAL: Registration duplicate checking (30k students optimization)
+            # Includes exam_type to differentiate regular vs back exams
+            models.Index(fields=['student', 'semester', 'session', 'paper_code', 'label', 'exam_type'], 
+                        name='idx_reg_dup_check'),
         ]
+
+
         
     def save(self, *args, **kwargs):
         """
@@ -547,6 +554,13 @@ class SemesterRegistration(models.Model):
     class Meta:
         verbose_name = 'Semester Registration'
         verbose_name_plural = 'Semester Registrations'
+        
+        # Composite index for eligibility checking (used during registration)
+        indexes = [
+            models.Index(fields=['student', 'sem', 'is_open', 'status'], 
+                        name='idx_eligibility_check'),
+        ]
+
 
     def __str__(self):
         return f"{self.student}"

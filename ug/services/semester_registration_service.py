@@ -530,6 +530,7 @@ class SemesterRegistrationService:
                                     assessment_uids: list) -> Dict:
         """
         Create StudentCourseAssessment entries from assessment UIDs
+        OPTIMIZED FOR HIGH VOLUME: 30k students, 800k existing rows
         
         Args:
             student: UGStudentProfile instance
@@ -542,19 +543,22 @@ class SemesterRegistrationService:
         """
         from django.db import transaction
         
+        # === VALIDATION PHASE (Fast, before expensive queries) ===
         if not assessment_uids:
             raise ValueError("No assessment UIDs provided")
         
+        # Limit number of assessments to prevent abuse
+        if len(assessment_uids) > 50:
+            raise ValueError(f"Too many assessments ({len(assessment_uids)}). Maximum 50 allowed.")
+        
         # Get semester number using class constant
         semester_num = SemesterRegistrationService.SEMESTER_MAP.get(semester, 3)
-
         
-        # 1. VALIDATE ELIGIBILITY FIRST
-        registration = SemesterRegistration.objects.filter(
+        # 1. VALIDATE ELIGIBILITY (Single query with select_related)
+        registration = SemesterRegistration.objects.select_related('student').filter(
             student=student,
             sem=semester_num,
             is_open=True
-            
         ).first()
         
         if not registration:
@@ -567,109 +571,144 @@ class SemesterRegistrationService:
         if not registration.exam_eligible:
             raise ValueError("Student is not eligible for registration. Please check with administration.")
         
-        # Get session and batch
+        # Get session and batch (optimize batch query)
         session = registration.session or student.session
-        batch_obj = UGBatch.objects.filter(name=student.batch).first() if student.batch else None
+        batch_obj = None
+        if student.batch:
+            batch_obj = UGBatch.objects.only('id', 'name').filter(name=student.batch).first()
         
-        # 2. FETCH COURSESTRUCTURE DATA FROM UIDs
-        course_structures = CourseStructure.objects.filter(
-            uid__in=assessment_uids,
-            semester=str(semester_num)
-        ).select_related('department')
+        # 2. FETCH COURSESTRUCTURE DATA (Optimized query with select_related)
+        course_structures = list(
+            CourseStructure.objects.filter(
+                uid__in=assessment_uids,
+                semester=str(semester_num)
+            ).select_related('department').only(
+                'uid', 'paper_code', 'course_code', 'course_name', 'course_short_name',
+                'course_type', 'label', 'max_marks', 'min_marks', 'max_credit',
+                'department__id', 'department__name'
+            )
+        )
         
-        if not course_structures.exists():
+        if not course_structures:
             raise ValueError("No valid course structures found for provided UIDs")
         
-        # Validate that all UIDs were found
-        found_uids = set(str(cs.uid) for cs in course_structures)
+        # Validate all UIDs were found
+        found_uids = {str(cs.uid) for cs in course_structures}
         requested_uids = set(assessment_uids)
         missing_uids = requested_uids - found_uids
         
         if missing_uids:
             raise ValueError(f"Invalid assessment UIDs: {', '.join(list(missing_uids)[:5])}")
         
-        # 3. CREATE STUDENTCOURSEASSESSMENT ENTRIES
+        # 3. CHECK FOR EXISTING REGISTRATIONS (Single bulk query)
+        # Build list of (paper_code, label, exam_type) tuples to check
+        # Note: exam_type differentiates regular vs back exams
+        assessment_keys = [
+            (cs.paper_code or cs.course_code, cs.label, 'Regular')  # Default to 'Regular' for new registrations
+            for cs in course_structures
+        ]
+        
+        # Get existing assessments in one query using Q objects
+        from django.db.models import Q
+        existing_query = Q()
+        for paper_code, label, exam_type in assessment_keys:
+            existing_query |= Q(paper_code=paper_code, label=label, exam_type=exam_type)
+        
+        existing_assessments = set(
+            StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=str(semester_num),
+                session=session
+            ).filter(existing_query).values_list('paper_code', 'label', 'exam_type')
+        )
+        
+        # 4. PREPARE BULK CREATE (Build list of objects to create)
+        assessments_to_create = []
         registered_assessments = []
-        courses_registered = set()  # Track unique courses
+        courses_registered = set()
         total_credits = 0
         
-        with transaction.atomic():
-            for course_structure in course_structures:
-                paper_code = course_structure.paper_code or course_structure.course_code
-                
-                # Check if this assessment already exists
-                existing = StudentCourseAssessment.objects.filter(
-                    student=student,
-                    semester=str(semester_num),
-                    session=session,
-                    paper_code=paper_code,
-                    label=course_structure.label
-                ).first()
-                
-                if existing:
-                    # Skip if already registered
-                    continue
-                
-                # Create StudentCourseAssessment entry
-                # Extract course_type from course_code (e.g., MJC from MJC-3)
-                course_code_value = course_structure.course_code  # e.g., MJC-3, MDC-3, AEC-3
-                course_type_value = course_code_value.split('-')[0] if course_code_value and '-' in course_code_value else course_structure.course_type
-                
-                StudentCourseAssessment.objects.create(
-                    student=student,
-                    semester=str(semester_num),
-                    session=session,
-                    batch=batch_obj,
-                    
-                    # Course info from CourseStructure
-                    paper_code=paper_code,
-                    course_name=course_structure.course_name,
-                    course_short_name=course_structure.course_short_name,
-                    course_code=course_code_value,  # Full code: MJC-3, MJC-4, MDC-3, AEC-3, etc.
-                    course_type=course_type_value,  # Prefix only: MJC, MDC, AEC, etc.
-                    department=course_structure.department,
-                    
-                    # Assessment label (CIA-Theory, ESE-Theory, etc.)
-                    label=course_structure.label,
-                    
-                    # Individual assessment marks
-                    ind_max_marks=int(course_structure.max_marks) if course_structure.max_marks else 0,
-                    ind_pass_marks=float(course_structure.min_marks) if course_structure.min_marks else 0,
-                    # ind_is_absent=False,  # Default to present during registration
-                    
-                    # Course-level info
-                    # course_max_credits=course_structure.max_credit,
-                    # course_max_marks=course_structure.max_marks,
-                    
-                    # Student info
-                    college_code=student.college.code if student.college else None,
-                    degree=student.degree.code if student.degree else None,
-                )
-                
-                # Track for response
-                registered_assessments.append({
-                    'uid': str(course_structure.uid),
-                    'paper_code': paper_code,
-                    'course_name': course_structure.course_name,
-                    'label': course_structure.label,
-                    'max_marks': course_structure.max_marks,
-                    'pass_marks': course_structure.min_marks
-                })
-                
-                # Track unique courses and credits
-                if paper_code not in courses_registered:
-                    courses_registered.add(paper_code)
-                    total_credits += course_structure.max_credit or 0
+        # Get college and degree codes once
+        college_code = student.college.code if student.college else None
+        degree_code = student.degree.code if student.degree else None
+        
+        for course_structure in course_structures:
+            paper_code = course_structure.paper_code or course_structure.course_code
+            label = course_structure.label
+            exam_type = 'Regular'  # New registrations are always 'Regular' (back exams handled separately)
             
-            # Update semester registration status
+            # Skip if already exists (including exam_type check)
+            if (paper_code, label, exam_type) in existing_assessments:
+
+                continue
+            
+            # Extract course_type from course_code (e.g., MJC from MJC-3)
+            course_code_value = course_structure.course_code
+            course_type_value = (
+                course_code_value.split('-')[0] 
+                if course_code_value and '-' in course_code_value 
+                else course_structure.course_type
+            )
+            
+            # Create assessment object (don't save yet)
+            assessment = StudentCourseAssessment(
+                student=student,
+                semester=str(semester_num),
+                session=session,
+                batch=batch_obj,
+                
+                # Course info
+                paper_code=paper_code,
+                course_name=course_structure.course_name,
+                course_short_name=course_structure.course_short_name,
+                course_code=course_code_value,
+                course_type=course_type_value,
+                department=course_structure.department,
+                
+                # Assessment info
+                label=label,
+                exam_type=exam_type,  # 'Regular' for new registrations
+                ind_max_marks=int(course_structure.max_marks) if course_structure.max_marks else 0,
+                ind_pass_marks=float(course_structure.min_marks) if course_structure.min_marks else 0,
+                
+                # Student info
+                college_code=college_code,
+                degree=degree_code,
+            )
+            
+            assessments_to_create.append(assessment)
+            
+            # Track for response
+            registered_assessments.append({
+                'uid': str(course_structure.uid),
+                'paper_code': paper_code,
+                'course_name': course_structure.course_name,
+                'label': label,
+                'max_marks': course_structure.max_marks,
+                'pass_marks': course_structure.min_marks
+            })
+            
+            # Track unique courses and credits
+            if paper_code not in courses_registered:
+                courses_registered.add(paper_code)
+                total_credits += course_structure.max_credit or 0
+        
+        # 5. BULK INSERT IN TRANSACTION (Much faster than individual creates)
+        with transaction.atomic():
+            if assessments_to_create:
+                # Use bulk_create for massive performance improvement
+                StudentCourseAssessment.objects.bulk_create(
+                    assessments_to_create,
+                    batch_size=500  # Process in batches of 500
+                )
+            
+            # Update registration status
             registration.status = 'REGISTERED'
-            registration.save()
+            registration.save(update_fields=['status'])
         
         return {
             'success': True,
             'message': f'Successfully registered for Semester {semester}',
-            'semester': semester,
-            'session': session,
             'batch': student.batch,
             'registered_assessments': registered_assessments,
             'total_courses': len(courses_registered),
