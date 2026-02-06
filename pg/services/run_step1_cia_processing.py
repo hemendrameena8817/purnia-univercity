@@ -6,7 +6,7 @@ Run this script after CIA marks entry is complete.
 Usage:
     # Dry run (no database changes)
     python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1ST --dry-run    # Production run
-    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1ST --session 2024-25
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2025-26 --dry-run
 """
 
 import os
