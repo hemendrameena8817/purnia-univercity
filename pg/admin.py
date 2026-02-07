@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.http import HttpResponse
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
@@ -348,6 +351,122 @@ class PGExamResultAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     
     list_per_page = 50
+    
+    # Add custom actions
+    actions = ['export_pass_promoted_to_excel']
+    
+    def export_pass_promoted_to_excel(self, request, queryset):
+        """
+        Export PGExamResult records to Excel, filtering only PASS and PROMOTED students
+        from Semester 2, Session 2024-25
+        """
+        # Ignore the selected queryset and fetch ALL matching records from database
+        # This ensures we export all students, not just those on the current page
+        filtered_queryset = PGExamResult.objects.filter(
+            semester_result__in=['PASS', 'PROMOTED'],
+            semester='2ND',
+            session='2024-25'
+        )
+        
+        if not filtered_queryset.exists():
+            self.message_user(request, "No PASS or PROMOTED records found for Semester 2, Session 2024-25.", level='warning')
+            return
+        
+        # Create workbook and worksheet
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "PG Exam Results"
+        
+        # Define headers
+        headers = [
+            'Registration No',
+            'Student Name',
+            'Department',
+            'Program',
+            'Batch',
+            'Semester',
+            'Session',
+            'CIA Status',
+            'ESE Status',
+            'Semester Result',
+            'SGPA',
+            'Credits Earned',
+            'Max Credits',
+            'Next Semester',
+            'Next Sem Status',
+            'Published At',
+            'Created At'
+        ]
+        
+        # Style the header row
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        
+        # Write headers
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # Set column widths
+        column_widths = [15, 25, 20, 25, 15, 10, 10, 12, 12, 15, 8, 12, 12, 12, 15, 18, 18]
+        for col_num, width in enumerate(column_widths, 1):
+            ws.column_dimensions[ws.cell(row=1, column=col_num).column_letter].width = width
+        
+        # Write data rows
+        for row_num, result in enumerate(filtered_queryset.select_related('student', 'student__department', 'student__program'), 2):
+            # Helper function to get CIA/ESE status display
+            def get_status_display(status):
+                if status is None:
+                    return 'Pending'
+                return 'PASS' if status else 'FAIL'
+            
+            row_data = [
+                result.student.registration_no if result.student else 'N/A',
+                f"{result.student.first_name} {result.student.last_name}" if result.student else 'N/A',
+                result.student.department.name if result.student and result.student.department else 'N/A',
+                result.student.program.name if result.student and result.student.program else 'N/A',
+                result.student.batch if result.student else 'N/A',
+                result.semester,
+                result.session,
+                get_status_display(result.cia_pass),
+                get_status_display(result.ese_pass),
+                result.semester_result,
+                float(result.sgpa) if result.sgpa else 0.0,
+                result.semester_credit_earned,
+                result.semester_max_credit,
+                result.next_semester if result.next_semester else 'N/A',
+                result.next_sem_status if result.next_sem_status else 'N/A',
+                result.published_at.strftime('%Y-%m-%d %H:%M:%S') if result.published_at else 'Not Published',
+                result.created_at.strftime('%Y-%m-%d %H:%M:%S') if result.created_at else 'N/A'
+            ]
+            
+            for col_num, value in enumerate(row_data, 1):
+                cell = ws.cell(row=row_num, column=col_num)
+                cell.value = value
+                cell.alignment = Alignment(vertical="center")
+        
+        # Freeze the header row
+        ws.freeze_panes = ws['A2']
+        
+        # Prepare response
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = 'attachment; filename=pg_exam_results_pass_promoted.xlsx'
+        
+        # Save workbook to response
+        wb.save(response)
+        
+        # Show success message
+        self.message_user(request, f"Successfully exported {filtered_queryset.count()} PASS/PROMOTED records (Sem 2, 2024-25) to Excel.", level='success')
+        
+        return response
+    
+    export_pass_promoted_to_excel.short_description = "Export Sem 2 (2024-25) PASS/PROMOTED to Excel"
     
     # Custom methods for list display
     def get_student_regno(self, obj):

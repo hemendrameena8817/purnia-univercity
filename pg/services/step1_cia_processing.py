@@ -76,14 +76,17 @@ class PGCIAResultProcessingService:
         # Get batch object first
         from pg.models import PGBatch
         try:
-            batch_obj = PGBatch.objects.get(name=self.batch)
+            batch_objs = list(PGBatch.objects.filter(name=self.batch))
+            if not batch_objs:
+                raise PGBatch.DoesNotExist
         except PGBatch.DoesNotExist:
             print(f"\n❌ ERROR: Batch '{self.batch}' not found in database")
             return self.stats
         
         # Get all students in batch who have assessments in this semester
+        # PGBatch.name is usually what PGStudentProfile.batch (CharField) stores.
         students = PGStudentProfile.objects.filter(
-            batch=batch_obj,
+            batch=self.batch,
             course_assessments__semester=self.semester
         ).distinct()
         self.stats['total_students'] = students.count()
@@ -139,6 +142,43 @@ class PGCIAResultProcessingService:
             semester=self.semester,
             label__icontains='MID_TERM'  # PG uses MID_TERM instead of CIA
         )
+
+        # CHECK PROMOTION STATUS (For Semesters > 1)
+        # Convert semester to int to check if > 1
+        sem_map_int = {'1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4}
+        current_sem_num = sem_map_int.get(self.semester.upper())
+        
+        if current_sem_num and current_sem_num > 1:
+            # Find previous semester string
+            # Invert map to find string from int
+            prev_sem_num = current_sem_num - 1
+            prev_sem_str = next((k for k, v in sem_map_int.items() if v == prev_sem_num), None)
+            
+            if prev_sem_str:
+                # Check previous semester result
+                # Handle potential duplicates (e.g. from different sessions) by taking the latest updated one
+                prev_result = PGExamResult.objects.filter(
+                    student=student,
+                    semester=prev_sem_str
+                ).order_by('-updated_at').first()
+                
+                if prev_result:
+                    # Check if passed ALL CIA in previous semester
+                    # User requirement: "check he is pass all cia in his previous sem"
+                    if not prev_result.cia_pass:
+                        if show_detail:
+                            print(f"⚠️ SKIPPING: Student failed CIA in {prev_sem_str} (cia_pass: {prev_result.cia_pass})")
+                        return
+                    
+                    # Also check for valid promotion status
+                    if prev_result.semester_result not in ['PASS', 'PROMOTED']:
+                       if show_detail:
+                           print(f"⚠️ SKIPPING: Student not promoted from {prev_sem_str} (Status: {prev_result.semester_result})")
+                       return
+                else:
+                    if show_detail:
+                        print(f"⚠️ SKIPPING: No result record found for {prev_sem_str}")
+                    return
         
         if not cia_assessments.exists():
             # No CIA assessments found - skip
@@ -249,34 +289,56 @@ class PGCIAResultProcessingService:
     
     def _create_or_update_exam_result(self, student: PGStudentProfile, cia_passed: bool):
         """
-        Create or update PGExamResult entry
+        Create or update PGExamResult entry - IDEMPOTENT VERSION
         
         Args:
             student: PGStudentProfile instance
             cia_passed: Whether student passed CIA
         """
-        result, created = PGExamResult.objects.get_or_create(
-            student=student,
-            semester=self.semester,
-            session=self.session,
-            defaults={
-                'cia_pass': cia_passed,
-                # 'ese_pass': False,  # ESE not yet processed
-                'semester_result': 'PENDING',
-                'semester_max_credit': 0,
-                'semester_credit_earned': 0,
-                'sgpa': Decimal('0.00'),
-                'is_legacy': False,
-            }
-        )
+        # 1. Try to find EXISTING record for this student & semester (ignoring session initially)
+        # This handles cases where 'session' string might differ slightly (2024-25 vs 2024-2025)
+        # or if we just want to update the existing record for this semester.
         
-        if created:
-            self.stats['exam_results_created'] += 1
-        else:
-            # Update existing entry
-            result.cia_pass = cia_passed
-            result.save(update_fields=['cia_pass', 'updated_at'])
+        existing_result = PGExamResult.objects.filter(
+            student=student,
+            semester=self.semester
+        ).first()
+        
+        # 2. If not found, try normalized semester (e.g. '1' vs '1ST')
+        if not existing_result:
+            sem_map = {'1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4'}
+            normalized_sem = sem_map.get(self.semester.upper())
+            if normalized_sem:
+                 existing_result = PGExamResult.objects.filter(
+                    student=student,
+                    semester=normalized_sem
+                ).first()
+        
+        if existing_result:
+            # UPDATE existing
+            existing_result.cia_pass = cia_passed
+            existing_result.session = self.session # Update to current session string
+            existing_result.semester = self.semester # Update to current semester string
+            
+            # Reset status if it was pending or handle logic solely for CIA update?
+            # We only update CIA status here. 
+            existing_result.save(update_fields=['cia_pass', 'session', 'semester', 'updated_at'])
             self.stats['exam_results_updated'] += 1
+            
+        else:
+            # CREATE new
+            PGExamResult.objects.create(
+                student=student,
+                semester=self.semester,
+                session=self.session,
+                cia_pass=cia_passed,
+                semester_result='PENDING',
+                semester_max_credit=0,
+                semester_credit_earned=0,
+                sgpa=Decimal('0.00'),
+                is_legacy=False,
+            )
+            self.stats['exam_results_created'] += 1
             
     def _create_exam_registration(self, student: PGStudentProfile):
         """

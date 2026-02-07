@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram
+from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment
 from colleges.models import College
 
 
@@ -54,3 +54,55 @@ class PGStudentProfileSerializer(serializers.ModelSerializer):
             'status', 'session', 'batch', 'is_active'
         ]
         read_only_fields = ['uid']
+
+class PGStudentCourseAssessmentSerializer(serializers.ModelSerializer):
+    """
+    Serializer for CIA Marks Entry.
+    Allows updating marks obtained and absent status.
+    """
+    class Meta:
+        model = PGStudentCourseAssessment
+        fields = [
+            'id', 
+            'student', 'paper_code', 'label', 
+            'ind_marks_obtained', 'ind_max_marks', 'ind_pass_marks', 
+            'ind_is_absent', 'ind_is_pass'
+        ]
+        read_only_fields = [
+            'student', 'paper_code', 'label', 
+            'ind_max_marks', 'ind_pass_marks', 'ind_is_pass'
+        ]
+    
+    def validate(self, data):
+        """
+        Check that marks obtained do not exceed max marks.
+        """
+        instance = self.instance
+        if instance:
+            max_marks = instance.ind_max_marks
+            new_marks = data.get('ind_marks_obtained')
+            
+            if new_marks is not None and max_marks is not None:
+                if new_marks > max_marks:
+                    raise serializers.ValidationError(
+                        f"Marks obtained ({new_marks}) cannot exceed max marks ({max_marks})."
+                    )
+        return data
+
+    def update(self, instance, validated_data):
+        """
+        Auto-calculate pass status on update.
+        """
+        instance = super().update(instance, validated_data)
+        
+        # Recalculate pass status
+        if instance.ind_marks_obtained is not None and instance.ind_pass_marks is not None:
+            if instance.ind_is_absent:
+                instance.ind_is_pass = False
+            else:
+                instance.ind_is_pass = instance.ind_marks_obtained >= instance.ind_pass_marks
+        elif instance.ind_is_absent:
+             instance.ind_is_pass = False
+             
+        instance.save()
+        return instance
