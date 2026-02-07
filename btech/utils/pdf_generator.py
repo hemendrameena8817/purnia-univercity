@@ -170,3 +170,119 @@ def generate_btech_roll_sheet_pdf(exam, college, branch):
     except Exception as e:
         logger.error(f"Roll Sheet PDF generation failed: {str(e)}")
         return None
+
+
+def generate_btech_attendance_sheet_pdf(exam, college, branch):
+    """
+    Generate student-wise attendance sheets for BTech students.
+    Each student gets their own sheet with their exam schedule.
+    """
+    from weasyprint import HTML, CSS
+    from django.conf import settings
+    from django.template.loader import get_template
+    from btech.models import (
+        BTechExamRegistration, 
+        BTechExamSchedule,
+        BTechExamCenterMapping
+    )
+    from pup_umis_backend.utils.file_utils import image_to_base64, generate_barcode_base64
+    import os
+    import base64
+    import logging
+    from django.db.models import Q
+
+    logger = logging.getLogger(__name__)
+
+    # Get all students registered for this exam from the specified college and branch
+    registrations = BTechExamRegistration.objects.filter(
+        exam=exam,
+        student__college=college,
+        student__branch=branch
+    ).select_related('student').order_by('student__roll_no')
+    
+    if not registrations.exists():
+        logger.warning(f"No registrations found for Exam: {exam.name}, "
+                     f"College: {college.name}, Branch: {branch.name}")
+        return None
+
+    # Get exam center mapping
+    exam_center = None
+    mapping = BTechExamCenterMapping.objects.filter(
+        exams=exam,
+        attached_colleges=college
+    ).first()
+    
+    if mapping and hasattr(mapping, 'center'):
+        exam_center = mapping.center
+    
+    # Get university logo
+    logo_path = os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")
+    university_logo = image_to_base64(logo_path) if os.path.exists(logo_path) else None
+
+    # Get exam schedules for this branch
+    schedules = BTechExamSchedule.objects.filter(
+        exam=exam,
+        common_course_structure__branch=branch
+    ).select_related('common_course_structure').order_by('exam_date', 'exam_time')
+    
+    # Prepare attendance data for each student
+    attendance_data = []
+    for reg in registrations:
+        student = reg.student
+        
+        # Generate barcode for student's registration number
+        barcode_text = f"Roll:{student.roll_no or ''}, Reg:{student.registration_no or ''}, Name:{student.get_full_name()}, Branch:{branch.name}"
+        barcode_bytes = generate_barcode_base64(barcode_text)
+        barcode_base64 = barcode_bytes if barcode_bytes else None
+        
+        # Get student photo
+        photo_base64 = None
+        if hasattr(student, 'profile_image') and student.profile_image:
+            try:
+                photo_base64 = image_to_base64(student.profile_image.path)
+            except Exception as e:
+                logger.error(f"Error reading photo for {student.registration_no}: {str(e)}")
+        
+        # Prepare student schedules
+        student_schedules = []
+        for schedule in schedules:
+            # Check if this schedule is relevant for the student's registration
+            if reg.exam_type == 'REGULAR' or \
+               (hasattr(reg, 'backlog_subjects') and 
+                schedule.common_course_structure in reg.backlog_subjects.all()):
+                student_schedules.append({
+                    'date': schedule.exam_date.strftime('%d-%m-%Y') if schedule.exam_date else 'TBD',
+                    'sitting': schedule.get_exam_time_display() if hasattr(schedule, 'get_exam_time_display') else 'TBD',
+                    'subject_name': schedule.common_course_structure.course_name if schedule.common_course_structure else 'N/A',
+                    'subject_code': schedule.common_course_structure.code if schedule.common_course_structure else 'N/A',
+                })
+        
+        attendance_data.append({
+            'name': student.get_full_name() if hasattr(student, 'get_full_name') else student.name,
+            'roll_no': student.roll_no or 'N/A',
+            'registration_no': student.registration_no or 'N/A',
+            'photo': photo_base64,
+            'college_name': college.name,
+            'barcode': barcode_base64,
+            'schedules': student_schedules
+        })
+    
+    # Prepare context for the template
+    context = {
+        'attendance_data': attendance_data,
+        'university_logo': university_logo,
+        'exam_header': f"{exam.name}",
+        'center_name': f"{exam_center.center_code} - {exam_center.name}" if exam_center else "Not Assigned"
+    }
+    
+    # Render HTML
+    html_string = get_template('btech/attendance_sheet.html').render(context)
+    
+    try:
+        # Generate PDF
+        html = HTML(string=html_string, base_url=settings.MEDIA_ROOT)
+        pdf = html.write_pdf()
+        return pdf
+    except Exception as e:
+        logger.error(f"Attendance Sheet PDF generation failed: {str(e)}")
+        return None
