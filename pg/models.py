@@ -407,6 +407,8 @@ class PGStudentCourseAssessment(models.Model):
     #####temp#####
     temp_total_gp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
     #####temp#####
+    is_cia_fill = models.BooleanField(default=False, help_text="Is CIA Fill")
+    is_ese_fill = models.BooleanField(default=False, help_text="Is ESE Fill")
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")

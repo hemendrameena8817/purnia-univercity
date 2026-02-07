@@ -1,57 +1,324 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import transaction
-from .models import PGStudentCourseAssessment
+from .models import PGStudentCourseAssessment, PGDepartment
 from .serializers import PGStudentCourseAssessmentSerializer
 
 class PGCIAMarksEntryView(APIView):
     """
     API View for Bulk CIA Marks Entry.
-    Accepts a list of assessment updates.
+    Only accessible by college users who can manage marks.
+    Restricted to students from the user's college.
     
     Request Body:
     [
-        {"id": 123, "ind_marks_obtained": 25, "ind_is_absent": false},
-        {"id": 124, "ind_marks_obtained": 0, "ind_is_absent": true}
+        {"uid": "123e4567-e89b-12d3-a456-426614174000", "ind_marks_obtained": 25, "ind_is_absent": false},
+        {"uid": "223e4567-e89b-12d3-a456-426614174001", "ind_marks_obtained": 0, "ind_is_absent": true}
     ]
     """
-    permission_classes = [] # Allow unauthenticated access for testing/internal use
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
     
     def post(self, request):
+        # Check if user is a college user
+        if request.user.user_type != 'college_user':
+            return Response({
+                "error": "Access denied. Only college users can enter marks."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get college from user's college profile
+        try:
+            college_profile = request.user.college_profile
+            user_college = college_profile.college
+                
+        except AttributeError:
+            return Response({
+                "error": "College profile not found for this user."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         data = request.data
         if not isinstance(data, list):
-            return Response({"error": "Expected a list of updates."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "error": "Expected a list of updates."
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         updated_count = 0
         errors = []
         
         with transaction.atomic():
             for item in data:
-                assess_id = item.get('id')
-                if not assess_id:
-                    errors.append({"error": "Missing 'id' field", "item": item})
+                assess_uid = item.get('uid')
+                if not assess_uid:
+                    errors.append({"error": "Missing 'uid' field", "item": item})
                     continue
                 
                 try:
-                    assessment = PGStudentCourseAssessment.objects.select_for_update().get(id=assess_id)
+                    assessment = PGStudentCourseAssessment.objects.select_for_update().get(uid=assess_uid)
+                    
+                    # Verify that the student belongs to the user's college
+                    if assessment.student.college != user_college:
+                        errors.append({
+                            "uid": assess_uid,
+                            "error": f"Student does not belong to your college. Student college: {assessment.student.college}, Your college: {user_college}"
+                        })
+                        continue
+                        
                 except PGStudentCourseAssessment.DoesNotExist:
-                    errors.append({"error": f"Assessment with id {assess_id} not found."})
+                    errors.append({"error": f"Assessment with uid {assess_uid} not found."})
                     continue
                 
                 serializer = PGStudentCourseAssessmentSerializer(assessment, data=item, partial=True)
                 if serializer.is_valid():
-                    serializer.save()
+                    # Save the marks and set is_cia_fill to True
+                    assessment_obj = serializer.save()
+                    assessment_obj.is_cia_fill = True
+                    assessment_obj.save()
                     updated_count += 1
                 else:
-                    errors.append({"id": assess_id, "errors": serializer.errors})
+                    errors.append({"uid": assess_uid, "errors": serializer.errors})
         
         response_data = {
             "message": f"Successfully updated {updated_count} records.",
-            "errors": errors
         }
         
         if errors:
             return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
             
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class PGCollegeStudentsView(APIView):
+    """
+    API View to get students from the logged-in college user's college.
+    Queries from PGStudentCourseAssessment to get students with actual assessment records.
+    
+    Query Parameters:
+    - department: Filter by department UID
+    - semester: Filter by semester (e.g., '3RD')
+    - batch: Filter by batch name (e.g., '2024-26')
+    - session: Filter by session (e.g., '2024-25')
+    
+    Example: GET /api/pg/college-students/?department=<uid>&semester=3RD&batch=2024-26&session=2024-25
+    
+    Returns: List of students with uid and name only
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Check if user is a college user
+        if request.user.user_type != 'college_user':
+            return Response({
+                "error": "Access denied. Only college users can access this endpoint."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Get college from user's college profile
+        try:
+            college_profile = request.user.college_profile
+            user_college = college_profile.college
+        except AttributeError:
+            return Response({
+                "error": "College profile not found for this user."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get query parameters
+        department_uid = request.query_params.get('department')
+        semester = request.query_params.get('semester')
+        batch_name = request.query_params.get('batch')
+        session = request.query_params.get('session')
+        subject_uid = request.query_params.get('subject')
+        
+        # Build filter for assessments
+        filters = {
+            'student__college': user_college
+        }
+        
+        if department_uid:
+            filters['department__uid'] = department_uid
+        if semester:
+            filters['semester'] = semester
+        if batch_name:
+            filters['batch__name'] = batch_name
+        if session:
+            filters['session'] = session
+            
+        if subject_uid:
+            from .models import PGCourseStructure
+            from django.core.exceptions import ValidationError
+            try:
+                subject = PGCourseStructure.objects.get(uid=subject_uid)
+                # Filter by course_code from the subject (e.g., 'EC-1', 'CC-2')
+                # Use either 'code' or 'course_code' field from PGCourseStructure
+                course_code_value = subject.course_code or subject.code
+                if course_code_value:
+                    filters['course_code'] = course_code_value
+                # Keep the user's semester filter - don't override it
+            except (PGCourseStructure.DoesNotExist, ValidationError):
+                 return Response({
+                    "error": "Subject not found or invalid UID."
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        
+        # Only show assessments where CIA marks have NOT been filled
+        filters['is_cia_fill'] = False
+        
+        # Get assessments with student data
+        assessments = PGStudentCourseAssessment.objects.filter(**filters).select_related('student')
+        
+        # Build response with all assessment records
+        # Each assessment is a separate entry (student may appear multiple times for different courses)
+        students_data = []
+        for assessment in assessments:
+            students_data.append({
+                'uid': assessment.uid,  # Assessment UID for marks entry
+                'registration_no': assessment.student.registration_no,
+                'name': f"{assessment.student.first_name} {assessment.student.last_name or ''}".strip(),
+                'ind_max_marks': assessment.ind_max_marks,
+                'ind_pass_marks': assessment.ind_pass_marks,
+                'is_cia_fill': assessment.is_cia_fill
+            })
+        
+        # Apply pagination
+        from .pagination import StandardResultsSetPagination
+        
+        paginator = StandardResultsSetPagination()
+        paginated_data = paginator.paginate_queryset(students_data, request)
+        
+        # Serialize the data
+        from .serializers import PGCollegeStudentSerializer
+        serializer = PGCollegeStudentSerializer(paginated_data, many=True)
+        
+        # Return paginated response
+        return paginator.get_paginated_response(serializer.data)
+
+
+class PGDepartmentDropdownView(APIView):
+    """
+    API View to get all PG departments for dropdown.
+    Returns uid, name, and code for each department.
+    
+    Example: GET /api/pg/departments/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Check if user is a college user
+        if request.user.user_type != 'college_user':
+            return Response({
+                "error": "Access denied. Only college users can access this endpoint."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        from .serializers import PGDepartmentSerializer
+        
+        departments = PGDepartment.objects.all().order_by('name')
+        serializer = PGDepartmentSerializer(departments, many=True)
+        
+        return Response({
+            'total': departments.count(),
+            'departments': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+class PGBatchDropdownView(APIView):
+    """
+    API View to get all PG batches for dropdown.
+    Returns uid and name for each batch.
+    
+    Example: GET /api/pg/batches/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Check if user is a college user
+        if request.user.user_type != 'college_user':
+            return Response({
+                "error": "Access denied. Only college users can access this endpoint."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        from .models import PGBatch
+        
+        batches = PGBatch.objects.all().order_by('name')
+        
+        batches_data = [
+            {
+                'uid': str(batch.uid),
+                'name': batch.name
+            }
+            for batch in batches
+        ]
+        
+        return Response({
+            'total': len(batches_data),
+            'batches': batches_data
+        }, status=status.HTTP_200_OK)
+
+
+class PGSubjectDropdownView(APIView):
+    """
+    API View to get subjects (courses) for dropdown based on department and semester.
+    
+    Query Parameters:
+    - department: Filter by Department UID (required)
+    - semester: Filter by Semester (optional, e.g., '1ST', '2ND', '3RD', '4TH')
+    
+    Example: GET /api/pg/subjects/?department=<uid>&semester=3RD
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Check if user is a college user
+        if request.user.user_type != 'college_user':
+            return Response({
+                "error": "Access denied. Only college users can access this endpoint."
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        department_uid = request.query_params.get('department')
+        semester = request.query_params.get('semester')
+        
+        if not department_uid:
+            return Response({
+                "error": "Department UID is required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        from .models import PGCourseStructure
+        from .serializers import PGSubjectDropdownSerializer
+        
+        # Build filters
+        filters = {
+            'department__uid': department_uid
+        }
+        
+        # Add semester filter if provided
+        if semester:
+            filters['semester'] = semester
+        
+        # Get subjects filtered by department and optionally semester
+        subjects = PGCourseStructure.objects.filter(
+            **filters
+        ).select_related('department').order_by('course_name')
+        
+        # Filter duplicates in Python (since distinct('field') is Postgres only)
+        # We want unique courses based on course_name and code
+        seen = set()
+        unique_subjects = []
+        for subject in subjects:
+            identifier = (subject.course_name, subject.code)
+            if identifier not in seen:
+                seen.add(identifier)
+                unique_subjects.append(subject)
+        
+        serializer = PGSubjectDropdownSerializer(unique_subjects, many=True)
+        
+        return Response({
+            'total': len(unique_subjects),
+            'subjects': serializer.data
+        }, status=status.HTTP_200_OK)
+
+
+
