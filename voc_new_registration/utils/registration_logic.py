@@ -50,7 +50,7 @@ def generate_registration_number(instance, session=None, college=None):
         # This prevents two threads from both seeing "0 records" and creating 00001
         _ = college.__class__.objects.select_for_update().get(pk=college.pk)
 
-        # Now safe to query max number
+        # Now safe to query max number for this prefix (college/course specific)
         last_reg = NewRegistration.objects.filter(
             registration_number__startswith=prefix
         ).order_by('-registration_number').only('registration_number').first()
@@ -67,8 +67,20 @@ def generate_registration_number(instance, session=None, college=None):
 
         final_number = f"{prefix}{new_series:05d}"
         
+        # Generate GLOBAL sr_no (university-wide counter)
+        # This is independent of college/course and tracks total registrations
+        last_global_reg = NewRegistration.objects.filter(
+            sr_no__isnull=False
+        ).order_by('-sr_no').only('sr_no').first()
+        
+        if last_global_reg and last_global_reg.sr_no:
+            global_sr_no = last_global_reg.sr_no + 1
+        else:
+            global_sr_no = 1
+        
         # SAVE IMMEDIATELY to reserve this number before releasing lock
         instance.registration_number = final_number
-        instance.save(update_fields=['registration_number'])
+        instance.sr_no = global_sr_no  # Global university-wide serial number
+        instance.save(update_fields=['registration_number', 'sr_no'])
         
         return final_number

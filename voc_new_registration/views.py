@@ -237,12 +237,26 @@ class RegistrationStatusView(views.APIView):
         if not registration.registration_number and registration.is_registration_completed:
             try:
                 if not registration.migrated_from_other_university:
+                    # For non-migrated students, use old_registration_no
                     if registration.old_registration_no:
                         registration.registration_number = registration.old_registration_no
+                        # Generate global sr_no
+                        last_global_reg = NewRegistration.objects.filter(
+                            sr_no__isnull=False
+                        ).order_by('-sr_no').only('sr_no').first()
+                        if last_global_reg and last_global_reg.sr_no:
+                            registration.sr_no = last_global_reg.sr_no + 1
+                        else:
+                            registration.sr_no = 1
                         registration.save()
                 else:
-                    registration.registration_number = generate_registration_number(registration)
-                    registration.save()
+                    # For migrated students, generate new registration number
+                    if registration.college and registration.course:
+                        registration.registration_number = generate_registration_number(registration)
+                        # sr_no is already set by generate_registration_number function
+                        registration.save()
+                    else:
+                        print(f"Cannot generate registration number: Missing college or course for {registration.aadhaar_no}")
             except Exception as e:
                 # Log error but don't block the status return
                 print(f"Error generating registration number in StatusView: {str(e)}")
