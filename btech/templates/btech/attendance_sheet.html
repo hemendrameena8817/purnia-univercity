@@ -121,7 +121,7 @@
 
       .cs-signature {
         text-align: right;
-        margin-top: 10px;
+        margin-top: 50px;
         font-weight: bold;
         font-size: 9pt;
       }
@@ -136,9 +136,7 @@
         class="university-logo"
         alt="University Logo"
       />
-      {% endif %}
-      
-      {% if student.barcode %}
+      {% endif %} {% if student.barcode %}
       <div class="barcode-container">
         <img
           src="data:image/png;base64,{{ student.barcode }}"
@@ -147,7 +145,7 @@
         />
       </div>
       {% endif %}
-      
+
       <div class="header">
         <h2>Purnea University, Purnia</h2>
         <p>Attendance Sheet ({{ exam_header }})</p>
@@ -178,7 +176,10 @@
         </div>
         <div class="student-photo">
           {% if student.photo %}
-          <img src="data:image/png;base64,{{ student.photo }}" alt="Student Photo" />
+          <img
+            src="data:image/png;base64,{{ student.photo }}"
+            alt="Student Photo"
+          />
           {% else %}
           <div style="padding-top: 35px">PHOTO</div>
           {% endif %}
@@ -190,7 +191,7 @@
           <tr>
             <th style="width: 30px">Sl No.</th>
             <th>Date of Exam</th>
-            <th>Sitting</th>
+            <th>SITTING</th>
             <th>SUBJECT</th>
             <th>Paper</th>
             <th>A/B SL. NO.</th>

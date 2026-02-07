@@ -252,7 +252,7 @@ def generate_btech_attendance_sheet_pdf(exam, college, branch):
                 schedule.common_course_structure in reg.backlog_subjects.all()):
                 student_schedules.append({
                     'date': schedule.exam_date.strftime('%d-%m-%Y') if schedule.exam_date else 'TBD',
-                    'sitting': schedule.get_exam_time_display() if hasattr(schedule, 'get_exam_time_display') else 'TBD',
+                    'sitting': schedule.sitting,
                     'subject_name': schedule.common_course_structure.course_name if schedule.common_course_structure else 'N/A',
                     'subject_code': schedule.common_course_structure.code if schedule.common_course_structure else 'N/A',
                 })
