@@ -11,7 +11,13 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from ug.services.semester_registration_service import SemesterRegistrationService
-from ug.serializers.registration_serializers import (
+from ug.utils.api_response import (
+    success_response, error_response,
+    already_registered_response, not_eligible_response, 
+    validation_error_response, profile_not_found_response,
+    internal_error_response, missing_field_response
+)
+from ug.serializers import (
     EligibilityResponseSerializer,
     AvailableCoursesResponseSerializer,
     CourseSelectionRequestSerializer,
@@ -121,6 +127,16 @@ class AvailableCoursesView(APIView):
             # Get available courses
             courses_data = SemesterRegistrationService.get_available_courses(student, semester)
             
+            # Add student and college information
+            student_info = {
+                'applicant_name': student.first_name or '',
+                'college_name': student.college.name if student.college else None,
+                'college_code': student.college.college_code if student.college else None
+            }
+            
+            # Add student info to response
+            courses_data['student_info'] = student_info
+            
             return Response(courses_data, status=status.HTTP_200_OK)
         
         except AttributeError:
@@ -137,27 +153,27 @@ class AvailableCoursesView(APIView):
 
 class SubmitRegistrationView(APIView):
     """
-    Submit course selections for semester registration
+    Submit course registration using assessment UIDs (OPTIMIZED)
     
     POST /api/ug/semester-registration/submit/
     
     Request Body:
     {
         "semester": "3RD",
-        "session": "2024-25",
-        "selections": {
-            "major_courses": ["HIST301", "HIST302"],
-            "elective_courses": ["GE301"],
-            "aecc_courses": ["AECC301"]
-        }
+        "assessment_uids": [
+            "uuid-1",
+            "uuid-2",
+            "uuid-3"
+        ]
     }
     
-    Creates StudentCourseAssessment entries for:
-    - Selected major courses
-    - Auto-assigned minor courses (from 1st semester)
-    - Auto-assigned MDC courses (from 1st semester)
-    - Selected elective courses
-    - Selected AECC courses
+    The assessment UIDs come from the available-courses API.
+    
+    Optimizations:
+    - Uses bulk_create for performance (handles 30k+ students)
+    - Fetches CourseStructure data using UIDs
+    - Sets exam_type='Regular' for new registrations
+    - Checks for duplicates in single bulk query
     
     Updates SemesterRegistration.status to 'REGISTERED'
     """
@@ -165,53 +181,49 @@ class SubmitRegistrationView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        """Submit course selections and create registrations"""
+        """Submit assessment UIDs and create registrations"""
         try:
             # Get student profile
             student = request.user.ug_student_profile
             
-            # Validate request data
-            serializer = CourseSelectionRequestSerializer(data=request.data)
-            if not serializer.is_valid():
-                return Response(
-                    {'error': 'Invalid request data', 'details': serializer.errors},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # Extract data from request
+            semester = request.data.get('semester')
+            assessment_uids = request.data.get('assessment_uids', [])
             
-            semester = serializer.validated_data['semester']
-            selections = serializer.validated_data['selections']
+            # Validate required fields
+            if not semester:
+                return missing_field_response('semester')
+            
+            if not assessment_uids or not isinstance(assessment_uids, list):
+                return validation_error_response('assessment_uids must be a non-empty list')
             
             # Check eligibility
             eligibility = SemesterRegistrationService.check_registration_eligibility(student)
-            if not eligibility['eligible']:
-                return Response(
-                    {
-                        'error': 'Not eligible for registration',
-                        'reason': eligibility.get('reason')
-                    },
-                    status=status.HTTP_403_FORBIDDEN
+            if not eligibility.get('eligible', False):
+                return not_eligible_response(
+                    reason=eligibility.get('reason'),
+                    message=eligibility.get('message')
                 )
             
-            # Validate and create registrations
+            # Create registrations (optimized bulk operation)
             result = SemesterRegistrationService.create_course_registrations(
-                student, semester, selections
+                student, semester, assessment_uids
             )
             
+            # Add status to success response
+            result['status'] = 'success'
             return Response(result, status=status.HTTP_200_OK)
         
         except ValueError as e:
-            # Validation error from service layer
-            return Response(
-                {'error': 'Validation failed', 'details': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            error_message = str(e)
+            
+            # Check if it's an "already registered" error
+            if "already registered" in error_message.lower():
+                return already_registered_response(semester)
+            
+            # Other validation errors (400 Bad Request)
+            return validation_error_response(error_message)
         except AttributeError:
-            return Response(
-                {'error': 'Student profile not found for this user'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return profile_not_found_response()
         except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            return internal_error_response(str(e))

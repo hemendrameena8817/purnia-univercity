@@ -29,7 +29,7 @@ schema_view = get_schema_view(
         title=" API",
         default_version="v1",
         description="API for Sewa Bharati - PUP UMIS Backend",
-        contact=openapi.Contact(email="contact@sewabharati.com"),
+        contact=openapi.Contact(email="pu@zucol.ai"),
         license=openapi.License(name="MIT License"),
     ),
     public=True,
@@ -60,6 +60,7 @@ urlpatterns = [
     path('api/mca_sem/', include('mca_sem.urls')),
     path('api/btech/', include('btech.urls')),
     path('api/pg/', include('pg.urls')),
+    path('api/ug/', include('ug.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -256,7 +256,7 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
             'json_data',
             'registration_number',
         ]
-        read_only_fields = ['registration_number']
+        read_only_fields = ['registration_number', 'is_registration_completed']
 
     def validate_dob(self, value):
         """Handle empty string dob sending from frontend as null"""
@@ -266,18 +266,12 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """
-        Validate registration completion status.
-        Only same-university students can have their status marked as completed directly.
+        Prevent frontend from setting is_registration_completed.
+        This field is read-only and set automatically based on registration_number.
         """
-        migrated = data.get('migrated_from_other_university', self.instance.migrated_from_other_university if self.instance else False)
-        completed = data.get('is_registration_completed')
-
-        if completed and migrated:
-            # Check if there is already a successful payment
-            if self.instance and not self.instance.payments.filter(payment_status='SUCCESS').exists():
-                raise serializers.ValidationError({
-                    "is_registration_completed": "Cannot mark as completed for migrated students without a successful payment."
-                })
+        # Remove is_registration_completed from data if present (frontend should not set this)
+        if 'is_registration_completed' in data:
+            data.pop('is_registration_completed')
         
         return data
 
@@ -298,37 +292,33 @@ class NewRegistrationUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """
         Custom update to handle registration number generation.
+        - For non-migrated students: Use old_registration_no as registration_number
+        - For migrated students: Registration number generated after payment
+        - is_registration_completed is automatically set based on registration_number.
         """
-        # Determine if registration is being completed
-        was_completed = instance.is_registration_completed
-        is_now_completed = validated_data.get('is_registration_completed', was_completed)
+        # Check if student is NOT migrated and has old_registration_no
+        is_migrated = validated_data.get('migrated_from_other_university', instance.migrated_from_other_university)
+        old_reg_no = validated_data.get('old_registration_no', instance.old_registration_no)
         
+        # For non-migrated students, set registration_number from old_registration_no
+        if not is_migrated and old_reg_no and not instance.registration_number:
+            instance.registration_number = old_reg_no
+            instance.save(update_fields=['registration_number'])
         
-        # Determine college
-        current_college = validated_data.get('college', instance.college)
-
-        if is_now_completed and not instance.registration_number:
-            # Check migration status
-            is_migrated = validated_data.get('migrated_from_other_university', instance.migrated_from_other_university)
-            old_reg_no = validated_data.get('old_registration_no', instance.old_registration_no)
-
-            if not is_migrated:
-                if old_reg_no:
-                    instance.registration_number = old_reg_no
-            else:
-                try:
-                    instance.registration_number = generate_registration_number(
-                        instance, 
-                        college=current_college
-                    )
-                except ValueError as e:
-                    raise serializers.ValidationError({"error": str(e)})
-
-        # Enforce: only mark completed if registration number exists
-        if not instance.registration_number:
-            validated_data['is_registration_completed'] = False
-
-        return super().update(instance, validated_data)
+        # Update instance with validated data
+        updated_instance = super().update(instance, validated_data)
+        
+        # Automatically set is_registration_completed based on registration_number
+        # Only mark as completed if registration_number exists
+        if updated_instance.registration_number:
+            updated_instance.is_registration_completed = True
+        else:
+            updated_instance.is_registration_completed = False
+        
+        # Save the updated completion status
+        updated_instance.save(update_fields=['is_registration_completed'])
+        
+        return updated_instance
 
 
 class RegistrationPaymentSerializer(serializers.ModelSerializer):

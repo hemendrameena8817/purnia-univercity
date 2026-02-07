@@ -69,8 +69,9 @@ class MCASemesterRegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(MCAExamRegistration)
 class MCAExamRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'session', 'status', 'is_open')
-    list_filter = ('sem', 'session', 'status', 'is_open')
+    list_display = ('student', 'exam', 'exam_type', 'sem', 'session', 'status', 'is_open')
+    list_filter = ('exam', 'exam_type', 'sem', 'session', 'status', 'is_open')
+    filter_horizontal = ('subjects',)
 
 @admin.register(MCAStudentAssessment)
 class MCAStudentAssessmentAdmin(admin.ModelAdmin):
