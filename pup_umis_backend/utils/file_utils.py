@@ -89,3 +89,23 @@ def image_to_base64(path):
         except Exception:
             return ""
     return ""
+
+
+def generate_barcode_base64(text):
+    import barcode
+    from barcode.writer import ImageWriter
+    import io
+    import base64
+    
+    try:
+        # Code128 is a good choice for alphanumeric data
+        CODE128 = barcode.get_barcode_class('code128')
+        bar = CODE128(text, writer=ImageWriter())
+        
+        buffer = io.BytesIO()
+        bar.write(buffer, options={"write_text": False, "module_height": 5.0}) # Don't write text under barcode
+        return base64.b64encode(buffer.getvalue()).decode()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Barcode generation failed: {str(e)}")
+        return ""
