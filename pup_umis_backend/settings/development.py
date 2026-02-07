@@ -39,6 +39,18 @@ DATABASES = {
             "charset": "utf8mb4",
             "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
         },
+    },
+    "live": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": config('DB_NAME1', default='pup_umis_production'),
+        "USER": config('DB_USER1', default='root'),
+        "PASSWORD": config('DB_PASSWORD1', default=''),
+        "HOST": config('DB_HOST1', default='localhost'),
+        "PORT": config('DB_PORT1', default='3306'),
+        "OPTIONS": {
+            "charset": "utf8mb4",
+            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
+        },
     }
 }
 
