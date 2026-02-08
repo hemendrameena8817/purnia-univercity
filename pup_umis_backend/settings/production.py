@@ -18,13 +18,15 @@ SECRET_KEY = config('SECRET_KEY')
 
 DEBUG = False
 
+
+# ALLOWED_HOSTS with wildcard subdomain support
+# .purneau.ac.in matches all subdomains (api.purneau.ac.in, staging-api.purneau.ac.in, etc.)
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
     cast=Csv(),
     default=[
-        "api.purneau.ac.in",
-        "staging-api.purneau.ac.in",
-        "purneau.ac.in",
+        "purneau.ac.in",           # Main domain
+        ".purneau.ac.in",          # All subdomains (api., staging-api., student., etc.)
     ]
 )
 
@@ -55,27 +57,36 @@ DATABASES = {
 # =================================================
 
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
-# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-# USE_X_FORWARDED_HOST = True
+
+# CRITICAL FOR PRODUCTION: Uncomment these if behind Nginx/Apache/Load Balancer
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
+# HSTS (Uncomment after testing)
 # SECURE_HSTS_SECONDS = 31536000
 # SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 # SECURE_HSTS_PRELOAD = True
 
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-
-CSRF_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+SESSION_COOKIE_SAMESITE=None
+CSRF_COOKIE_SAMESITE=None
 
 # =================================================
 # CORS SETTINGS
 # =================================================
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Match ALL subdomains automatically (*.purneau.ac.in, *.vercel.app)
+CORS_ORIGIN_REGEX_WHITELIST = [
+    r"^https://[\w-]+\.purneau\.ac\.in$",  # Matches: https://api.purneau.ac.in, https://student.purneau.ac.in, etc.
+    r"^https://[\w-]+\.vercel\.app$",       # Matches: https://pup-student.vercel.app, etc.
+]
 
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
@@ -96,20 +107,13 @@ CORS_ALLOWED_ORIGINS = config(
 # CSRF SETTINGS
 # =================================================
 
+# Django 4.0+ supports wildcard patterns
 CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
     cast=Csv(),
     default=[
-        "https://student.purneau.ac.in",
-        "https://staging-student.purneau.ac.in",
-        "https://pup-student.vercel.app",
-        "https://student.purneau.ac.in",
-        "https://staging-student.purneau.ac.in",
-        "https://college.purneau.ac.in",
-        "https://university.purneau.ac.in",
-        "https://pup-college.vercel.app",
-        "https://pup-student.vercel.app",
-        "https://pup-university.vercel.app",
+        "https://*.purneau.ac.in",  # All subdomains
+        "https://*.vercel.app",      # All Vercel apps
     ]
 )
 
