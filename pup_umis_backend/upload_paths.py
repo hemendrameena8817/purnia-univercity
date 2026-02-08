@@ -19,7 +19,7 @@ def unique_file_path(prefix):
         now = datetime.now()
         return (
             f"{prefix}/"
-            f"{now.year}/{now.month:02d}/"
+            f"{now.year}/{now.month:02d}/{now.day:02d}/{now.hour:02d}{now.minute:02d}{now.second:02d}/"
             f"{uuid.uuid4().hex}{ext}"
         )
     return _path
