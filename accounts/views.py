@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from captcha.models import CaptchaStore
 
 from .serializers import (
     LoginSerializer, 
@@ -31,6 +32,19 @@ class LoginView(DjRestAuthLoginView):
     def post(self, request, *args, **kwargs):
         self.request = request
         self.serializer = self.get_serializer(data=request.data)
+        
+        # CAPTCHA verification from query parameters
+        captcha_key = request.query_params.get('captcha_key')
+        captcha_value = request.query_params.get('captcha_value')
+        
+        if not captcha_key or not captcha_value:
+            return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+        except CaptchaStore.DoesNotExist:
+            return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+
         self.serializer.is_valid(raise_exception=True)
         
         self.login()
