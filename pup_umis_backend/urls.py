@@ -23,6 +23,7 @@ import os
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from voc_new_registration.views import CaptchaView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -61,6 +62,7 @@ urlpatterns = [
     path('api/btech/', include('btech.urls')),
     path('api/pg/', include('pg.urls')),
     path('api/ug/', include('ug.urls')),
+    path('api/captcha/', CaptchaView.as_view(), name='common-captcha'),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
