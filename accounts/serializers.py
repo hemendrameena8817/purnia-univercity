@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.utils.translation import gettext_lazy as _
 from .models import CollegeUserProfile
+from colleges.models import College
 from .utils.user_profile import get_ug_profile_data, get_pg_profile_data, get_current_profile as get_user_current_profile
 
 User = get_user_model()
@@ -47,19 +48,25 @@ class LoginSerializer(serializers.Serializer):
 #         read_only_fields = ['uid', 'email', 'created_at']
 
 
+class CollegeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = College
+        fields = ['uid', 'name', 'college_code', 'address', 'contact_no', 'email', 'center_code']
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """
     User profile serializer with UG, PG student profiles and college profile.
     Optimized for login response with minimal queries.
     """
 
+    college = CollegeSerializer(read_only=True)
     
     class Meta:
         model = User
         fields = [
             'uid', 'email', 'username', 'first_name', 'last_name',
             'phone', 'user_type', 'current_profile', 'is_verified', 'is_active', 
-            'created_at'
+            'created_at', 'college'
         ]
         read_only_fields = ['uid', 'email', 'created_at']
 
