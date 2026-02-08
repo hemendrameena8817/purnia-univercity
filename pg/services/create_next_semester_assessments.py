@@ -309,7 +309,8 @@ class NextSemesterAssessmentService:
         semester: str,
         session: str,
         dry_run: bool = False,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
+        batch: Optional[str] = None
     ) -> Dict:
         """
         Create PGStudentCourseAssessment entries for all students
@@ -320,6 +321,7 @@ class NextSemesterAssessmentService:
             session: Academic session (e.g., '2024-25')
             dry_run: If True, don't save to database
             limit: Optional limit on number of students to process
+            batch: Optional batch name to filter students
             
         Returns:
             Dict with summary of results
@@ -332,6 +334,14 @@ class NextSemesterAssessmentService:
             session=session,
             semester_result__in=['PASS', 'PROMOTED']
         )
+        
+        if batch:
+            # Filter by student's batch
+            # Assuming PGExamResult -> Student -> Batch (CharField) or Student -> Batch (ForeignKey via name)
+            # The user said "batch wise", and previous scripts filtered batch by name.
+            # PGStudentProfile has 'batch' CharField.
+            eligible_results = eligible_results.filter(student__batch=batch)
+            print(f"Filtering by batch: {batch}")
         
         if limit:
             eligible_results = eligible_results[:limit]

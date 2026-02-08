@@ -14,6 +14,7 @@ import django
 import argparse
 
 # Setup Django
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
 django.setup()
 
@@ -51,6 +52,11 @@ def main():
         default=None,
         help='Process only a specific student ID'
     )
+    parser.add_argument(
+        '--batch',
+        default=None,
+        help='Filter by batch name (e.g., 2024-26)'
+    )
     
     args = parser.parse_args()
     
@@ -60,6 +66,7 @@ def main():
     print(f"\nConfiguration:")
     print(f"  Semester: {args.semester}")
     print(f"  Session: {args.session}")
+    print(f"  Batch: {args.batch or 'All'}")
     print(f"  Dry Run: {args.dry_run}")
     print(f"  Limit: {args.limit or 'None'}")
     print(f"  Student ID: {args.student_id or 'All eligible students'}")
@@ -105,7 +112,8 @@ def main():
             semester=args.semester,
             session=args.session,
             dry_run=args.dry_run,
-            limit=args.limit
+            limit=args.limit,
+            batch=args.batch
         )
         
         print("\n" + "=" * 80)

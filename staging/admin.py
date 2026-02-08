@@ -310,7 +310,7 @@ class PGResultCurrentAdmin(admin.ModelAdmin):
         'institute_code', 'is_migrated'
     )
     list_filter = (
-        'is_migrated', 'semester_code', 'course_code', 'discipline_code',
+        'paper_code','is_migrated', 'semester_code', 'course_code', 'discipline_code',
         'batch_code', 'session_code', 'institute_code', 'subject_result', 
         'final_result', 'exam_type'
     )
