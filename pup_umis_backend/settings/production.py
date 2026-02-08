@@ -209,16 +209,13 @@ AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="ap-south-2")
 
 AWS_DEFAULT_ACL = None
 AWS_S3_FILE_OVERWRITE = False
-
-AWS_QUERYSTRING_AUTH = not config(
-    "AWS_S3_PUBLIC_MEDIA",
-    default=True,
-    cast=bool
-)
+AWS_S3_ADDRESSING_STYLE = "virtual"
+AWS_S3_PUBLIC_MEDIA = False
+AWS_QUERYSTRING_AUTH = True
+AWS_QUERYSTRING_EXPIRE = 300
 
 AWS_S3_OBJECT_PARAMETERS = {
     "CacheControl": "max-age=86400",
 }
-AWS_QUERYSTRING_EXPIRE = 300
 
 # MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/"
