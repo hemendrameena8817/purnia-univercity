@@ -80,7 +80,20 @@ X_FRAME_OPTIONS = 'DENY'
 # -------------------------------------------------
 
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', cast=Csv())
-
+if not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "https://api.purneau.ac.in",
+        "https://staging-api.purneau.ac.in",
+        "https://purneau.ac.in",
+        "https://staging-student.purneau.ac.in",
+        "https://student.purneau.ac.in",
+        "https://college.purneau.ac.in",
+        "https://university.purneau.ac.in",
+        "https://pup-college.vercel.app",
+        "https://pup-student.vercel.app",
+        "https://pup-university.vercel.app",
+    ]
 
 # -------------------------------------------------
 # CSRF Settings (Production)
