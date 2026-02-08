@@ -5,11 +5,8 @@ GENDER_CHOICES = [
 ]
     
 CASTE_CHOICES = [
-    ('GEN', 'GEN'),
     ('General', 'General'),
-    ('GEN.', 'GEN.'),
-    ('UR', 'UR'),
-    ('Unreserved', 'Unreserved'),
+    ('EWS', 'EWS'),
     ('OBC', 'OBC'),
     ('BC', 'BC'),
     ('BC-I', 'BC-I'),
@@ -17,7 +14,6 @@ CASTE_CHOICES = [
     ('BC (Annexure-II)', 'BC (Annexure-II)'),
     ('SC', 'SC'),
     ('ST', 'ST'),
-    ('EWS', 'EWS'),
     ('EBC', 'EBC'),
     ('EBC-I', 'EBC-I'),
     ('EBC (Annexure-I)', 'EBC (Annexure-I)'),

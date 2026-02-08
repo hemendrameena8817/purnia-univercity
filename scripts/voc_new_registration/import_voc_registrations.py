@@ -97,17 +97,16 @@ class Command(BaseCommand):
         # Gender validation - invalid values will be set to NULL during import
         # No validation error for gender - just accept any value
         
-        # Validate caste - Accept all values from database CASTE_CHOICES
+        # Validate caste - Standardize variations to 'General'
         if data.get('caste'):
             caste_val = str(data['caste']).strip()
-            # Map common variations to database values
             caste_upper = caste_val.upper()
-            if caste_upper in ['UNRESERVED', 'UR']:
-                caste_val = 'GEN'
-            elif caste_upper == 'GENERAL':
-                caste_val = 'General'
-            # Accept all other caste values as-is (BC, BC-I, BC-II, BC (Annexure-II), EBC, EBC-I, EBC (Annexure-I), SC, ST, EWS, OBC, GEN, GEN.)
-            # No validation error - database accepts these values
+            if caste_upper in ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED']:
+                data['caste'] = 'General'
+                self.stdout.write(self.style.NOTICE(f"Row {row_num}: Caste '{caste_val}' mapped to 'General'"))
+            else:
+                self.stdout.write(self.style.NOTICE(f"Row {row_num}: Caste '{caste_val}' kept as '{caste_val}'"))
+            # Keep other caste values as-is
         
         # Validate mobile number
         if data.get('mobile_no'):
@@ -366,18 +365,16 @@ class Command(BaseCommand):
                 else:
                     data['gender'] = None
                 
-                # Handle Caste Mapping - Accept all values from database CASTE_CHOICES
+                # Handle Caste Mapping - Standardize variations to 'General'
                 if 'caste' in data and data['caste']:
                     caste_val = str(data['caste']).strip()
                     
                     # Map common variations to database values
                     caste_upper = caste_val.upper()
-                    if caste_upper in ['UNRESERVED', 'UR']:
-                        data['caste'] = 'GEN'
-                    elif caste_upper == 'GENERAL':
+                    if caste_upper in ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED']:
                         data['caste'] = 'General'
                     else:
-                        # Keep original value (BC, BC-I, BC-II, BC (Annexure-II), EBC, EBC-I, EBC (Annexure-I), SC, ST, EWS, OBC, GEN, GEN.)
+                        # Keep original value (BC, BC-I, BC-II, BC (Annexure-II), EBC, EBC-I, EBC (Annexure-I), SC, ST, EWS, OBC)
                         data['caste'] = caste_val
                 else:
                     data['caste'] = None
