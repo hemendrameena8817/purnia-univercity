@@ -10,7 +10,7 @@ poetry run python manage.py shell
 
 Then:
 >>> from scripts.voc_new_registration.import_voc_registrations import run_import
->>> run_import('old_data/All B.Ed Data 2025-27.xlsx')
+>>> run_import('scripts/voc_new_registration/data/All B.Ed Data 2025-27.xlsx')
 >>> run_import('path/to/file.xlsx', dry_run=True)  # Test first
 >>> run_import('path/to/file.xlsx', sheet='Sheet2', skip_errors=True)
 
@@ -22,6 +22,12 @@ BATCH (must exist in database), COLLEGE CODE (must match database college_code)
 
 Optional columns: FATHER'S NAME, MOTHER'S NAME, GENDER, CASTE, DOB, MOBILE NO, EMAIL, 
 SESSION, STUDENT NAME IN HINDI, MIGRATION SUBMITTED, LAST ATTENDED UNIVERSITY
+
+Accepted CASTE values: GEN, General, GEN., UR, Unreserved, OBC, BC, BC-I, BC-II, 
+BC (Annexure-II), SC, ST, EWS, EBC, EBC-I, EBC (Annexure-I)
+
+NOTE: College codes like "04" may be converted to "4" by Excel. The script automatically
+pads single-digit numeric codes with leading zeros (4 → 04) to match database values.
 """
 
 import pandas as pd
@@ -78,29 +84,30 @@ class Command(BaseCommand):
             if isinstance(data['aadhaar_no'], (int, float)):
                 aadhaar = str(int(data['aadhaar_no']))
             
+            # Remove any spaces, hyphens, or other formatting characters
+            aadhaar = aadhaar.replace(' ', '').replace('-', '').replace('_', '')
+            
             if len(aadhaar) != 12 or not aadhaar.isdigit():
-                errors.append(f"Row {row_num}: Invalid Aadhaar number '{aadhaar}' (must be 12 digits)")
+                errors.append(f"Row {row_num}: Invalid Aadhaar number '{aadhaar}' (must be 12 digits, found {len(aadhaar)} characters)")
             
             # Check for duplicate Aadhaar in database
             if NewRegistration.objects.filter(aadhaar_no=aadhaar).exists():
                 errors.append(f"Row {row_num}: Aadhaar '{aadhaar}' already exists in database")
         
-        # Validate gender
-        if data.get('gender'):
-            gender_str = str(data['gender']).upper()
-            if gender_str not in ['M', 'MALE', 'F', 'FEMALE', 'O', 'OTHER']:
-                errors.append(f"Row {row_num}: Invalid gender '{data['gender']}' (must be M/Male, F/Female, or O/Other)")
+        # Gender validation - invalid values will be set to NULL during import
+        # No validation error for gender - just accept any value
         
-        # Validate caste
+        # Validate caste - Accept all values from database CASTE_CHOICES
         if data.get('caste'):
-            caste_val = str(data['caste']).upper().strip()
-            # Map common variations
-            if caste_val in ['UNRESERVED', 'UR', 'GENERAL']:
+            caste_val = str(data['caste']).strip()
+            # Map common variations to database values
+            caste_upper = caste_val.upper()
+            if caste_upper in ['UNRESERVED', 'UR']:
                 caste_val = 'GEN'
-            
-            valid_castes = ['GEN', 'OBC', 'SC', 'ST', 'EWS', 'EBC', 'RBC', 'FDC']
-            if caste_val not in valid_castes:
-                errors.append(f"Row {row_num}: Invalid caste '{data['caste']}' (must be one of: {', '.join(valid_castes)})")
+            elif caste_upper == 'GENERAL':
+                caste_val = 'General'
+            # Accept all other caste values as-is (BC, BC-I, BC-II, BC (Annexure-II), EBC, EBC-I, EBC (Annexure-I), SC, ST, EWS, OBC, GEN, GEN.)
+            # No validation error - database accepts these values
         
         # Validate mobile number
         if data.get('mobile_no'):
@@ -157,6 +164,10 @@ class Command(BaseCommand):
             if college_code.upper() in ['NULL', 'NAN', 'NONE', '']:
                 errors.append(f"Row {row_num}: College code is required (cannot be empty)")
             else:
+                # Handle numeric college codes - pad with leading zeros to 2 digits
+                if college_code.isdigit() and len(college_code) < 2:
+                    college_code = college_code.zfill(2)
+                
                 college_obj = College.objects.filter(college_code__iexact=college_code).first()
                 if not college_obj:
                     errors.append(f"Row {row_num}: College with code '{college_code}' not found in database")
@@ -222,6 +233,8 @@ class Command(BaseCommand):
                 aadhaar_col = row_data.get('AADHAAR NUMBER')
                 if aadhaar_col and not pd.isna(aadhaar_col):
                     aadhaar = str(int(aadhaar_col)) if isinstance(aadhaar_col, (int, float)) else str(aadhaar_col).strip()
+                    # Remove any formatting characters
+                    aadhaar = aadhaar.replace(' ', '').replace('-', '').replace('_', '')
                     if aadhaar in aadhaar_duplicates_in_sheet:
                         aadhaar_duplicates_in_sheet[aadhaar].append(index + 2)
                     else:
@@ -327,6 +340,10 @@ class Command(BaseCommand):
                 if college_code:
                     c_code = str(college_code).strip()
                     if c_code.upper() not in ['NULL', 'NAN', 'NONE', '']:
+                        # Handle numeric college codes - pad with leading zeros to 2 digits
+                        if c_code.isdigit() and len(c_code) < 2:
+                            c_code = c_code.zfill(2)
+                        
                         college_obj = College.objects.filter(college_code__iexact=c_code).first()
                         data['college'] = college_obj
                     else:
@@ -334,37 +351,38 @@ class Command(BaseCommand):
                 else:
                     data['college'] = None
                 
-                # Convert gender to single character
+                # Convert gender to single character - invalid values become NULL
                 if 'gender' in data and data['gender']:
                     gender_str = str(data['gender']).upper()
                     if gender_str in ['M', 'MALE']:
                         data['gender'] = 'M'
                     elif gender_str in ['F', 'FEMALE']:
                         data['gender'] = 'F'
-                    else:
+                    elif gender_str in ['O', 'OTHER']:
                         data['gender'] = 'O'
-                
-                # Handle Caste Mapping
-                if 'caste' in data and data['caste']:
-                    caste_val = str(data['caste']).upper().strip()
-                    
-                    # Map common variations
-                    if caste_val in ['UNRESERVED', 'UR', 'GENERAL']:
-                        caste_val = 'GEN'
-                    
-                    # Validate against allowed choices
-                    valid_castes = ['GEN', 'OBC', 'SC', 'ST', 'EWS', 'EBC', 'RBC', 'FDC']
-                    
-                    if caste_val in valid_castes:
-                        data['caste'] = caste_val
                     else:
-                        # If unknown or too long, keep it blank
-                        data['caste'] = None
-                        self.stdout.write(self.style.WARNING(f"Warning: Invalid/Unknown caste '{caste_val}' for row {index+2}. Setting to NULL."))
+                        # Invalid gender value - set to NULL
+                        data['gender'] = None
+                else:
+                    data['gender'] = None
+                
+                # Handle Caste Mapping - Accept all values from database CASTE_CHOICES
+                if 'caste' in data and data['caste']:
+                    caste_val = str(data['caste']).strip()
+                    
+                    # Map common variations to database values
+                    caste_upper = caste_val.upper()
+                    if caste_upper in ['UNRESERVED', 'UR']:
+                        data['caste'] = 'GEN'
+                    elif caste_upper == 'GENERAL':
+                        data['caste'] = 'General'
+                    else:
+                        # Keep original value (BC, BC-I, BC-II, BC (Annexure-II), EBC, EBC-I, EBC (Annexure-I), SC, ST, EWS, OBC, GEN, GEN.)
+                        data['caste'] = caste_val
                 else:
                     data['caste'] = None
                 
-                # Convert Aadhaar to string if numeric
+                # Convert Aadhaar to string if numeric and remove formatting
                 if 'aadhaar_no' in data and data['aadhaar_no']:
                     try:
                         val = data['aadhaar_no']
@@ -372,6 +390,8 @@ class Command(BaseCommand):
                             data['aadhaar_no'] = str(int(val))
                         else:
                             data['aadhaar_no'] = str(val).strip()
+                        # Remove any spaces, hyphens, or underscores
+                        data['aadhaar_no'] = data['aadhaar_no'].replace(' ', '').replace('-', '').replace('_', '')
                     except:
                         data['aadhaar_no'] = ''
                 
