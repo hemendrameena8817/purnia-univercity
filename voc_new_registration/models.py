@@ -77,8 +77,10 @@ class NewRegistration(models.Model):
     # Profile Images
     profile_picture = models.ImageField(upload_to='voc_registrations/images/', null=True, blank=True)
     signature = models.ImageField(upload_to='voc_registrations/signatures/', null=True, blank=True)
-    migration_certificate = models.ImageField(upload_to='voc_registrations/certificates/', null=True, blank=True)
-    registration_certificate = models.ImageField(upload_to='voc_registrations/certificates/', null=True, blank=True)
+    
+    # Certificates (PDF or Image)
+    migration_certificate = models.FileField(upload_to='voc_registrations/certificates/', null=True, blank=True)
+    registration_certificate = models.FileField(upload_to='voc_registrations/certificates/', null=True, blank=True)
     
     # Student Information
     student_name = models.CharField(max_length=255, help_text="Student name in English")
