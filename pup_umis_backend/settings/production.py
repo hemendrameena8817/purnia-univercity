@@ -112,6 +112,7 @@ CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
     cast=Csv(),
     default=[
+        "https://api.purneau.ac.in",
         "https://*.purneau.ac.in",  # All subdomains
         "https://*.vercel.app",      # All Vercel apps
     ]
@@ -195,7 +196,7 @@ TEMPLATES[0]['APP_DIRS'] = False
 
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="ap-south-1")
+AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="ap-south-2")
 
 AWS_DEFAULT_ACL = None
 AWS_S3_FILE_OVERWRITE = False
