@@ -5,7 +5,7 @@ This script imports/updates Colleges from an Excel file into the College model.
 
 HOW TO RUN:
 -----------
-poetry run python scripts/colleges/import_colleges.py --file "old_data/INSTITUTE_TABLE_FINAL.xlsx"
+poetry run python scripts/colleges/import_colleges.py --file "/courses_data/colleges/INSTITUTE_TABLE_FINAL.xlsx"
 """
 
 import os
