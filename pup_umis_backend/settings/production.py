@@ -212,4 +212,4 @@ AWS_S3_OBJECT_PARAMETERS = {
 }
 AWS_QUERYSTRING_EXPIRE = 300
 
-MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/"
+# MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/"
