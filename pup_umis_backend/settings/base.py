@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "drf_yasg",
     "simple_history",
     "corsheaders",
+    "storages",
     
     # Auth apps
     "dj_rest_auth",
@@ -52,7 +53,7 @@ INSTALLED_APPS = [
     "captcha",
     'plw',
     'mca_sem',
-    'btech'
+    'btech',
 ]
 
 

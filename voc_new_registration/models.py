@@ -2,6 +2,8 @@ import uuid
 from django.db import models, transaction
 from django.utils import timezone
 from .options import CASTE_CHOICES, GENDER_CHOICES
+from pup_umis_backend.storage_backends import MediaStorage, DocumentStorage, ProfilePhotoStorage
+from pup_umis_backend.upload_paths import unique_file_path
 
 class NewRegistrationCourse(models.Model):
     """
@@ -75,12 +77,32 @@ class NewRegistration(models.Model):
 
     
     # Profile Images
-    profile_picture = models.ImageField(upload_to='voc_registrations/images/', null=True, blank=True)
-    signature = models.ImageField(upload_to='voc_registrations/signatures/', null=True, blank=True)
-    
+    profile_picture = models.ImageField(
+        upload_to=unique_file_path('voc_registrations/images/'),
+        storage=MediaStorage(),
+        null=True,
+        blank=True
+    )
+    signature = models.ImageField(
+        upload_to=unique_file_path('voc_registrations/signatures/'),
+        storage=MediaStorage(),
+        null=True,
+        blank=True
+    )
+        
     # Certificates (PDF or Image)
-    migration_certificate = models.FileField(upload_to='voc_registrations/certificates/', null=True, blank=True)
-    registration_certificate = models.FileField(upload_to='voc_registrations/certificates/', null=True, blank=True)
+    migration_certificate = models.FileField(
+        upload_to=unique_file_path('voc_registrations/certificates/'),
+        storage=DocumentStorage(),
+        null=True,
+        blank=True
+    )
+    registration_certificate = models.FileField(
+        upload_to=unique_file_path('voc_registrations/certificates/'),
+        storage=DocumentStorage(),
+        null=True,
+        blank=True
+    )
     
     # Student Information
     student_name = models.CharField(max_length=255, help_text="Student name in English")
