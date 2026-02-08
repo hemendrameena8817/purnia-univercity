@@ -54,12 +54,12 @@ DATABASES = {
 # HTTPS & SECURITY MIDDLEWARE
 # =================================================
 
-SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-USE_X_FORWARDED_HOST = True
-SECURE_HSTS_SECONDS = 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# USE_X_FORWARDED_HOST = True
+# SECURE_HSTS_SECONDS = 31536000
+# SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+# SECURE_HSTS_PRELOAD = True
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
@@ -103,6 +103,13 @@ CSRF_TRUSTED_ORIGINS = config(
         "https://student.purneau.ac.in",
         "https://staging-student.purneau.ac.in",
         "https://pup-student.vercel.app",
+        "https://student.purneau.ac.in",
+        "https://staging-student.purneau.ac.in",
+        "https://college.purneau.ac.in",
+        "https://university.purneau.ac.in",
+        "https://pup-college.vercel.app",
+        "https://pup-student.vercel.app",
+        "https://pup-university.vercel.app",
     ]
 )
 
