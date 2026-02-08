@@ -128,6 +128,7 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
         'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type',
         'ind_marks_obtained', 'ind_is_absent', 
         'comb_final_marks_obtained', 'sgpa', 'sem_result',
+        'is_cia_fill', 'is_ese_fill',
         'session', 'created_at'
     )
     
@@ -164,7 +165,7 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
             'fields': ('uid', 'student', 'course_name', 'course_short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label')
         }),
         ('Exam Details', {
-            'fields': ('exam_type', 'session', 'batch', 'department', 'degree', 'college_code', 'attendance')
+            'fields': ('exam_type', 'session', 'batch', 'department', 'degree', 'college_code', 'attendance', 'is_cia_fill', 'is_ese_fill')
         }),
         ('Individual Assessment', {
             'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 
@@ -381,6 +382,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
         headers = [
             'Registration No',
             'Student Name',
+            'College Code',
             'Department',
             'Program',
             'Batch',
@@ -412,12 +414,12 @@ class PGExamResultAdmin(admin.ModelAdmin):
             cell.alignment = header_alignment
         
         # Set column widths
-        column_widths = [15, 25, 20, 25, 15, 10, 10, 12, 12, 15, 8, 12, 12, 12, 15, 18, 18]
+        column_widths = [15, 25, 15, 20, 25, 15, 10, 10, 12, 12, 15, 8, 12, 12, 12, 15, 18, 18]
         for col_num, width in enumerate(column_widths, 1):
             ws.column_dimensions[ws.cell(row=1, column=col_num).column_letter].width = width
         
         # Write data rows
-        for row_num, result in enumerate(filtered_queryset.select_related('student', 'student__department', 'student__program'), 2):
+        for row_num, result in enumerate(filtered_queryset.select_related('student', 'student__department', 'student__program', 'student__college'), 2):
             # Helper function to get CIA/ESE status display
             def get_status_display(status):
                 if status is None:
@@ -426,7 +428,8 @@ class PGExamResultAdmin(admin.ModelAdmin):
             
             row_data = [
                 result.student.registration_no if result.student else 'N/A',
-                f"{result.student.first_name} {result.student.last_name}" if result.student else 'N/A',
+                result.student.first_name if result.student else 'N/A',
+                result.student.college.college_code if result.student and result.student.college else 'N/A',
                 result.student.department.name if result.student and result.student.department else 'N/A',
                 result.student.program.name if result.student and result.student.program else 'N/A',
                 result.student.batch if result.student else 'N/A',

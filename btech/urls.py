@@ -3,6 +3,7 @@ from .views import (
     BTechCourseListView, BTechCourseDetailView,
     BTechSessionListView, BTechSessionDetailView,
     BTechBatchListView, BTechBatchDetailView,
+    BTechAttendanceSheetPDFView,
     BTechStudentProfileListView, BTechStudentProfileCreateView, BTechStudentProfileDetailView,
     BTechCourseStructureListView, BTechCourseStructureDetailView,
     BTechExamListView, BTechExamDetailView,
@@ -61,4 +62,9 @@ urlpatterns = [
 
     # Roll Sheet
     path('roll-sheet/pdf/', BTechRollSheetPDFView.as_view(), name='btech-roll-sheet-pdf'),
+    path(
+        'attendance-sheet/pdf/',
+        BTechAttendanceSheetPDFView.as_view(),
+        name='btech-attendance-sheet-pdf'
+    ),
 ]

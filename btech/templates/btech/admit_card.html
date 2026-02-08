@@ -407,7 +407,9 @@
               {{ s.common_course_structure.course_name }}
             </td>
             <td>{{ s.exam_time|default:"-" }}</td>
-            <td>{{ s.exam_date|date:"d-m-Y" }}</td>
+            <td>
+              {{ s.exam_date|date:"d-m-Y" }} / {{ s.sitting|default:"-" }}
+            </td>
           </tr>
           {% empty %}
           <tr>

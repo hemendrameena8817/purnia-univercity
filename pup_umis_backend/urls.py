@@ -59,6 +59,7 @@ urlpatterns = [
     path('api/plw/', include('plw.urls')),
     path('api/mca_sem/', include('mca_sem.urls')),
     path('api/btech/', include('btech.urls')),
+    path('api/pg/', include('pg.urls')),
     path('api/ug/', include('ug.urls')),
 ]
 if settings.DEBUG:

@@ -78,6 +78,7 @@ class UserAccountAdmin(BaseUserAdmin):
         "get_college",
         "is_staff",
         "is_active",
+        "college"
     )
 
     list_filter = (
@@ -106,6 +107,7 @@ class UserAccountAdmin(BaseUserAdmin):
             {
                 "fields": (
                     "user_type",
+                    "college",
                     "current_profile",
                     "is_active",
                     "is_staff",

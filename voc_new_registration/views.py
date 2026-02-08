@@ -213,37 +213,63 @@ class RegistrationStatusView(views.APIView):
     )
     def get(self, request, uid):
         try:
-            registration = NewRegistration.objects.get(uid=uid, is_deleted=False)
+            registration = NewRegistration.objects.select_related(
+                'college', 'course', 'batch', 'session'
+            ).get(uid=uid, is_deleted=False)
         except (NewRegistration.DoesNotExist, ValueError):
             return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Get latest payment status if it exists
+        # Get latest payment status and details if it exists
         latest_payment = registration.payments.order_by('-created_at').first()
-        payment_status = latest_payment.payment_status if latest_payment else None
+        payment_data = None
+        if latest_payment:
+            payment_data = {
+                "order_id": latest_payment.order_id,
+                "payment_status": latest_payment.payment_status,
+                "amount": str(latest_payment.amount),
+                "payment_mode": latest_payment.payment_mode,
+                "tracking_id": latest_payment.tracking_id,
+                "bank_ref_no": latest_payment.bank_ref_no,
+                "created_at": latest_payment.created_at
+            }
 
+        # Fallback: Generate registration number if needed (shouldn't happen with new flow)
         if not registration.registration_number and registration.is_registration_completed:
             try:
                 if not registration.migrated_from_other_university:
+                    # For non-migrated students, use old_registration_no
                     if registration.old_registration_no:
                         registration.registration_number = registration.old_registration_no
+                        # Generate global sr_no
+                        last_global_reg = NewRegistration.objects.filter(
+                            sr_no__isnull=False
+                        ).order_by('-sr_no').only('sr_no').first()
+                        if last_global_reg and last_global_reg.sr_no:
+                            registration.sr_no = last_global_reg.sr_no + 1
+                        else:
+                            registration.sr_no = 1
                         registration.save()
                 else:
-                    registration.registration_number = generate_registration_number(registration)
-                    registration.save()
+                    # For migrated students, generate new registration number
+                    if registration.college and registration.course:
+                        registration.registration_number = generate_registration_number(registration)
+                        # sr_no is already set by generate_registration_number function
+                        registration.save()
+                    else:
+                        print(f"Cannot generate registration number: Missing college or course for {registration.aadhaar_no}")
             except Exception as e:
                 # Log error but don't block the status return
                 print(f"Error generating registration number in StatusView: {str(e)}")
 
-        return Response({
-            "uid": registration.uid,
-            "student_name": registration.student_name,
-            "is_registration_completed": registration.is_registration_completed,
-            "is_account_created": registration.is_account_created,
-            "migrated_from_other_university": registration.migrated_from_other_university,
-            "latest_payment_status": payment_status,
-            "aadhaar_no": registration.aadhaar_no,
-            "registration_number": registration.registration_number
-        }, status=status.HTTP_200_OK)
+        # Use the serializer to get complete registration data
+        serializer = NewRegistrationGetSerializer(registration, context={'request': request})
+        registration_data = serializer.data
+        
+        # Add payment information to the response
+        registration_data['payment_details'] = payment_data
+        registration_data['latest_payment_status'] = latest_payment.payment_status if latest_payment else None
+
+        return Response(registration_data, status=status.HTTP_200_OK)
 
 
 class NewRegistrationBulkCreateView(views.APIView):
@@ -444,58 +470,127 @@ class PaymentResponseView(views.APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
-        enc_response = request.data.get('encResp')
-        if not enc_response:
-            return Response({"error": "Invalid response"}, status=status.HTTP_400_BAD_REQUEST)
-
-        working_key = config('CCAVENUE_WORKING_KEY', default='')
-        decrypted_response = decrypt(enc_response, working_key)
-        response_data = parse_response(decrypted_response)
+        import logging
+        logger = logging.getLogger(__name__)
         
-        order_id = response_data.get('order_id')
-        auth_status = response_data.get('order_status')
+        # Log the incoming request data for debugging
+        logger.info(f"Payment response received. Data: {request.data}")
+        logger.info(f"Request headers: {request.headers}")
         
-        try:
-            payment = RegistrationPayment.objects.get(order_id=order_id)
-        except RegistrationPayment.DoesNotExist:
-            return Response({"error": "Payment record not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        payment.tracking_id = response_data.get('tracking_id')
-        payment.bank_ref_no = response_data.get('bank_ref_no')
-        payment.payment_mode = response_data.get('payment_mode')
-        payment.raw_response = response_data
-        
-        if auth_status and auth_status.lower() == 'success':
-            payment.payment_status = 'SUCCESS'
-            # Complete registration using serializer to trigger reg_no generation
-            reg = payment.registration
-            serializer = NewRegistrationUpdateSerializer(
-                reg, 
-                data={'is_registration_completed': True}, 
-                partial=True
-            )
-            if serializer.is_valid():
-                serializer.save()
-            else:
-                # Log error or handle failure
-                print(f"Serializer error for {reg.aadhaar_no}: {serializer.errors}")
-                reg.is_registration_completed = True
-                reg.save()
-        elif auth_status == 'Aborted':
-            payment.payment_status = 'ABORTED'
+        # Check if this is a form submission or direct POST
+        if request.content_type == 'application/x-www-form-urlencoded':
+            enc_response = request.POST.get('encResp')
         else:
-            payment.payment_status = 'FAILED'
-        
-        payment.save()
+            enc_response = request.data.get('encResp')
+            
+        logger.info(f"Encrypted response: {enc_response}")
+            
+        if not enc_response:
+            logger.error("No encResp parameter found in request")
+            return Response(
+                {"error": "Invalid response: Missing encResp parameter"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        payment.save()
+        try:
+            working_key = config('CCAVENUE_WORKING_KEY')
+            if not working_key:
+                raise ValueError("CCAVENUE_WORKING_KEY not configured")
+                
+            logger.info(f"Decrypting response with working key")
+            decrypted_response = decrypt(enc_response, working_key)
+            response_data = parse_response(decrypted_response)
+            logger.info(f"Decrypted response data: {response_data}")
+            
+            order_id = response_data.get('order_id')
+            auth_status = response_data.get('order_status', '').lower()
+            
+            if not order_id:
+                raise ValueError("No order_id in decrypted response")
+                
+            logger.info(f"Processing payment for order_id: {order_id}, status: {auth_status}")
+            
+            try:
+                payment = RegistrationPayment.objects.select_related(
+                    'registration',
+                    'registration__college',
+                    'registration__course',
+                    'registration__batch',
+                    'registration__session'
+                ).get(order_id=order_id)
+            except RegistrationPayment.DoesNotExist:
+                logger.error(f"Payment record not found for order_id: {order_id}")
+                return Response(
+                    {"error": "Payment record not found"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
 
-        # Redirect to Frontend
-        # You should define FRONTEND_URL in your .env (e.g., http://localhost:3000)
-        frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
-        redirect_url = f"{frontend_url}/payment/status?order_id={order_id}&status={payment.payment_status}"
-        
-        return redirect(redirect_url)
+            # Update payment details
+            payment.tracking_id = response_data.get('tracking_id')
+            payment.bank_ref_no = response_data.get('bank_ref_no')
+            payment.payment_mode = response_data.get('payment_mode')
+            payment.raw_response = response_data
+            
+            # Handle different payment statuses
+            if auth_status == 'success':
+                payment.payment_status = 'SUCCESS'
+                reg = payment.registration
+                
+                try:
+                    # For migrated students, ensure registration number is generated
+                    if reg.migrated_from_other_university and not reg.registration_number:
+                        # Generate registration number
+                        reg.registration_number = generate_registration_number(reg)
+                        logger.info(f"Generated registration number: {reg.registration_number} for migrated student")
+                    
+                    # Mark registration as completed
+                    reg.is_registration_completed = True
+                    reg.save()
+                    
+                    logger.info(f"Successfully updated registration for {reg.aadhaar_no}")
+                    
+                except Exception as e:
+                    logger.error(f"Error updating registration: {str(e)}")
+                    payment.payment_status = 'PENDING'
+                    payment.save()
+                    raise
+                    
+            elif auth_status == 'aborted':
+                payment.payment_status = 'ABORTED'
+                logger.info(f"Payment aborted for order_id: {order_id}")
+            else:
+                payment.payment_status = 'FAILED'
+                logger.warning(f"Payment failed for order_id: {order_id}. Status: {auth_status}")
+            
+            payment.save()
+            logger.info(f"Payment {payment.payment_status} for order_id: {order_id}")
+
+            # Redirect to Frontend with all necessary parameters
+            frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+            
+            if hasattr(payment, 'registration') and hasattr(payment.registration, 'uid'):
+                uid = str(payment.registration.uid)
+                redirect_url = (
+                    f"{frontend_url}/new-registration/registration-status"
+                    f"?uid={uid}"
+                    f"&payment_status={payment.payment_status.lower()}"
+                    f"&order_id={order_id}"
+                )
+                if payment.payment_status == 'SUCCESS' and payment.registration.registration_number:
+                    redirect_url += f"&registration_number={payment.registration.registration_number}"
+            else:
+                logger.error(f"Registration or UID not found for payment {payment.id}")
+                redirect_url = f"{frontend_url}/new-registration/registration-status?error=registration_not_found"
+
+            logger.info(f"Redirecting to: {redirect_url}")
+            return redirect(redirect_url)
+            
+        except Exception as e:
+            logger.exception("Error processing payment response")
+            # Still redirect to frontend but with error status
+            frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+            error_redirect = f"{frontend_url}/new-registration/registration-status?error={str(e)[:100]}"
+            return redirect(error_redirect)
 
 
 class RegistrationOptionsView(views.APIView):

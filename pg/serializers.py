@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment
+from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment, PGCourseStructure
 from colleges.models import College
 
 
@@ -106,3 +106,52 @@ class PGStudentCourseAssessmentSerializer(serializers.ModelSerializer):
              
         instance.save()
         return instance
+
+
+class AssessmentDetailSerializer(serializers.ModelSerializer):
+    """
+    Serializer for assessment details in college students view.
+    """
+    class Meta:
+        model = PGStudentCourseAssessment
+        fields = [
+            'uid', 'semester', 'session', 'paper_code', 
+            'course_name', 'course_code', 'label',
+            'ind_max_marks', 'ind_pass_marks', 
+            'ind_marks_obtained', 'ind_is_absent'
+        ]
+
+
+class StudentWithAssessmentsSerializer(serializers.Serializer):
+    """
+    Serializer for student with their assessments grouped together.
+    """
+    registration_no = serializers.CharField()
+    name = serializers.CharField()
+    department = serializers.CharField(allow_null=True)
+    batch = serializers.CharField(allow_null=True)
+    assessments = AssessmentDetailSerializer(many=True)
+
+
+class PGSubjectDropdownSerializer(serializers.ModelSerializer):
+    """
+    Serializer for subject dropdown.
+    """
+    uid = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = PGCourseStructure
+        fields = ['uid', 'code', 'semester']
+
+
+class PGCollegeStudentSerializer(serializers.Serializer):
+    """
+    Serializer for college students with assessment marks info.
+    Used in PGCollegeStudentsView.
+    """
+    uid = serializers.UUIDField()  # Assessment UID for marks entry
+    registration_no = serializers.CharField()
+    name = serializers.CharField()
+    ind_max_marks = serializers.IntegerField(allow_null=True)
+    ind_pass_marks = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    is_cia_fill = serializers.BooleanField()

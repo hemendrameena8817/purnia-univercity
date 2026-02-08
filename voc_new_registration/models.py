@@ -138,6 +138,7 @@ class NewRegistration(models.Model):
     is_account_created = models.BooleanField(default=False)
     is_registration_completed = models.BooleanField(default=False)
     registration_number = models.CharField(max_length=50, null=True, blank=True, unique=True, help_text="Generated unique registration number")
+    sr_no = models.IntegerField(null=True, blank=True, help_text="Serial number (last 5 digits of registration number)")
 
     
     # Soft Delete
@@ -159,6 +160,7 @@ class NewRegistration(models.Model):
             models.Index(fields=['course']),
             models.Index(fields=['college']),
             models.Index(fields=['aadhaar_no']),
+            models.Index(fields=['-sr_no']),  # Descending index for fast MAX(sr_no) queries
         ]
     
     def __str__(self):

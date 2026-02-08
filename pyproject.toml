@@ -29,6 +29,7 @@ qrcode = {extras = ["pil"], version = "^8.2"}
 lxml = "^6.0.2"
 weasyprint = "^68.0"
 gunicorn = "^25.0.2"
+python-barcode = "^0.16.1"
 
 [tool.poetry.group.dev.dependencies]
 # Add development dependencies here as needed
