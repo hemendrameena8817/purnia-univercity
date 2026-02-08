@@ -100,14 +100,13 @@ class UserAccountAdmin(BaseUserAdmin):
     ordering = ("-created_at",)
 
     fieldsets = (
-        (None, {"fields": ("email", "password")}),
-        ("Personal Info", {"fields": ("username", "first_name", "last_name", "phone")}),
+        (None, {"fields": ("email", "password")} ),
+        ("Personal Info", {"fields": ("username", "first_name", "last_name", "phone", "college")} ),
         (
             "Permissions",
             {
                 "fields": (
                     "user_type",
-                    "college",
                     "current_profile",
                     "is_active",
                     "is_staff",
@@ -132,6 +131,7 @@ class UserAccountAdmin(BaseUserAdmin):
                     "first_name",
                     "last_name",
                     "phone",
+                    "college",
                     "password1",
                     "password2",
                     "user_type",

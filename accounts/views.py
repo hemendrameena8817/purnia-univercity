@@ -54,6 +54,10 @@ class LoginView(DjRestAuthLoginView):
         if hasattr(self, 'refresh_token') and self.refresh_token:
             # If dj-rest-auth suppressed it (due to cookie logic), put it back
             response.data['refresh'] = str(self.refresh_token)
+
+        # Add serialized user data to the response
+        user_data = UserProfileSerializer(request.user).data
+        response.data['user'] = user_data
         
         return response
 
