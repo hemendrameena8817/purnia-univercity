@@ -86,7 +86,7 @@ class NewRegistration(models.Model):
     father_name = models.CharField(max_length=255, null=True, blank=True)
     mother_name = models.CharField(max_length=255, null=True, blank=True)
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, null=True, blank=True)
-    caste = models.CharField(max_length=10, choices=CASTE_CHOICES, null=True, blank=True)
+    caste = models.CharField(max_length=255, choices=CASTE_CHOICES, null=True, blank=True)
     dob = models.DateField(null=True, blank=True, help_text="Date of Birth")
     
     course = models.ForeignKey(
