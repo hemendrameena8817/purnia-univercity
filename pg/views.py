@@ -213,8 +213,23 @@ class PGDepartmentDropdownView(APIView):
             }, status=status.HTTP_403_FORBIDDEN)
         
         from .serializers import PGDepartmentSerializer
+        from accounts.models import CollegeUserProfile
         
-        departments = PGDepartment.objects.all().order_by('name')
+        # Get user's college profile to check assigned department
+        try:
+            college_profile = CollegeUserProfile.objects.get(user=request.user)
+            user_department = college_profile.PG_department
+        except CollegeUserProfile.DoesNotExist:
+            user_department = None
+        
+        # Filter departments based on user's assigned department
+        if user_department:
+            # User has a specific department assigned - show only that department
+            departments = PGDepartment.objects.filter(id=user_department.id).order_by('name')
+        else:
+            # User has no department assigned - show all departments
+            departments = PGDepartment.objects.all().order_by('name')
+        
         serializer = PGDepartmentSerializer(departments, many=True)
         
         return Response({
