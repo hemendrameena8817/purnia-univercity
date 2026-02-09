@@ -17,7 +17,7 @@ class CollegeUserProfileInline(admin.StackedInline):
     
     fieldsets = (
         ('College Assignment', {
-            'fields': ('college', 'designation')
+            'fields': ('college', 'PG_department', 'designation')
         }),
         ('Permissions', {
             'fields': (
@@ -117,8 +117,11 @@ class UserAccountAdmin(BaseUserAdmin):
                 )
             },
         ),
-        ("Important dates", {"fields": ("last_login",)}),
+        ("Important dates", {"fields": ("last_login", "created_at", "updated_at")}),
+        ("System Info", {"fields": ("uid",)}),
     )
+
+    readonly_fields = ("uid", "created_at", "updated_at")
 
     add_fieldsets = (
         (
@@ -228,14 +231,19 @@ class CollegeUserProfileAdmin(admin.ModelAdmin):
     list_display = (
         'user',
         'college',
+        'PG_department',
         'designation',
         'can_manage_students',
         'can_manage_marks',
+        'can_manage_results',
+        'can_verify_data',
+        'can_approve_certificates',
         'is_active',
     )
     
     list_filter = (
         'college',
+        'PG_department',
         'is_active',
         'can_manage_students',
         'can_manage_marks',
@@ -249,13 +257,15 @@ class CollegeUserProfileAdmin(admin.ModelAdmin):
         'user__last_name',
         'college__name',
         'college__college_code',
+        'PG_department__name',
     )
     
-    raw_id_fields = ('user', 'college')
+    raw_id_fields = ('user', 'college', 'PG_department')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('User & College', {
-            'fields': ('user', 'college')
+            'fields': ('user', 'college', 'PG_department')
         }),
         ('Role', {
             'fields': ('designation',)
@@ -270,7 +280,7 @@ class CollegeUserProfileAdmin(admin.ModelAdmin):
             )
         }),
         ('Status', {
-            'fields': ('is_active',)
+            'fields': ('is_active', 'uid', 'created_at', 'updated_at')
         }),
     )
     
