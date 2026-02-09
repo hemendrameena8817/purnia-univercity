@@ -76,6 +76,8 @@ class UserAccountAdmin(BaseUserAdmin):
         "user_type",
         "current_profile",
         "get_college",
+        "created_at",
+        "updated_at",
         "is_staff",
         "is_active",
         "college"
