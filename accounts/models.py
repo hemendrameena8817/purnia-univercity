@@ -55,7 +55,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
 
     USER_TYPE_CHOICES = [
         ("university_admin", "University Admin"),
-        ("college_user", "College User"),
+        ("college_user", "College User"), 
         ("student", "Student"),
         ("examiner", "Examiner"),
     ]
@@ -141,7 +141,13 @@ class CollegeUserProfile(models.Model):
     )
     
     designation = models.CharField(max_length=100, blank=True, null=True)
-    
+    PG_department = models.ForeignKey(
+        "pg.PGDepartment",
+        on_delete=models.CASCADE,
+        related_name='pg_department_users',
+        null=True,
+        blank=True
+    )
     # Permissions
     can_manage_students = models.BooleanField(default=False)
     can_manage_marks = models.BooleanField(default=False)
