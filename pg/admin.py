@@ -95,7 +95,7 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
 @admin.register(PGCourseStructure)
 class PGCourseStructureAdmin(admin.ModelAdmin):
     list_display = ('course_name', 'department', 'course_type', 'code', 'paper_code', 'semester', 'max_marks', 'max_credit', 'effective_credit', 'label')
-    list_filter = ('department__faculty', 'department', 'course_type', 'semester')
+    list_filter = ('department__faculty', 'department', 'course_type', 'semester','code',)
     search_fields = ('course_name', 'course_short_name', 'code', 'paper_code', 'department__name', 'label')
     ordering = ('department', 'semester', 'code')
     readonly_fields = ('uid', 'created_at', 'updated_at')
@@ -142,10 +142,20 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
     show_full_result_count = False
     
     # Keep only indexed and most useful filters
-    list_filter = ('semester', 'session', 'exam_type', 'label', 'ind_is_absent', 'sem_result')
+    list_filter = (
+        'semester', 'session', 'batch', 'department', 
+        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code",
+    )
     
     # Optimize search - use indexed fields only
-    search_fields = ('student__registration_no', 'course_code', 'paper_code')
+    search_fields = (
+        'student__registration_no', 
+        'student__first_name', 
+        'student__last_name',
+        'student__roll_no',
+        'course_code', 
+        'paper_code'
+    )
     
     # Smaller page size for faster rendering
     list_per_page = 50
@@ -259,7 +269,7 @@ class PGExamRegistrationAdmin(admin.ModelAdmin):
 @admin.register(PGCommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
     list_display = ('semester', 'course_code', 'course_type', 'course_name', 'get_departments_count', 'credit', 'marks', 'cia_marks', 'ese_marks')
-    list_filter = ('semester', 'credit', 'course_type')
+    list_filter = ('semester', 'credit', 'course_type', 'departments', 'course_code')
     search_fields = ('course_name', 'course_type', 'course_code', 'old_code', 'new_code')
     ordering = ('semester', 'course_code')
     readonly_fields = ('uid', 'created_at', 'updated_at', 'get_departments_list')

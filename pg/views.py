@@ -271,6 +271,59 @@ class PGSubjectDropdownView(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     
+    @staticmethod
+    def roman_to_int(roman):
+        """Convert Roman numeral to integer for sorting."""
+        if not roman:
+            return 0
+        
+        roman_values = {
+            'I': 1, 'V': 5, 'X': 10, 'L': 50,
+            'C': 100, 'D': 500, 'M': 1000
+        }
+        
+        total = 0
+        prev_value = 0
+        
+        for char in reversed(roman.upper()):
+            value = roman_values.get(char, 0)
+            if value < prev_value:
+                total -= value
+            else:
+                total += value
+            prev_value = value
+        
+        return total
+    
+    @staticmethod
+    def get_sort_key(subject):
+        """
+        Generate a sort key for subject code.
+        Handles codes like 'EC-I', 'CC-II', 'DSE-III', etc.
+        Places AECC and AEC subjects at the bottom.
+        Returns tuple of (priority, prefix, numeric_value) for proper sorting.
+        """
+        code = subject.code or ''
+        if not code:
+            return (0, '', 0)
+        
+        # Split by hyphen to separate prefix from Roman numeral
+        parts = code.split('-')
+        if len(parts) >= 2:
+            prefix = parts[0].strip()
+            roman = parts[1].strip()
+            numeric_value = PGSubjectDropdownView.roman_to_int(roman)
+            
+            # Place AECC and AEC at the bottom (priority 1), others at top (priority 0)
+            priority = 1 if prefix in ['AECC', 'AEC'] else 0
+            
+            return (priority, prefix, numeric_value)
+        else:
+            # If no hyphen, just use the code as-is
+            # Check if it's AECC or AEC
+            priority = 1 if code.strip() in ['AECC', 'AEC'] else 0
+            return (priority, code, 0)
+    
     def get(self, request):
         # Check if user is a college user
         if request.user.user_type != 'college_user':
@@ -301,7 +354,7 @@ class PGSubjectDropdownView(APIView):
         # Get subjects filtered by department and optionally semester
         subjects = PGCourseStructure.objects.filter(
             **filters
-        ).select_related('department').order_by('course_name')
+        ).select_related('department')
         
         # Filter duplicates in Python (since distinct('field') is Postgres only)
         # We want unique courses based on course_name and code
@@ -312,6 +365,9 @@ class PGSubjectDropdownView(APIView):
             if identifier not in seen:
                 seen.add(identifier)
                 unique_subjects.append(subject)
+        
+        # Sort by code with proper Roman numeral ordering
+        unique_subjects.sort(key=self.get_sort_key)
         
         serializer = PGSubjectDropdownSerializer(unique_subjects, many=True)
         
