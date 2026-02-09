@@ -178,6 +178,49 @@ class UserAccountAdmin(BaseUserAdmin):
                 inline_instances.append(PGStudentProfileInline)
                 
         return [inline(self.model, self.admin_site) for inline in inline_instances]
+    
+    def save_model(self, request, obj, form, change):
+        """
+        Save the user and ensure college_profile is synced for college users
+        """
+        super().save_model(request, obj, form, change)
+        
+        # For college users, ensure college_profile exists and matches
+        if obj.user_type == 'college_user' and obj.college:
+            # Get or create the college profile
+            college_profile, created = CollegeUserProfile.objects.get_or_create(
+                user=obj,
+                defaults={
+                    'college': obj.college,
+                    'is_active': True
+                }
+            )
+            
+            # Update college if it changed
+            if not created and college_profile.college != obj.college:
+                college_profile.college = obj.college
+                college_profile.save()
+    
+    def save_formset(self, request, form, formset, change):
+        """
+        Save inline formsets and ensure UserAccount.college is synced
+        """
+        instances = formset.save(commit=False)
+        
+        for instance in instances:
+            # If this is a CollegeUserProfile inline
+            if isinstance(instance, CollegeUserProfile):
+                instance.save()
+                # Sync the college field on UserAccount
+                if instance.college and instance.user.college != instance.college:
+                    instance.user.college = instance.college
+                    instance.user.save(update_fields=['college'])
+        
+        # Delete removed instances
+        for obj in formset.deleted_objects:
+            obj.delete()
+        
+        formset.save_m2m()
 
 
 @admin.register(CollegeUserProfile)
