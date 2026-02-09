@@ -174,6 +174,7 @@ def migrate_users(dry_run=False, user_type=None, limit=None, batch_size=5000):
             first_name=local_user.first_name or '',
             email=local_user.email or '',
             user_type=local_user.user_type or 'student',
+            current_profile=local_user.current_profile or '',
             college_id=live_college_id,
             is_active=local_user.is_active,
             is_verified=local_user.is_verified,
