@@ -26,7 +26,8 @@ def run():
     from django.contrib.auth.hashers import make_password
 
     # File path
-    file_path = r"D:\code\Purnea\pup-umis-backend\courses_data\pg\pg_college_department.xlsx"
+    from django.conf import settings
+    file_path = os.path.join(settings.BASE_DIR, 'courses_data', 'pg', 'pg_college_department.xlsx')
     
     if not os.path.exists(file_path):
         print(f"Error: File not found at {file_path}")
