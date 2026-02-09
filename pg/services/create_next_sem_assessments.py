@@ -5,7 +5,7 @@ for students who have passed or been promoted
 
 Usage:
     python create_next_sem_assessments.py --semester 1ST --session 2024-25 --dry-run
-    python create_next_sem_assessments.py --semester 1ST --session 2024-25  # Actually create
+    python create_next_sem_assessments.py --semester "1ST" --session "2024-25" --batch "2024-26"
 """
 
 import os

@@ -195,8 +195,13 @@ class NextSemesterAssessmentService:
                 if course_structure.label and 'ESE' in course_structure.label.upper():
                     continue
                 
-                # Use MID_SEM as the label for all CIA assessments
-                labels = ['MID_SEM']
+                # Use MID_TERM as the label for all CIA assessments
+                labels = ['MID_TERM']
+                
+                # Prefix paper code with PG if not already present
+                final_paper_code = course_structure.paper_code
+                if final_paper_code and not final_paper_code.startswith('PG'):
+                    final_paper_code = f"PG{final_paper_code}"
                 
                 for label in labels:
                     # Check if assessment already exists
@@ -204,13 +209,13 @@ class NextSemesterAssessmentService:
                         student=student,
                         semester=next_semester_str,
                         session=next_session,
-                        paper_code=course_structure.paper_code,
+                        paper_code=final_paper_code,
                         label=label
                     ).first()
                     
                     if existing:
                         print(f"Assessment already exists for {student.registration_no}, "
-                              f"semester {next_semester_str}, paper {course_structure.paper_code}, label {label}")
+                              f"semester {next_semester_str}, paper {final_paper_code}, label {label}")
                         continue
                     
                     # Use max_marks and min_marks directly from PGCourseStructure
@@ -245,7 +250,7 @@ class NextSemesterAssessmentService:
                         'course_short_name': course_structure.course_short_name,
                         'course_type': course_structure.course_type,
                         'course_code': course_structure.code,  # Use 'code' field instead of 'course_code'
-                        'paper_code': course_structure.paper_code,
+                        'paper_code': final_paper_code,
                         'semester': next_semester_str,
                         'label': label,
                         'department': student.department,
@@ -304,6 +309,7 @@ class NextSemesterAssessmentService:
                 'error': str(e)
             }
     
+
     @staticmethod
     def create_assessments_for_eligible_students(
         semester: str,
@@ -337,8 +343,6 @@ class NextSemesterAssessmentService:
         
         if batch:
             # Filter by student's batch
-            # Assuming PGExamResult -> Student -> Batch (CharField) or Student -> Batch (ForeignKey via name)
-            # The user said "batch wise", and previous scripts filtered batch by name.
             # PGStudentProfile has 'batch' CharField.
             eligible_results = eligible_results.filter(student__batch=batch)
             print(f"Filtering by batch: {batch}")
@@ -347,7 +351,7 @@ class NextSemesterAssessmentService:
             eligible_results = eligible_results[:limit]
         
         total = eligible_results.count()
-        print(f"\nFound {total} eligible students for semester {semester}, session {session}")
+        print(f"\nFound {total} eligible students for semester {semester}, session {session}" + (f", batch {batch}" if batch else ""))
         
         results = {
             'total_eligible': total,
