@@ -180,8 +180,8 @@ def migrate_users(dry_run=False, user_type=None, limit=None, batch_size=5000):
             is_verified=local_user.is_verified,
             is_staff=local_user.is_staff,
             is_superuser=local_user.is_superuser,
-            date_joined=local_user.date_joined,
-            last_login=local_user.last_login
+            # date_joined=local_user.date_joined,
+            # last_login=local_user.last_login
         )
         
         users_to_create.append(new_user)
