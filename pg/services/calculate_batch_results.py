@@ -16,7 +16,7 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
         dry_run (bool): If True, DOES NOT SAVE changes to DB. Default is True.
     """
     # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='2411M050141', semester='1ST', session='2024-25', dry_run=True)"
-    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='1934B090018', semester='1ST', session='2024-25', dry_run=True)"/
+    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='190152300011', semester='1ST', session='2024-25', dry_run=True)"
     # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(batch_name='2024-26', semester='1ST', session='2024-25', dry_run=False)"
     print("=" * 100)
     print(f"STARTING RESULT CALCULATION")
