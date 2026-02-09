@@ -251,8 +251,8 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of attachment UIDs to link to this grievance"
     )
-    college_uid = serializers.UUIDField(write_only=True, help_text="College UID where grievance is to be submitted")
-    active_profile = serializers.CharField(write_only=True, help_text="Active profile Type to verify the college")
+    college_uid = serializers.UUIDField(write_only=True, required=False, help_text="College UID where grievance is to be submitted")
+    active_profile = serializers.CharField(write_only=True, required=False, help_text="Active profile Type to verify the college")
     
     class Meta:
         model = Grievance
@@ -288,14 +288,19 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         except GrievanceCategory.DoesNotExist:
             raise serializers.ValidationError({"error": "Invalid or inactive category"})
         
-        college_uid = validated_data.pop('college_uid')
-        active_profile = validated_data.pop('active_profile')
-        try:
-            college = verify_student_college_profile(user, college_uid, active_profile)
-            validated_data['assigned_to_college'] = college
-        except Exception as e:
-            message = format_django_validation_error(e)
-            raise serializers.ValidationError({"error": message})
+        college_uid = validated_data.pop('college_uid', None)
+        validated_data.pop('active_profile', None) # No longer strictly needed
+
+        if college_uid:
+            from colleges.models import College
+            try:
+                validated_data['assigned_to_college'] = College.objects.get(uid=college_uid)
+            except College.DoesNotExist:
+                raise serializers.ValidationError({"error": "Invalid college UID."})
+        elif user.college:
+            validated_data['assigned_to_college'] = user.college
+        else:
+            raise serializers.ValidationError({"error": "Please provide a college_uid or ensure your account is associated with a college."})
         
         attachment_uids = validated_data.pop('attachment_uids', [])
         
