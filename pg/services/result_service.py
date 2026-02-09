@@ -504,13 +504,13 @@ class PGResultService:
         is_promoted = False
         
         if total_courses == 6:
-            if passed_courses_count >= 4:
+            if passed_courses_count >= 3:
                 is_promoted = True
         elif total_courses == 5:
             if passed_courses_count >= 3:
                 is_promoted = True
         elif total_courses == 4:
-             if passed_courses_count >= 3:
+             if passed_courses_count >= 2:
                  is_promoted = True
                  
         if is_promoted:
