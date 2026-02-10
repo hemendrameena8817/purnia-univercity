@@ -1,6 +1,7 @@
 import uuid
 from django.db import models, transaction
 from django.utils import timezone
+from django.conf import settings
 from .options import CASTE_CHOICES, GENDER_CHOICES
 from pup_umis_backend.storage_backends import MediaStorage, DocumentStorage, ProfilePhotoStorage
 from pup_umis_backend.upload_paths import unique_file_path
@@ -79,13 +80,13 @@ class NewRegistration(models.Model):
     # Profile Images
     profile_picture = models.ImageField(
         upload_to=unique_file_path('voc_registrations/images/'),
-        storage=MediaStorage(),
+        storage=MediaStorage() if settings.DEBUG else None,
         null=True,
         blank=True
     )
     signature = models.ImageField(
         upload_to=unique_file_path('voc_registrations/signatures/'),
-        storage=MediaStorage(),
+        storage=MediaStorage() if settings.DEBUG else None,
         null=True,
         blank=True
     )
@@ -93,13 +94,13 @@ class NewRegistration(models.Model):
     # Certificates (PDF or Image)
     migration_certificate = models.FileField(
         upload_to=unique_file_path('voc_registrations/certificates/'),
-        storage=DocumentStorage(),
+        storage=DocumentStorage() if settings.DEBUG else None,
         null=True,
         blank=True
     )
     registration_certificate = models.FileField(
         upload_to=unique_file_path('voc_registrations/certificates/'),
-        storage=DocumentStorage(),
+        storage=DocumentStorage() if settings.DEBUG else None,
         null=True,
         blank=True
     )
