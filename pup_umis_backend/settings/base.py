@@ -140,8 +140,9 @@ STATIC_ROOT = BASE_DIR / 'static'
 # Media files (User uploaded files)
 # -------------------------------------------------
 
-#MEDIA_URL = '/media/'
-#MEDIA_ROOT = BASE_DIR / 'media'
+if config('DEBUG', default=True, cast=bool):
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # -------------------------------------------------
