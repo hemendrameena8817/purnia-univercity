@@ -720,14 +720,6 @@ class UGResultCalculator:
                 student_id=student_id, 
                 semester__in=['1ST', '2ND']
             )
-            # CAUTION: If current_semester is 2ND, the DB might be stale for 2ND credits.
-            # But usually we handle credits calculation before this.
-            # If we need to account for current semester credits that aren't in DB yet,
-            # we'd need another argument. For now, assuming standard flow where this comes later or is 1st sem.
-            # Step 2 updates ExamResult at the END.
-            # So if we are in Sem 2, we might have issue.
-            # But the User Request primarily concerns Sem 1 (1->2).
-            # For 1->2, we just need status.
             total_credits = sum(r.semester_credit_earned or 0 for r in results)
             
             if total_credits < 28:
@@ -737,7 +729,6 @@ class UGResultCalculator:
         # 3. Special Rules for moving to Sem 5 (Year 3)
         if target_sem == '5TH':
             # Rule: Total credits of 40 in Sem 1 & 2
-            # Rule: At least 68 credits in Sem 1, 2, 3, 4
             results_1_2 = UGExamResult.objects.filter(
                 student_id=student_id, 
                 semester__in=['1ST', '2ND']
@@ -747,6 +738,7 @@ class UGResultCalculator:
             if credits_1_2 < 40:
                 return False, f"Sem 1 & 2 Not Cleared: {credits_1_2}/40 Credits"
             
+            # Rule: At least 68 credits in Sem 1, 2, 3, 4
             results_1_4 = UGExamResult.objects.filter(
                 student_id=student_id, 
                 semester__in=['1ST', '2ND', '3RD', '4TH']
@@ -756,8 +748,39 @@ class UGResultCalculator:
             if total_credits < 68:
                 return False, f"Insufficient Credits: {total_credits}/68 (Sem 1-4)"
             return True, "Eligible"
+            
+        # 4. Special Rules for moving to Sem 7 (Year 4)
+        if target_sem == '7TH':
+            # Rule: Sem 1+2 >= 40
+            results_1_2 = UGExamResult.objects.filter(student_id=student_id, semester__in=['1ST', '2ND'])
+            credits_1_2 = sum(r.semester_credit_earned or 0 for r in results_1_2)
+            if credits_1_2 < 40:
+                return False, f"Sem 1 & 2 Not Cleared: {credits_1_2}/40 Credits"
 
-        # 4. Standard Promotion (1->2, 3->4, 5->6)
+            # Rule: Sem 3+4 >= 40
+            results_3_4 = UGExamResult.objects.filter(student_id=student_id, semester__in=['3RD', '4TH'])
+            credits_3_4 = sum(r.semester_credit_earned or 0 for r in results_3_4)
+            if credits_3_4 < 40:
+                return False, f"Sem 3 & 4 Not Cleared: {credits_3_4}/40 Credits"
+
+            # Rule: Sem 1-4 >= 80
+            results_1_4 = UGExamResult.objects.filter(student_id=student_id, semester__in=['1ST', '2ND', '3RD', '4TH'])
+            credits_1_4 = sum(r.semester_credit_earned or 0 for r in results_1_4)
+            if credits_1_4 < 80:
+                return False, f"Sem 1-4 Insufficient: {credits_1_4}/80 Credits"
+
+            # Rule: Sem 1-6 >= 108
+            results_1_6 = UGExamResult.objects.filter(
+                student_id=student_id, 
+                semester__in=['1ST', '2ND', '3RD', '4TH', '5TH', '6TH']
+            )
+            credits_1_6 = sum(r.semester_credit_earned or 0 for r in results_1_6)
+            if credits_1_6 < 108:
+                return False, f"Sem 1-6 Insufficient: {credits_1_6}/108 Credits"
+            
+            return True, "Eligible"
+
+        # 5. Standard Promotion (1->2, 3->4, 5->6)
         # Using status_to_check
         if status_to_check in ['PASS', 'PROMOTED']:
             return True, "Eligible"

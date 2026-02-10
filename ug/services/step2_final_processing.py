@@ -618,18 +618,27 @@ class FinalResultProcessingService:
         """Create SemesterRegistration for next semester"""
         next_sem = self._get_next_semester(self.semester)
         if next_sem:
-            SemesterRegistration.objects.get_or_create(
+            # Check if exists (avoid MultipleObjectsReturned if duplicates exist)
+            existing_qs = SemesterRegistration.objects.filter(
                 student=student,
                 sem=next_sem,
-                session=self.session,
-                defaults={
-                    'status': 'PENDING',
-                    'is_open': True,
-                    'exam_eligible': False,
-                    'remarks': f'Promoted from {self.semester}'
-                }
+                session=self.session
             )
-            self.stats['registrations_created'] += 1
+            
+            if not existing_qs.exists():
+                SemesterRegistration.objects.create(
+                    student=student,
+                    sem=next_sem,
+                    session=self.session,
+                    status='PENDING',
+                    is_open=True,
+                    exam_eligible=False,
+                    remarks=f'Promoted from {self.semester}'
+                )
+                self.stats['registrations_created'] += 1
+            else:
+                # Already exists
+                pass
 
     ################################################################################
     # UTILITIES
