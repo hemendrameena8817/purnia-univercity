@@ -579,6 +579,91 @@ class PGResultCurrent(models.Model):
         return f"{self.college_roll_no} - {self.student_name} - Sem {self.semester_code}"
 
 
+
+class UGResultCurrent(models.Model):
+    """
+    Staging table for UG_result_current from purnea_exm_new database.
+    Contains results for UG students (Non-CBCS/Old format).
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    # Original table columns
+    source_id = models.CharField(max_length=50, null=True, blank=True, help_text='Original id from dump')
+    user_id = models.CharField(max_length=50, null=True, blank=True)
+    college_roll_no = models.CharField(max_length=50, null=True, blank=True)
+    college_reg_no = models.CharField(max_length=50, null=True, blank=True)
+    student_name = models.CharField(max_length=200, null=True, blank=True)
+    fathers_name = models.CharField(max_length=200, null=True, blank=True)
+    mothers_name = models.CharField(max_length=200, null=True, blank=True)
+    semester_code = models.CharField(max_length=50, null=True, blank=True)
+    batch_code = models.CharField(max_length=50, null=True, blank=True)
+    session_code = models.CharField(max_length=50, null=True, blank=True)
+    course_code = models.CharField(max_length=50, null=True, blank=True)
+    discipline_code = models.CharField(max_length=50, null=True, blank=True)
+    temp_paper_code = models.CharField(max_length=50, null=True, blank=True)
+    paper_code_correction = models.CharField(max_length=100, null=True, blank=True)
+    subject_code_correction = models.CharField(max_length=100, null=True, blank=True)
+    paper_code = models.CharField(max_length=100, null=True, blank=True)
+    subject_code = models.CharField(max_length=50, null=True, blank=True)
+    subject_name = models.CharField(max_length=500, null=True, blank=True)
+    theory = models.CharField(max_length=50, null=True, blank=True)
+    sessional = models.CharField(max_length=50, null=True, blank=True)
+    status = models.CharField(max_length=50, null=True, blank=True)
+    pra = models.CharField(max_length=50, null=True, blank=True)
+    exam_type = models.CharField(max_length=50, null=True, blank=True)
+    maximum_mark = models.CharField(max_length=50, null=True, blank=True)
+    pass_mark = models.CharField(max_length=50, null=True, blank=True)
+    mark_secured = models.CharField(max_length=50, null=True, blank=True)
+    mark_secured_history = models.CharField(max_length=50, null=True, blank=True)
+    subject_total_mark = models.CharField(max_length=50, null=True, blank=True)
+    subject_result = models.CharField(max_length=50, null=True, blank=True)
+    subject_result_1 = models.CharField(max_length=50, null=True, blank=True)
+    subject_result_2 = models.CharField(max_length=50, null=True, blank=True)
+    final_result = models.CharField(max_length=100, null=True, blank=True)
+    grand_total_mark = models.CharField(max_length=50, null=True, blank=True)
+    total_secured_mark_1 = models.CharField(max_length=50, null=True, blank=True)
+    total_secured_mark_2 = models.CharField(max_length=50, null=True, blank=True)
+    total_secured_mark = models.CharField(max_length=50, null=True, blank=True)
+    hon = models.CharField(max_length=50, null=True, blank=True)
+    total_per = models.CharField(max_length=50, null=True, blank=True)
+    agreegate = models.CharField(max_length=100, null=True, blank=True)
+    institute_code = models.CharField(max_length=50, null=True, blank=True)
+    record_status_check = models.CharField(max_length=50, null=True, blank=True)
+    record_status = models.CharField(max_length=50, null=True, blank=True)
+    grade = models.CharField(max_length=50, null=True, blank=True)
+    student_check = models.CharField(max_length=50, null=True, blank=True)
+    grace_chk = models.CharField(max_length=50, null=True, blank=True)
+    remark = models.CharField(max_length=255, null=True, blank=True)
+    paper_type_code = models.CharField(max_length=50, null=True, blank=True)
+    sub_reult_com = models.CharField(max_length=50, null=True, blank=True)
+    ExRegular_chk = models.CharField(max_length=50, null=True, blank=True)
+    subject_count = models.CharField(max_length=50, null=True, blank=True)
+    exam_type_his = models.CharField(max_length=255, null=True, blank=True)
+    aggregate_hindi = models.TextField(null=True, blank=True)
+
+    # Meta fields
+    is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'UG Result Current before CIA'
+        verbose_name_plural = 'UG Result Current before CIA'
+        indexes = [
+            models.Index(fields=['user_id']),
+            models.Index(fields=['college_roll_no']),
+            models.Index(fields=['college_reg_no']),
+            models.Index(fields=['semester_code']),
+            models.Index(fields=['batch_code']),
+            models.Index(fields=['session_code']),
+            models.Index(fields=['course_code']),
+            models.Index(fields=['institute_code']),
+        ]
+        
+    def __str__(self):
+        return f"{self.college_roll_no} - {self.student_name} - {self.subject_name}"
+
+
 class DisciplineMasterDump(models.Model):
     """
     Staging table for discipline_master from purnea_exm_new database.

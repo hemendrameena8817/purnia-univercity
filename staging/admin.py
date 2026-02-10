@@ -3,7 +3,7 @@ from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
     RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent,
-    PGResultCurrent, DisciplineMasterDump
+    UGResultCurrent, PGResultCurrent, DisciplineMasterDump
 )
 
 
@@ -289,6 +289,81 @@ class UGSemResultCurrentAdmin(admin.ModelAdmin):
                 ('sem_1_total_ce', 'sem_2_total_ce', 'sem_3_total_ce'),
                 ('sem_1_final_result', 'is_grace', 'gpa_grace'),
             )
+        }),
+        ('Migration Status', {
+            'fields': (
+                ('uid', 'imported_at'),
+                'is_migrated',
+                'migration_notes',
+            )
+        }),
+    )
+
+@admin.register(UGResultCurrent)
+class UGResultCurrentAdmin(admin.ModelAdmin):
+    show_full_result_count = False
+    list_display = (
+        'source_id', 'college_roll_no', 'student_name', 'semester_code', 
+        'course_code', 'discipline_code', 'paper_code', 'subject_code',
+        'subject_result', 'final_result', 'exam_type',
+        'institute_code', 'is_migrated'
+    )
+    list_filter = (
+        'is_migrated', 'semester_code', 'course_code', 'discipline_code',
+        'batch_code', 'session_code', 'institute_code', 'subject_result', 
+        'final_result', 'exam_type'
+    )
+    search_fields = (
+        'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
+        'mothers_name', 'user_id', 'source_id', 'paper_code', 'subject_code', 'exam_type'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50
+    
+    fieldsets = (
+        ('Student Information', {
+            'fields': (
+                ('student_name', 'fathers_name', 'mothers_name'),
+                ('college_roll_no', 'college_reg_no'),
+                ('user_id', 'source_id'),
+            )
+        }),
+        ('Course Information', {
+            'fields': (
+                ('course_code', 'discipline_code'),
+                ('semester_code', 'session_code', 'batch_code'),
+                ('paper_code', 'subject_code'),
+                'subject_name',
+                'institute_code',
+            )
+        }),
+        ('Exam Details', {
+            'fields': (
+                ('exam_type', 'exam_type_his'),
+                ('status', 'record_status', 'record_status_check'),
+                'paper_type_code',
+            )
+        }),
+        ('Marks & Result', {
+            'fields': (
+                ('theory', 'sessional', 'pra'),
+                ('maximum_mark', 'pass_mark', 'mark_secured', 'mark_secured_history'),
+                'subject_total_mark',
+                ('subject_result', 'subject_result_1', 'subject_result_2'),
+                'final_result',
+                ('grand_total_mark', 'total_secured_mark', 'total_secured_mark_1', 'total_secured_mark_2'),
+                ('total_per', 'hon', 'agreegate', 'grade'),
+                ('student_check', 'grace_chk', 'remark'),
+                ('sub_reult_com', 'ExRegular_chk', 'subject_count'),
+                'aggregate_hindi',
+            )
+        }),
+        ('Correction Fields', {
+            'fields': (
+                ('temp_paper_code', 'paper_code_correction', 'subject_code_correction'),
+            ),
+            'classes': ('collapse',)
         }),
         ('Migration Status', {
             'fields': (
