@@ -175,6 +175,7 @@ class PGCollegeStudentsView(APIView):
             students_data.append({
                 'uid': assessment.uid,  # Assessment UID for marks entry
                 'registration_no': assessment.student.registration_no,
+                'roll_no': assessment.student.roll_no,  # Roll number
                 'name': f"{assessment.student.first_name} {assessment.student.last_name or ''}".strip(),
                 'ind_max_marks': assessment.ind_max_marks,
                 'ind_pass_marks': assessment.ind_pass_marks,

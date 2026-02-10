@@ -151,6 +151,7 @@ class PGCollegeStudentSerializer(serializers.Serializer):
     """
     uid = serializers.UUIDField()  # Assessment UID for marks entry
     registration_no = serializers.CharField()
+    roll_number = serializers.CharField()
     name = serializers.CharField()
     ind_max_marks = serializers.IntegerField(allow_null=True)
     ind_pass_marks = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
