@@ -126,7 +126,14 @@ LOGGING = {
     },
 }
 
-
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 # -------------------------------------------------
 # Debug Toolbar (Optional - uncomment if installed)
 # -------------------------------------------------
