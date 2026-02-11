@@ -33,8 +33,13 @@ class PrivateMediaStorage:
             return instance
         else:
             media_root = getattr(settings, 'MEDIA_ROOT', os.path.join(settings.BASE_DIR, 'media'))
+            media_url = getattr(settings, 'MEDIA_URL', '/media/')
+            
             location = os.path.join(media_root, cls.location)
-            instance = FileSystemStorage(location=location)
+            # Ensure base_url has a trailing slash and uses forward slashes
+            base_url = f"{media_url.rstrip('/')}/{cls.location.strip('/')}/"
+            
+            instance = FileSystemStorage(location=location, base_url=base_url)
             return instance
 
 
