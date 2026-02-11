@@ -144,7 +144,6 @@ class PGCollegeStudentsView(APIView):
             filters['batch__name'] = batch_name
         if session:
             filters['session'] = session
-            
         if subject_uid:
             from .models import PGCourseStructure
             from django.core.exceptions import ValidationError
@@ -167,7 +166,8 @@ class PGCollegeStudentsView(APIView):
         
         # Get assessments with student data
         assessments = PGStudentCourseAssessment.objects.filter(**filters).select_related('student')
-        
+        assessments = assessments.order_by('student__roll_no')
+
         # Build response with all assessment records
         # Each assessment is a separate entry (student may appear multiple times for different courses)
         students_data = []
