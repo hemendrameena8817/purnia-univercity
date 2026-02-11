@@ -195,8 +195,8 @@ class NextSemesterAssessmentService:
                 if course_structure.label and 'ESE' in course_structure.label.upper():
                     continue
                 
-                # Use MID_TERM as the label for all CIA assessments
-                labels = ['MID_TERM']
+                # Use CIA as the label for all CIA assessments
+                labels = ['CIA']
                 
                 # Prefix paper code with PG if not already present
                 final_paper_code = course_structure.paper_code
@@ -398,7 +398,7 @@ if __name__ == '__main__':
     print("=" * 80)
     
     # Configuration
-    SEMESTER = "1ST"
+    SEMESTER = "2ND"
     SESSION = "2024-25"
     DRY_RUN = True  # Set to False to actually create records
     LIMIT = None  # Set to a number to limit processing

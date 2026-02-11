@@ -80,13 +80,13 @@ class NewRegistration(models.Model):
     # Profile Images
     profile_picture = models.ImageField(
         upload_to=unique_file_path('voc_registrations/images/'),
-        storage=MediaStorage() if settings.DEBUG else None,
+        storage=MediaStorage(),
         null=True,
         blank=True
     )
     signature = models.ImageField(
         upload_to=unique_file_path('voc_registrations/signatures/'),
-        storage=MediaStorage() if settings.DEBUG else None,
+        storage=MediaStorage(),
         null=True,
         blank=True
     )
@@ -94,13 +94,13 @@ class NewRegistration(models.Model):
     # Certificates (PDF or Image)
     migration_certificate = models.FileField(
         upload_to=unique_file_path('voc_registrations/certificates/'),
-        storage=DocumentStorage() if settings.DEBUG else None,
+        storage=DocumentStorage(),
         null=True,
         blank=True
     )
     registration_certificate = models.FileField(
         upload_to=unique_file_path('voc_registrations/certificates/'),
-        storage=DocumentStorage() if settings.DEBUG else None,
+        storage=DocumentStorage(),
         null=True,
         blank=True
     )
