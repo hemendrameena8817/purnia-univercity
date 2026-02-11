@@ -14,7 +14,6 @@ from .serializers import (
     GrievanceListSerializer,
     GrievanceDetailSerializer,
     GrievanceCreateSerializer,
-    GrievanceUpdateSerializer,
     GrievanceCommentSerializer,
     GrievanceCommentCreateSerializer,
     GrievanceEscalateSerializer,
@@ -59,6 +58,18 @@ class GrievanceListCreateView(APIView):
                 description="Filter by scope: 'college' or 'university'. Only relevant for University Admin to see specific buckets.",
                 type=openapi.TYPE_STRING,
                 enum=['college', 'university']
+            ),
+            openapi.Parameter(
+                'is_assigned_to_university',
+                openapi.IN_QUERY,
+                description="Filter by university assignment status (true/false)",
+                type=openapi.TYPE_BOOLEAN
+            ),
+            openapi.Parameter(
+                'is_assigned_to_college',
+                openapi.IN_QUERY,
+                description="Filter by college assignment status (true/false)",
+                type=openapi.TYPE_BOOLEAN
             ),
             openapi.Parameter(
                 'page',
@@ -163,6 +174,16 @@ class GrievanceListCreateView(APIView):
         if category_filter:
             # Filter by category UID (more secure than ID)
             queryset = queryset.filter(category__uid=category_filter)
+
+        is_assigned_to_university_filter = request.query_params.get('is_assigned_to_university')
+        if is_assigned_to_university_filter is not None:
+            val = is_assigned_to_university_filter.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(is_assigned_to_university=val)
+
+        is_assigned_to_college_filter = request.query_params.get('is_assigned_to_college')
+        if is_assigned_to_college_filter is not None:
+            val = is_assigned_to_college_filter.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(is_assigned_to_college=val)
 
         # University Admin can filter by specific college
         college_filter = request.query_params.get('college')
@@ -281,7 +302,6 @@ class GrievanceListCreateView(APIView):
 class GrievanceDetailView(APIView):
     """
     GET: Retrieve a single grievance
-    PATCH: Update grievance status/priority (college/university staff only)
     """
     permission_classes = [IsAuthenticated]
 
@@ -324,97 +344,6 @@ class GrievanceDetailView(APIView):
         
         serializer = GrievanceDetailSerializer(grievance, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @swagger_auto_schema(
-        operation_description="""Update grievance status or assign to staff member.
-        
-        **Examples:**
-        
-        Update status only:
-        ```json
-        {"status": "in_progress"}
-        ```
-        
-        Assign to staff member:
-        ```json
-        {"handled_by_uid": "abc-123-def-456"}
-        ```
-        
-        Update multiple fields:
-        ```json
-        {
-          "status": "in_progress",
-          "handled_by_uid": "abc-123-def-456"
-        }
-        ```
-        """,
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'status': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    description='Update grievance status',
-                    enum=['open', 'in_progress', 'resolved', 'closed', 'escalated']
-                ),
-                'handled_by_uid': openapi.Schema(
-                    type=openapi.TYPE_STRING,
-                    format='uuid',
-                    description='UID of staff member to assign (use null to unassign)',
-                    nullable=True
-                ),
-            },
-            example={
-                'status': 'in_progress',
-                'handled_by_uid': 'abc-123-def-456'
-            }
-        ),
-        responses={
-            200: GrievanceDetailSerializer,
-            400: 'Validation error',
-            403: 'Permission denied',
-            404: 'Grievance not found'
-        },
-        tags=['Grievances'],
-        security=[{'Bearer': []}]
-    )
-    def patch(self, request, identifier):
-        """Update grievance (college/university staff only)"""
-        if request.user.user_type not in ['college_user', 'university_admin']:
-            return Response(
-                {'error': 'Only college/university staff can update grievances'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        grievance = self.get_object(identifier, request.user)
-        if not grievance:
-            return Response(
-                {'error': 'Grievance not found or access denied'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        serializer = GrievanceUpdateSerializer(
-            grievance,
-            data=request.data,
-            partial=True,
-            context={'request': request}
-        )
-        
-        if serializer.is_valid():
-            serializer.save()
-            response_serializer = GrievanceDetailSerializer(grievance)
-            return Response(
-                {
-                    'message': 'Grievance updated successfully',
-                    'grievance': response_serializer.data
-                },
-                status=status.HTTP_200_OK
-            )
-        
-        # Use utility to format errors to {error: "message"}
-        error_msg = get_first_serializer_error(serializer.errors)
-        return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 class GrievanceCommentListView(APIView):
     """
