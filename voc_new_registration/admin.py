@@ -24,12 +24,11 @@ class NewRegistrationSessionAdmin(admin.ModelAdmin):
 
 @admin.register(NewRegistration)
 class NewRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student_name', 'registration_number', 'course', 'college', 'is_registration_completed', 'created_at')
+    list_display = ('student_name', 'registration_number', 'course', 'college', 'is_registration_completed', 'updated_at')
     search_fields = ('student_name', 'aadhaar_no', 'registration_number', 'mobile_no')
     list_filter = (
         'is_registration_completed', 
-        'is_account_created', 
-        'is_deleted',
+        'course',
         'college'
     )
     readonly_fields = ('created_at', 'updated_at')
