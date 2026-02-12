@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
-from .models import UserAccount, CollegeUserProfile
+from .models import UserAccount, CollegeUserProfile, UniversityUserProfile
 from mca_sem.models import MCAStudentProfile
 from plw.models import PLWStudentProfile
 from ug.models import UGStudentProfile
@@ -26,6 +26,35 @@ class CollegeUserProfileInline(admin.StackedInline):
                 'can_manage_results',
                 'can_verify_data', 
                 'can_approve_certificates'
+            )
+        }),
+        ('Status', {
+            'fields': ('is_active',)
+        }),
+    )
+
+
+class UniversityUserProfileInline(admin.StackedInline):
+    model = UniversityUserProfile
+    can_delete = False
+    verbose_name_plural = 'University Profile'
+    fk_name = 'user'
+    extra = 0
+    
+    fieldsets = (
+        ('Profile Info', {
+            'fields': ('designation', 'department')
+        }),
+        ('Module Permissions', {
+            'fields': (
+                'can_manage_voc_registration',
+                'can_manage_grievances',
+                'can_manage_ug',
+                'can_manage_pg',
+                'can_manage_mca',
+                'can_manage_btech',
+                'can_manage_colleges',
+                'can_manage_university_settings',
             )
         }),
         ('Status', {
@@ -148,6 +177,7 @@ class UserAccountAdmin(BaseUserAdmin):
     
     inlines = [
         CollegeUserProfileInline,
+        UniversityUserProfileInline,
         MCAStudentProfileInline,
         PLWStudentProfileInline,
         UGStudentProfileInline,
@@ -170,6 +200,10 @@ class UserAccountAdmin(BaseUserAdmin):
         # Show college profile for college users
         if obj.user_type == 'college_user':
             inline_instances.append(CollegeUserProfileInline)
+        
+        # Show university profile for university admin
+        elif obj.user_type == 'university_admin':
+            inline_instances.append(UniversityUserProfileInline)
             
         # Show student profile based on current_profile
         elif obj.user_type == 'student':
@@ -205,6 +239,13 @@ class UserAccountAdmin(BaseUserAdmin):
             if not created and college_profile.college != obj.college:
                 college_profile.college = obj.college
                 college_profile.save()
+        
+        # For university users, ensure university_profile exists
+        elif obj.user_type == 'university_admin':
+            UniversityUserProfile.objects.get_or_create(
+                user=obj,
+                defaults={'is_active': True}
+            )
     
     def save_formset(self, request, form, formset, change):
         """
@@ -288,3 +329,57 @@ class CollegeUserProfileAdmin(admin.ModelAdmin):
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('user', 'college')
+
+
+@admin.register(UniversityUserProfile)
+class UniversityUserProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        'user',
+        'designation',
+        'department',
+        'can_manage_voc_registration',
+        'can_manage_grievances',
+        'is_active',
+    )
+    
+    list_filter = (
+        'department',
+        'is_active',
+        'can_manage_voc_registration',
+        'can_manage_grievances',
+    )
+    
+    search_fields = (
+        'user__email',
+        'user__first_name',
+        'user__last_name',
+        'designation',
+        'department',
+    )
+    
+    raw_id_fields = ('user',)
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        ('User Info', {
+            'fields': ('user', 'designation', 'department')
+        }),
+        ('Module Permissions', {
+            'fields': (
+                'can_manage_voc_registration',
+                'can_manage_grievances',
+                'can_manage_ug',
+                'can_manage_pg',
+                'can_manage_mca',
+                'can_manage_btech',
+                'can_manage_colleges',
+                'can_manage_university_settings',
+            )
+        }),
+        ('Status', {
+            'fields': ('is_active', 'uid', 'created_at', 'updated_at')
+        }),
+    )
+    
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user')

@@ -31,7 +31,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 import uuid
 from .utils.ccavenue_utils import encrypt, decrypt, parse_response
-from .utils.ccavenue_utils import encrypt, decrypt, parse_response
+from accounts.permissions import IsUniversityAdmin, CanManageVocRegistration
+from pup_umis_backend.utils.pagination import DefaultPagination
 
 
 class NewRegistrationListView(generics.ListAPIView):
@@ -40,6 +41,8 @@ class NewRegistrationListView(generics.ListAPIView):
     Supports search and filtering.
     """
     serializer_class = NewRegistrationListSerializer
+    permission_classes = [CanManageVocRegistration]
+    pagination_class = DefaultPagination
     
     def get_queryset(self):
         # Only list records that are not soft-deleted
@@ -55,29 +58,29 @@ class NewRegistrationListView(generics.ListAPIView):
             )
         
         # Filtering
-        course = self.request.query_params.get('course', None)
-        if course:
-            queryset = queryset.filter(course__uid=course)
+        course_uid = self.request.query_params.get('course_uid', None)
+        if course_uid:
+            queryset = queryset.filter(course__uid=course_uid)
         
-        batch = self.request.query_params.get('batch', None)
-        if batch:
-            queryset = queryset.filter(batch__uid=batch)
-            
-        session = self.request.query_params.get('session', None)
-        if session:
-            queryset = queryset.filter(session__uid=session)
+        batch_uid = self.request.query_params.get('batch_uid', None)
+        if batch_uid:
+            queryset = queryset.filter(batch__uid=batch_uid)
         
-        gender = self.request.query_params.get('gender', None)
-        if gender:
-            queryset = queryset.filter(gender=gender.upper())
+        gender_uid = self.request.query_params.get('gender_uid', None)
+        if gender_uid:
+            queryset = queryset.filter(gender=gender_uid.upper())
         
-        caste = self.request.query_params.get('caste', None)
-        if caste:
-            queryset = queryset.filter(caste=caste.upper())
+        caste_uid = self.request.query_params.get('caste_uid', None)
+        if caste_uid:
+            queryset = queryset.filter(caste=caste_uid.upper())
         
-        college = self.request.query_params.get('college', None)
-        if college:
-            queryset = queryset.filter(college__uid=college)
+        college_uid = self.request.query_params.get('college_uid', None)
+        if college_uid:
+            queryset = queryset.filter(college__uid=college_uid)
+        
+        is_completed = self.request.query_params.get('is_registration_completed', None)
+        if is_completed is not None:
+            queryset = queryset.filter(is_registration_completed=is_completed.lower() == 'true')
             
         return queryset
 
@@ -85,13 +88,13 @@ class NewRegistrationListView(generics.ListAPIView):
         operation_summary="List all new registrations",
         operation_description="Retrieve a list of all new registration entries with pagination support",
         manual_parameters=[
-            openapi.Parameter('search', openapi.IN_QUERY, description="Search by name", type=openapi.TYPE_STRING),
-            openapi.Parameter('course', openapi.IN_QUERY, description="Filter by course UID", type=openapi.TYPE_STRING),
-            openapi.Parameter('batch', openapi.IN_QUERY, description="Filter by batch UID", type=openapi.TYPE_STRING),
-            openapi.Parameter('session', openapi.IN_QUERY, description="Filter by session UID", type=openapi.TYPE_STRING),
-            openapi.Parameter('gender', openapi.IN_QUERY, description="Filter by gender", type=openapi.TYPE_STRING),
-            openapi.Parameter('caste', openapi.IN_QUERY, description="Filter by caste", type=openapi.TYPE_STRING),
-            openapi.Parameter('college', openapi.IN_QUERY, description="Filter by college UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('search', openapi.IN_QUERY, description="Search by name, father name, or mother name", type=openapi.TYPE_STRING),
+            openapi.Parameter('course_uid', openapi.IN_QUERY, description="Filter by course UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('batch_uid', openapi.IN_QUERY, description="Filter by batch UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('gender_uid', openapi.IN_QUERY, description="Filter by gender (MALE/FEMALE/OTHER)", type=openapi.TYPE_STRING),
+            openapi.Parameter('caste_uid', openapi.IN_QUERY, description="Filter by caste (e.g. GENERAL, OBC, SC, ST)", type=openapi.TYPE_STRING),
+            openapi.Parameter('college_uid', openapi.IN_QUERY, description="Filter by college UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('is_registration_completed', openapi.IN_QUERY, description="Filter by completion status (true/false)", type=openapi.TYPE_BOOLEAN),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -257,7 +260,7 @@ class NewRegistrationBulkCreateView(views.APIView):
     """
     API View for bulk creation of registrations.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [CanManageVocRegistration]
     @swagger_auto_schema(
         operation_summary="Bulk create registrations",
         request_body=openapi.Schema(
