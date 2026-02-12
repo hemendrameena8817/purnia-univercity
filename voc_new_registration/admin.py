@@ -6,32 +6,35 @@ from .models import (
 
 @admin.register(NewRegistrationCourse)
 class NewRegistrationCourseAdmin(admin.ModelAdmin):
-    list_display = ('code', 'name', 'registration_fee', 'is_active')
+    list_display = ('uid', 'code', 'name', 'registration_fee', 'is_active')
     search_fields = ('name', 'code')
     list_filter = ('is_active',)
+    readonly_fields = ('uid',)
 
 @admin.register(NewRegistrationBatch)
 class NewRegistrationBatchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_active')
+    list_display = ('uid', 'name', 'is_active')
     search_fields = ('name',)
     list_filter = ('is_active',)
+    readonly_fields = ('uid',)
 
 @admin.register(NewRegistrationSession)
 class NewRegistrationSessionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_active')
+    list_display = ('uid', 'name', 'is_active')
     search_fields = ('name',)
     list_filter = ('is_active',)
+    readonly_fields = ('uid',)
 
 @admin.register(NewRegistration)
 class NewRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student_name', 'registration_number', 'course', 'college', 'is_registration_completed', 'updated_at')
+    list_display = ('uid', 'student_name', 'registration_number', 'course', 'college', 'is_registration_completed', 'updated_at')
     search_fields = ('student_name', 'aadhaar_no', 'registration_number', 'mobile_no')
     list_filter = (
         'is_registration_completed', 
         'course',
         'college'
     )
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'uid')
 
 @admin.register(RegistrationPayment)
 class RegistrationPaymentAdmin(admin.ModelAdmin):

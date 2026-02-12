@@ -9,13 +9,17 @@ from .views import (
     PaymentResponseView,
     RegistrationStatusView,
     CaptchaView,
-    PaymentInfoView
+    PaymentInfoView,
+    CheckRegistrationWindowView
 )
 
 urlpatterns = [
     # Captcha generation
     path('captcha/', CaptchaView.as_view(), name='registration-captcha'),
     
+    # Check registration window
+    path('check-window/', CheckRegistrationWindowView.as_view(), name='check-registration-window'),
+
     # List all registrations
     path('', NewRegistrationListView.as_view(), name='registration-list'),
     
