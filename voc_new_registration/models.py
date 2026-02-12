@@ -172,6 +172,8 @@ class NewRegistration(models.Model):
     # Additional metadata
     json_data = models.JSONField(null=True, blank=True, help_text="Additional data from Excel")
     
+    registration_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when registration was completed")
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -185,8 +187,14 @@ class NewRegistration(models.Model):
             models.Index(fields=['course']),
             models.Index(fields=['college']),
             models.Index(fields=['aadhaar_no']),
-            models.Index(fields=['-sr_no']),  # Descending index for fast MAX(sr_no) queries
+            models.Index(fields=['-sr_no']), 
         ]
+    
+    def save(self, *args, **kwargs):
+        # Auto-set registration_at when is_registration_completed becomes True
+        if self.is_registration_completed and not self.registration_at:
+            self.registration_at = timezone.now()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.student_name} - {self.course} - {self.college}"
