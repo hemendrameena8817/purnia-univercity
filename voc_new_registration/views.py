@@ -12,7 +12,7 @@ from .models import (
     NewRegistrationBatch,
     NewRegistrationSession
 )
-from .utils.registration_logic import generate_registration_number
+from .utils.registration_logic import generate_registration_number, check_course_registration_window
 from .serializers import (
     CourseMinimalSerializer,
     BatchMinimalSerializer,
@@ -29,6 +29,7 @@ from decouple import config
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 import uuid
 from .utils.ccavenue_utils import encrypt, decrypt, parse_response
 from accounts.permissions import IsUniversityAdmin, CanManageVocRegistration
@@ -147,17 +148,18 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
         ]
     )
     def get(self, request, *args, **kwargs):
-        # captcha_key = request.query_params.get('captcha_key')
-        # captcha_value = request.query_params.get('captcha_value')
+        captcha_key = request.query_params.get('captcha_key')
+        captcha_value = request.query_params.get('captcha_value')
         
-        # if not captcha_key or not captcha_value:
-        #     return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+        if not captcha_key or not captcha_value:
+             return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
         
-        # from captcha.models import CaptchaStore
-        # try:
-        #     CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
-        # except CaptchaStore.DoesNotExist:
-        #     return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+        from captcha.models import CaptchaStore
+        try:
+             CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+        except CaptchaStore.DoesNotExist:
+             return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+
         course_code = request.query_params.get('course_type')
         if not course_code:
             return Response({"error": "course_type is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -167,6 +169,10 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
             instance = self.get_queryset().get(aadhaar_no=aadhaar_no, course__code=course_code)
         except NewRegistration.DoesNotExist:
             return Response({"error": "Registration not found with provided Aadhaar and Course Code"}, status=status.HTTP_404_NOT_FOUND)
+        
+        is_valid, error_data = check_course_registration_window(instance.course)
+        if not is_valid:
+            return Response(error_data, status=status.HTTP_400_BAD_REQUEST)
         
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
@@ -670,4 +676,70 @@ class CaptchaView(views.APIView):
         return Response({
             "captcha_key": hashkey,
             "captcha_image": image_url
+        }, status=status.HTTP_200_OK)
+
+
+class CheckRegistrationWindowView(views.APIView):
+    """
+    API View to check if the registration window is open for a given course.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Check course registration window",
+        manual_parameters=[
+            openapi.Parameter('course_code', openapi.IN_QUERY, description="Course Code", type=openapi.TYPE_STRING, required=True),
+        ],
+        responses={
+            200: "Registration is open",
+            400: "Registration is closed",
+            404: "Course not found"
+        }
+    )
+    def get(self, request):
+        course_code = request.query_params.get('course_code')
+        if not course_code:
+            return Response({"error": "course_code is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            course = NewRegistrationCourse.objects.get(code=course_code)
+        except NewRegistrationCourse.DoesNotExist:
+            return Response({"error": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        current_time = timezone.now()
+        start = course.registration_start_datetime
+        end = course.registration_end_datetime
+        
+        if not start and not end:
+            return Response({
+                "status": "NOT_CONFIGURED",
+                "is_open": False,
+                "message": "Registration schedule is not configured",
+                "course": course.name,
+                "code": course.code,
+                "current_datetime": timezone.localtime(current_time)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        status_key = "OPEN"
+        message = "Registration is open"
+        is_open = True
+        
+        if start and current_time < start:
+            status_key = "NOT_STARTED"
+            is_open = False
+            message = "Registration has not started yet"
+        elif end and current_time > end:
+            status_key = "ENDED"
+            is_open = False
+            message = "Registration has ended"
+            
+        return Response({
+            "status": status_key,
+            "is_open": is_open,
+            "message": message,
+            "course": course.name,
+            "code": course.code,
+            "start_datetime": timezone.localtime(start) if start else None,
+            "end_datetime": timezone.localtime(end) if end else None,
+            "current_datetime": timezone.localtime(current_time)
         }, status=status.HTTP_200_OK)

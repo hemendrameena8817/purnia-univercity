@@ -172,3 +172,35 @@ def generate_vocational_registration_number(instance, session=None, college=None
         instance.save(update_fields=['registration_number', 'sr_no'])
         
         return final_number
+
+
+def check_course_registration_window(course):
+    """
+    Checks if the current time is within the registration window for the given course.
+    Returns:
+        (is_valid, error_data)
+        - is_valid: Boolean indicating if registration is allowed.
+        - error_data: Dict containing error details if invalid, or None if valid.
+    """
+    if not course:
+        return False, {"error": "Course not found"}
+        
+    current_time = timezone.now()
+    
+    # Check if registration start datetime is set and current time is before it
+    if course.registration_start_datetime and current_time < course.registration_start_datetime:
+        return False, {
+            "error": "Registration has not started yet",
+            "start_time": timezone.localtime(course.registration_start_datetime),
+            "current_time": timezone.localtime(current_time)
+        }
+    
+    # Check if registration end datetime is set and current time is after it
+    if course.registration_end_datetime and current_time > course.registration_end_datetime:
+        return False, {
+            "error": "Registration period has ended",
+            "end_time": timezone.localtime(course.registration_end_datetime),
+            "current_time": timezone.localtime(current_time)
+        }
+        
+    return True, None
