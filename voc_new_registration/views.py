@@ -710,6 +710,16 @@ class CheckRegistrationWindowView(views.APIView):
         start = course.registration_start_datetime
         end = course.registration_end_datetime
         
+        if not start and not end:
+            return Response({
+                "status": "NOT_CONFIGURED",
+                "is_open": False,
+                "message": "Registration schedule is not configured",
+                "course": course.name,
+                "code": course.code,
+                "current_datetime": timezone.localtime(current_time)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         status_key = "OPEN"
         message = "Registration is open"
         is_open = True
