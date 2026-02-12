@@ -170,3 +170,42 @@ class CollegeUserProfile(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
+
+class UniversityUserProfile(models.Model):
+    """
+    Profile for university admin users.
+    Allows granular permission control for different modules.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    user = models.OneToOneField(
+        UserAccount,
+        on_delete=models.CASCADE,
+        related_name='university_profile',
+        limit_choices_to={'user_type': 'university_admin'}
+    )
+    
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True, null=True) # e.g. Registration Section, Exam Section
+    
+    # Granular Module Permissions
+    can_manage_voc_registration = models.BooleanField(default=False)
+    can_manage_grievances = models.BooleanField(default=False)
+    can_manage_ug = models.BooleanField(default=False)
+    can_manage_pg = models.BooleanField(default=False)
+    can_manage_mca = models.BooleanField(default=False)
+    can_manage_btech = models.BooleanField(default=False)
+    can_manage_colleges = models.BooleanField(default=False)
+    can_manage_university_settings = models.BooleanField(default=False)
+    
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "University User Profile"
+        verbose_name_plural = "University User Profiles"
+
+    def __str__(self):
+        return f"{self.user.get_full_name()} - {self.designation or 'University Admin'}"
+
