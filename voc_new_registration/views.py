@@ -136,10 +136,11 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     @swagger_auto_schema(
         operation_summary="Retrieve a specific registration",
-        operation_description="Lookup by Aadhaar number. Requires captcha validation.",
+        operation_description="Lookup by Aadhaar number. Requires course code matching.",
         manual_parameters=[
-            openapi.Parameter('captcha_key', openapi.IN_QUERY, description="Captcha Hash Key", type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter('captcha_value', openapi.IN_QUERY, description="Solved Captcha Text", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('course_code', openapi.IN_QUERY, description="Registered Course Code", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('captcha_key', openapi.IN_QUERY, description="Captcha Hash Key (Optional for now)", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('captcha_value', openapi.IN_QUERY, description="Solved Captcha Text (Optional for now)", type=openapi.TYPE_STRING, required=False),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -233,30 +234,10 @@ class RegistrationStatusView(views.APIView):
                 "created_at": latest_payment.created_at
             }
 
-        # Fallback: Generate registration number if needed (shouldn't happen with new flow)
+        # Fallback: Generate registration number if needed
         if not registration.registration_number and registration.is_registration_completed:
             try:
-                if not registration.migrated_from_other_university:
-                    # For non-migrated students, use old_registration_no
-                    if registration.old_registration_no:
-                        registration.registration_number = registration.old_registration_no
-                        # Generate global sr_no
-                        last_global_reg = NewRegistration.objects.filter(
-                            sr_no__isnull=False
-                        ).order_by('-sr_no').only('sr_no').first()
-                        if last_global_reg and last_global_reg.sr_no:
-                            registration.sr_no = last_global_reg.sr_no + 1
-                        else:
-                            registration.sr_no = 1
-                        registration.save()
-                else:
-                    # For migrated students, generate new registration number
-                    if registration.college and registration.course:
-                        registration.registration_number = generate_registration_number(registration)
-                        # sr_no is already set by generate_registration_number function
-                        registration.save()
-                    else:
-                        print(f"Cannot generate registration number: Missing college or course for {registration.aadhaar_no}")
+                generate_registration_number(registration)
             except Exception as e:
                 # Log error but don't block the status return
                 print(f"Error generating registration number in StatusView: {str(e)}")
