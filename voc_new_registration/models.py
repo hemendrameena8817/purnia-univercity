@@ -14,6 +14,8 @@ class NewRegistrationCourse(models.Model):
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=100, unique=True)
     registration_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    registration_start_datetime = models.DateTimeField(null=True, blank=True, help_text="Registration start date and time")
+    registration_end_datetime = models.DateTimeField(null=True, blank=True, help_text="Registration end date and time")
     is_active = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
