@@ -67,6 +67,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
         ("pg", "Postgraduate"),
         ("btech", "B.Tech"),
         ("mba", "MBA"),
+        ("ug_before_cbcs", "UG Old (Non-CBCS)"),
     ]
 
     uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
