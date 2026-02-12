@@ -147,17 +147,18 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
         ]
     )
     def get(self, request, *args, **kwargs):
-        # captcha_key = request.query_params.get('captcha_key')
-        # captcha_value = request.query_params.get('captcha_value')
+        captcha_key = request.query_params.get('captcha_key')
+        captcha_value = request.query_params.get('captcha_value')
         
-        # if not captcha_key or not captcha_value:
-        #     return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+        if not captcha_key or not captcha_value:
+            return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
         
-        # from captcha.models import CaptchaStore
-        # try:
-        #     CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
-        # except CaptchaStore.DoesNotExist:
-        #     return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+        from captcha.models import CaptchaStore
+        try:
+            CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+        except CaptchaStore.DoesNotExist:
+            return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+        
         course_code = request.query_params.get('course_type')
         if not course_code:
             return Response({"error": "course_type is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -167,6 +168,28 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
             instance = self.get_queryset().get(aadhaar_no=aadhaar_no, course__code=course_code)
         except NewRegistration.DoesNotExist:
             return Response({"error": "Registration not found with provided Aadhaar and Course Code"}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if current time is within the course registration window
+        course = instance.course
+        if course:
+            from django.utils import timezone
+            current_time = timezone.now()
+            
+            # Check if registration start datetime is set and current time is before it
+            if course.registration_start_datetime and current_time < course.registration_start_datetime:
+                return Response({
+                    "error": "Registration has not started yet",
+                    "registration_start_datetime": timezone.localtime(course.registration_start_datetime),
+                    "current_datetime": timezone.localtime(current_time)
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if registration end datetime is set and current time is after it
+            if course.registration_end_datetime and current_time > course.registration_end_datetime:
+                return Response({
+                    "error": "Registration period has ended",
+                    "registration_end_datetime": timezone.localtime(course.registration_end_datetime),
+                    "current_datetime": timezone.localtime(current_time)
+                }, status=status.HTTP_400_BAD_REQUEST)
         
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
