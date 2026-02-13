@@ -27,8 +27,9 @@ INSTALLED_APPS = [
     
     # Third-party apps
     "rest_framework",
-    "rest_framework.authtoken",  # Required for dj-rest-auth
+    "rest_framework.authtoken",  
     "drf_yasg",
+    "import_export",  
     "simple_history",
     "corsheaders",
     "storages",
