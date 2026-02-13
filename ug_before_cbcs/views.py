@@ -8,21 +8,20 @@ from django.conf import settings
 import os
 
 from .models import (
-    UGBeforeCBCSCourse, UGBeforeCBCSDiscipline, UGBeforeCBCSSession,
-    UGBeforeCBCSBatch, UGBeforeCBCSSubject, UGBeforeCBCSCourseStructure,
-    UGBeforeCBCSStudentProfile, UGBeforeCBCSExam, UGBeforeCBCSExamRegistration,
-    UGBeforeCBCSStudentAssessment, UGBeforeCBCSExamResult
+    UGBeforeCBCSStudentProfile,
+    UGBeforeCBCSSubject,
+    UGBeforeCBCSExam,
+    UGBeforeCBCSStudentResult,
+    UGBeforeCBCSExamSummary
 )
 from .serializers import (
-    UGBeforeCBCSCourseSerializer, UGBeforeCBCSDisciplineSerializer,
-    UGBeforeCBCSSessionSerializer, UGBeforeCBCSBatchSerializer,
-    UGBeforeCBCSSubjectSerializer, UGBeforeCBCSCourseStructureSerializer,
-    UGBeforeCBCSStudentProfileSerializer, UGBeforeCBCSExamSerializer,
-    UGBeforeCBCSExamRegistrationSerializer, UGBeforeCBCSStudentAssessmentSerializer,
-    UGBeforeCBCSExamResultSerializer
+    UGBeforeCBCSStudentProfileSerializer,
+    UGBeforeCBCSSubjectSerializer,
+    UGBeforeCBCSExamSerializer,
+    UGBeforeCBCSStudentResultSerializer,
+    UGBeforeCBCSExamSummarySerializer
 )
 
-# Base API Views (List & Detail)
 class BaseUGLV(APIView):
     model = None
     serializer_class = None
@@ -58,21 +57,14 @@ class BaseUGDV(APIView):
         obj.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-# Specific Views
-class CourseLV(BaseUGLV): model = UGBeforeCBCSCourse; serializer_class = UGBeforeCBCSCourseSerializer
-class CourseDV(BaseUGDV): model = UGBeforeCBCSCourse; serializer_class = UGBeforeCBCSCourseSerializer
 
-class DisciplineLV(BaseUGLV): model = UGBeforeCBCSDiscipline; serializer_class = UGBeforeCBCSDisciplineSerializer
-class DisciplineDV(BaseUGDV): model = UGBeforeCBCSDiscipline; serializer_class = UGBeforeCBCSDisciplineSerializer
+class SubjectLV(BaseUGLV): 
+    model = UGBeforeCBCSSubject
+    serializer_class = UGBeforeCBCSSubjectSerializer
 
-class SessionLV(BaseUGLV): model = UGBeforeCBCSSession; serializer_class = UGBeforeCBCSSessionSerializer
-class SessionDV(BaseUGDV): model = UGBeforeCBCSSession; serializer_class = UGBeforeCBCSSessionSerializer
-
-class BatchLV(BaseUGLV): model = UGBeforeCBCSBatch; serializer_class = UGBeforeCBCSBatchSerializer
-class BatchDV(BaseUGDV): model = UGBeforeCBCSBatch; serializer_class = UGBeforeCBCSBatchSerializer
-
-class SubjectLV(BaseUGLV): model = UGBeforeCBCSSubject; serializer_class = UGBeforeCBCSSubjectSerializer
-class SubjectDV(BaseUGDV): model = UGBeforeCBCSSubject; serializer_class = UGBeforeCBCSSubjectSerializer
+class SubjectDV(BaseUGDV): 
+    model = UGBeforeCBCSSubject
+    serializer_class = UGBeforeCBCSSubjectSerializer
 
 class StudentProfileLV(APIView):
     def get(self, request):
@@ -85,15 +77,26 @@ class StudentProfileLV(APIView):
         return Response(serializer.data)
 
 class StudentProfileDV(BaseUGDV): 
-    model = UGBeforeCBCSStudentProfile; serializer_class = UGBeforeCBCSStudentProfileSerializer
+    model = UGBeforeCBCSStudentProfile
+    serializer_class = UGBeforeCBCSStudentProfileSerializer
 
-class ExamLV(BaseUGLV): model = UGBeforeCBCSExam; serializer_class = UGBeforeCBCSExamSerializer
-class ExamDV(BaseUGDV): model = UGBeforeCBCSExam; serializer_class = UGBeforeCBCSExamSerializer
+class ExamLV(BaseUGLV): 
+    model = UGBeforeCBCSExam
+    serializer_class = UGBeforeCBCSExamSerializer
 
-class ExamRegistrationLV(BaseUGLV): model = UGBeforeCBCSExamRegistration; serializer_class = UGBeforeCBCSExamRegistrationSerializer
-class ExamResultLV(BaseUGLV): model = UGBeforeCBCSExamResult; serializer_class = UGBeforeCBCSExamResultSerializer
+class ExamDV(BaseUGDV): 
+    model = UGBeforeCBCSExam
+    serializer_class = UGBeforeCBCSExamSerializer
 
-# Marksheet PDF View (Skeleton)
+class StudentResultLV(BaseUGLV): 
+    model = UGBeforeCBCSStudentResult
+    serializer_class = UGBeforeCBCSStudentResultSerializer
+
+class ExamSummaryLV(BaseUGLV): 
+    model = UGBeforeCBCSExamSummary
+    serializer_class = UGBeforeCBCSExamSummarySerializer
+
+# Marksheet PDF View 
 class UGOldMarksheetPDFView(View):
     """
     Generates and returns the Marksheet PDF for Part I, II, or III.

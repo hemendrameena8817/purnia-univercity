@@ -1,231 +1,435 @@
+"""
+Django Admin for UG Before CBCS - Simplified Models
+====================================================
+Admin interface for the 5 simplified models.
+Use this file after migrating to the new structure.
+"""
+
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import (
-    UGBeforeCBCSCourse,
-    UGBeforeCBCSDiscipline,
-    UGBeforeCBCSSession,
-    UGBeforeCBCSBatch,
-    UGBeforeCBCSSubject,
-    UGBeforeCBCSCourseStructure,
     UGBeforeCBCSStudentProfile,
+    UGBeforeCBCSSubject,
     UGBeforeCBCSExam,
-    UGBeforeCBCSExamRegistration,
-    UGBeforeCBCSStudentAssessment,
-    UGBeforeCBCSExamResult
+    UGBeforeCBCSStudentResult,
+    UGBeforeCBCSExamSummary
 )
-
-
-@admin.register(UGBeforeCBCSCourse)
-class UGBeforeCBCSCourseAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'course_code', 'name', 'duration_years', 'created_at', 'updated_at')
-    search_fields = ('uid', 'course_code', 'name')
-    ordering = ('course_code',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_per_page = 50
-
-
-@admin.register(UGBeforeCBCSDiscipline)
-class UGBeforeCBCSDisciplineAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'code', 'name', 'course', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('course', 'is_active')
-    search_fields = ('uid', 'code', 'name')
-    ordering = ('course', 'code')
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_select_related = ('course',)
-    list_per_page = 50
-
-
-@admin.register(UGBeforeCBCSSession)
-class UGBeforeCBCSSessionAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'start_year', 'end_year', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('is_active',)
-    search_fields = ('uid', 'name')
-    ordering = ('-start_year',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_per_page = 50
-
-
-@admin.register(UGBeforeCBCSBatch)
-class UGBeforeCBCSBatchAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'session', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('session', 'is_active')
-    search_fields = ('uid', 'name')
-    ordering = ('-created_at',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_select_related = ('session',)
-    list_per_page = 50
-
-
-@admin.register(UGBeforeCBCSSubject)
-class UGBeforeCBCSSubjectAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'code', 'name', 'paper_number', 'subject_type', 'has_practical', 'is_active')
-    list_filter = ('subject_type', 'is_active', 'has_practical')
-    search_fields = ('uid', 'code', 'name', 'paper_number')
-    ordering = ('code',)
-    readonly_fields = ('uid',)
-    list_per_page = 50
-
-
-@admin.register(UGBeforeCBCSCourseStructure)
-class UGBeforeCBCSCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'discipline', 'part', 'subject', 'subject_type', 'theory_max_marks', 'theory_pass_marks', 'practical_max_marks', 'practical_pass_marks')
-    list_filter = ('part', 'discipline', 'subject_type')
-    search_fields = ('uid', 'subject__name', 'discipline__name')
-    ordering = ('discipline', 'part', 'subject')
-    readonly_fields = ('uid',)
-    list_select_related = ('discipline', 'subject', 'discipline__course')
-    list_per_page = 50
 
 
 @admin.register(UGBeforeCBCSStudentProfile)
 class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'registration_no', 'roll_no', 'student_name', 'college', 'course', 'discipline', 'batch', 'session', 'gender', 'is_active')
-    list_filter = ('college', 'course', 'discipline', 'batch', 'session', 'is_active', 'gender')
-    search_fields = ('uid', 'registration_no', 'roll_no', 'student_name', 'fathers_name', 'mothers_name', 'user__username')
-    ordering = ('registration_no',)
+    """Admin for Student Profiles"""
+    list_display = (
+        'registration_no',
+        'student_name',
+        'roll_no',
+        'course_code',
+        'discipline_code',
+        'college_display',
+        'is_active',
+        'created_at'
+    )
+    list_filter = (
+        'is_active',
+        'course_code',
+        'discipline_code',
+        'college',
+        'gender',
+        'created_at'
+    )
+    search_fields = (
+        'registration_no',
+        'roll_no',
+        'student_name',
+        'fathers_name',
+        'mothers_name',
+        'source_user_id'
+    )
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_select_related = ('user', 'college', 'course', 'discipline', 'batch', 'session')
-    list_per_page = 100
     
     fieldsets = (
         ('Basic Information', {
             'fields': ('uid', 'user', 'registration_no', 'roll_no')
         }),
         ('Personal Details', {
-            'fields': ('student_name', 'student_name_hindi', 'fathers_name', 'mothers_name', 'gender', 'dob')
+            'fields': (
+                'student_name',
+                'student_name_hindi',
+                'fathers_name',
+                'mothers_name',
+                'gender',
+                'dob'
+            )
         }),
-        ('Academic Details', {
-            'fields': ('college', 'course', 'discipline', 'batch', 'session')
+        ('Academic Association', {
+            'fields': ('college', 'course_code', 'discipline_code')
         }),
-        ('Status', {
-            'fields': ('is_active', 'created_at', 'updated_at')
+        ('Source Data', {
+            'fields': ('source_user_id',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('is_active', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def college_display(self, obj):
+        if obj.college:
+            return obj.college.name
+        return '-'
+    college_display.short_description = 'College'
+
+
+@admin.register(UGBeforeCBCSSubject)
+class UGBeforeCBCSSubjectAdmin(admin.ModelAdmin):
+    """Admin for Subjects"""
+    list_display = (
+        'paper_code',
+        'subject_name',
+        'subject_code',
+        'subject_type',
+        'maximum_mark',
+        'pass_mark',
+        'has_theory',
+        'has_practical',
+        'is_active'
+    )
+    list_filter = (
+        'is_active',
+        'subject_type',
+        'has_theory',
+        'has_practical',
+        'has_sessional'
+    )
+    search_fields = (
+        'paper_code',
+        'subject_code',
+        'subject_name',
+        'temp_paper_code',
+        'paper_code_correction',
+        'subject_code_correction'
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Subject Identification', {
+            'fields': (
+                'uid',
+                'paper_code',
+                'subject_code',
+                'subject_name',
+                'subject_type'
+            )
+        }),
+        ('Additional Codes (from Staging)', {
+            'fields': (
+                'temp_paper_code',
+                'paper_code_correction',
+                'subject_code_correction',
+                'paper_type_code'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Marks Configuration', {
+            'fields': (
+                'maximum_mark',
+                'pass_mark',
+                'has_theory',
+                'has_practical',
+                'has_sessional'
+            )
+        }),
+        ('Metadata', {
+            'fields': ('is_active', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
 
 
 @admin.register(UGBeforeCBCSExam)
 class UGBeforeCBCSExamAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'part', 'exam_year', 'exam_month_year', 'publication_date', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('part', 'exam_year', 'is_active')
-    search_fields = ('uid', 'name', 'exam_month_year')
-    ordering = ('-exam_year', 'part')
+    """Admin for Exams"""
+    list_display = (
+        'exam_code',
+        'name',
+        'part',
+        'exam_year',
+        'batch_code',
+        'session_code',
+        'course_code',
+        'is_published',
+        'is_active'
+    )
+    list_filter = (
+        'is_active',
+        'is_published',
+        'part',
+        'exam_year',
+        'course_code',
+        'batch_code'
+    )
+    search_fields = (
+        'exam_code',
+        'name',
+        'batch_code',
+        'session_code',
+        'semester_code'
+    )
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_per_page = 50
-
-
-@admin.register(UGBeforeCBCSExamRegistration)
-class UGBeforeCBCSExamRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'get_student_name', 'get_registration_no', 'exam', 'exam_type', 'is_ex_regular', 'center', 'college_at_exam', 'status', 'created_at')
-    list_filter = ('exam', 'exam_type', 'is_ex_regular', 'status', 'center', 'college_at_exam')
-    search_fields = ('uid', 'student__registration_no', 'student__student_name', 'exam__name', 'student__user__username')
-    ordering = ('-created_at',)
-    readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_select_related = ('student', 'student__user', 'exam', 'center', 'college_at_exam')
-    list_per_page = 100
-    
-    def get_student_name(self, obj):
-        return obj.student.student_name if obj.student else '-'
-    get_student_name.short_description = 'Student Name'
-    get_student_name.admin_order_field = 'student__student_name'
-    
-    def get_registration_no(self, obj):
-        return obj.student.registration_no if obj.student else '-'
-    get_registration_no.short_description = 'Registration No'
-    get_registration_no.admin_order_field = 'student__registration_no'
+    date_hierarchy = 'publication_date'
     
     fieldsets = (
-        ('Registration Details', {
-            'fields': ('uid', 'student', 'exam', 'exam_type', 'is_ex_regular')
+        ('Exam Identity', {
+            'fields': ('uid', 'name', 'exam_code')
         }),
-        ('Exam Center', {
-            'fields': ('center', 'college_at_exam')
+        ('Part & Year', {
+            'fields': (
+                'part',
+                'semester_code',
+                'exam_year',
+                'exam_month_year'
+            )
         }),
-        ('Status', {
-            'fields': ('status',)
+        ('Session & Batch', {
+            'fields': ('session_code', 'batch_code')
         }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at')
+        ('Course/Discipline', {
+            'fields': ('course_code', 'discipline_code')
+        }),
+        ('Publication', {
+            'fields': (
+                'publication_date',
+                'is_published',
+                'published_at'
+            )
+        }),
+        ('Metadata', {
+            'fields': ('is_active', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
 
 
-@admin.register(UGBeforeCBCSStudentAssessment)
-class UGBeforeCBCSStudentAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'get_student_name', 'get_registration_no', 'subject', 'subject_type', 'theory_marks', 'practical_marks', 'sessional_marks', 'marks_secured', 'max_marks', 'pass_marks', 'subject_result', 'is_absent')
-    list_filter = ('subject_result', 'subject_type', 'is_absent')
-    search_fields = ('uid', 'registration__student__registration_no', 'registration__student__student_name', 'subject__name', 'subject__code')
-    ordering = ('-created_at',)
+@admin.register(UGBeforeCBCSStudentResult)
+class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
+    """Admin for Student Results"""
+    list_display = (
+        'student_display',
+        'exam_display',
+        'subject_display',
+        'exam_type',
+        'theory',
+        'practical',
+        'mark_secured',
+        'subject_result_badge'
+    )
+    list_filter = (
+        'exam_type',
+        'is_ex_regular',
+        'is_absent',
+        'subject_result',
+        'exam__part',
+        'exam__exam_year'
+    )
+    search_fields = (
+        'student__registration_no',
+        'student__student_name',
+        'subject__paper_code',
+        'subject__subject_name',
+        'source_id'
+    )
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_select_related = ('registration', 'registration__student', 'subject')
-    list_per_page = 100
-    
-    def get_student_name(self, obj):
-        return obj.registration.student.student_name if obj.registration and obj.registration.student else '-'
-    get_student_name.short_description = 'Student Name'
-    get_student_name.admin_order_field = 'registration__student__student_name'
-    
-    def get_registration_no(self, obj):
-        return obj.registration.student.registration_no if obj.registration and obj.registration.student else '-'
-    get_registration_no.short_description = 'Registration No'
-    get_registration_no.admin_order_field = 'registration__student__registration_no'
     
     fieldsets = (
-        ('Assessment Details', {
-            'fields': ('uid', 'registration', 'subject', 'subject_type')
+        ('Relationships', {
+            'fields': ('uid', 'student', 'exam', 'subject')
         }),
-        ('Marks Breakdown', {
-            'fields': ('theory_marks', 'practical_marks', 'sessional_marks')
+        ('Exam Type & Status', {
+            'fields': (
+                'exam_type',
+                'exam_type_his',
+                'is_ex_regular',
+                'status'
+            )
         }),
-        ('Total Marks', {
-            'fields': ('marks_secured', 'max_marks', 'pass_marks', 'subject_total_mark')
+        ('Marks', {
+            'fields': (
+                'theory',
+                'practical',
+                'sessional',
+                'mark_secured',
+                'mark_secured_history',
+                'subject_total_mark',
+                'maximum_mark',
+                'pass_mark'
+            )
         }),
-        ('Result', {
-            'fields': ('subject_result', 'is_absent')
+        ('Subject Results', {
+            'fields': (
+                'subject_result',
+                'subject_result_1',
+                'subject_result_2',
+                'sub_reult_com'
+            )
         }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at')
+        ('Additional Fields', {
+            'fields': (
+                'is_absent',
+                'grace_chk',
+                'remark',
+                'student_check'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Source Tracking', {
+            'fields': ('source_id',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
+    
+    def student_display(self, obj):
+        return f"{obj.student.registration_no} - {obj.student.student_name}"
+    student_display.short_description = 'Student'
+    
+    def exam_display(self, obj):
+        return f"{obj.exam.exam_code}"
+    exam_display.short_description = 'Exam'
+    
+    def subject_display(self, obj):
+        return f"{obj.subject.paper_code}"
+    subject_display.short_description = 'Subject'
+    
+    def subject_result_badge(self, obj):
+        if not obj.subject_result:
+            return '-'
+        
+        result_upper = obj.subject_result.upper()
+        if 'PASS' in result_upper:
+            color = 'green'
+            icon = '✓'
+        elif 'FAIL' in result_upper:
+            color = 'red'
+            icon = '✗'
+        elif 'ABS' in result_upper:
+            color = 'orange'
+            icon = '⊘'
+        else:
+            color = 'gray'
+            icon = '•'
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.subject_result
+        )
+    subject_result_badge.short_description = 'Result'
 
 
-@admin.register(UGBeforeCBCSExamResult)
-class UGBeforeCBCSExamResultAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'get_student_name', 'get_registration_no', 'get_exam_name', 'result_status', 'grand_total_secured', 'grand_total_max', 'hons_total_secured', 'hons_total_max', 'is_published', 'published_at')
-    list_filter = ('result_status', 'is_published', 'published_at')
-    search_fields = ('uid', 'registration__student__registration_no', 'registration__student__student_name', 'registration__exam__name')
-    ordering = ('-published_at',)
+@admin.register(UGBeforeCBCSExamSummary)
+class UGBeforeCBCSExamSummaryAdmin(admin.ModelAdmin):
+    """Admin for Exam Summaries"""
+    list_display = (
+        'student_display',
+        'exam_display',
+        'total_secured_mark',
+        'grand_total_mark',
+        'total_per',
+        'grade',
+        'final_result_badge',
+        'is_published'
+    )
+    list_filter = (
+        'is_published',
+        'final_result',
+        'grade',
+        'exam__part',
+        'exam__exam_year',
+        'agreegate'
+    )
+    search_fields = (
+        'student__registration_no',
+        'student__student_name',
+        'exam__exam_code',
+        'exam__name'
+    )
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_select_related = ('registration', 'registration__student', 'registration__exam')
-    list_per_page = 100
-    
-    def get_student_name(self, obj):
-        return obj.registration.student.student_name if obj.registration and obj.registration.student else '-'
-    get_student_name.short_description = 'Student Name'
-    get_student_name.admin_order_field = 'registration__student__student_name'
-    
-    def get_registration_no(self, obj):
-        return obj.registration.student.registration_no if obj.registration and obj.registration.student else '-'
-    get_registration_no.short_description = 'Registration No'
-    get_registration_no.admin_order_field = 'registration__student__registration_no'
-    
-    def get_exam_name(self, obj):
-        return obj.registration.exam.name if obj.registration and obj.registration.exam else '-'
-    get_exam_name.short_description = 'Exam'
-    get_exam_name.admin_order_field = 'registration__exam__name'
+    date_hierarchy = 'published_at'
     
     fieldsets = (
-        ('Result Details', {
-            'fields': ('uid', 'registration', 'result_status', 'final_result_text')
+        ('Relationships', {
+            'fields': ('uid', 'student', 'exam')
         }),
-        ('Grand Total', {
-            'fields': ('grand_total_secured', 'grand_total_max')
+        ('Grand Totals', {
+            'fields': (
+                'grand_total_mark',
+                'total_secured_mark',
+                'total_secured_mark_1',
+                'total_secured_mark_2',
+                'hon'
+            )
         }),
-        ('Honours Total', {
-            'fields': ('hons_total_secured', 'hons_total_max')
+        ('Percentage & Grade', {
+            'fields': ('total_per', 'grade')
+        }),
+        ('Final Result & Aggregate', {
+            'fields': (
+                'final_result',
+                'agreegate',
+                'aggregate_hindi'
+            )
+        }),
+        ('Status & Checks', {
+            'fields': (
+                'record_status',
+                'record_status_check',
+                'subject_count'
+            ),
+            'classes': ('collapse',)
         }),
         ('Publication', {
             'fields': ('is_published', 'published_at')
         }),
-        ('Timestamps', {
-            'fields': ('created_at', 'updated_at')
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
+    
+    def student_display(self, obj):
+        return f"{obj.student.registration_no} - {obj.student.student_name}"
+    student_display.short_description = 'Student'
+    
+    def exam_display(self, obj):
+        return f"{obj.exam.name}"
+    exam_display.short_description = 'Exam'
+    
+    def final_result_badge(self, obj):
+        if not obj.final_result:
+            return '-'
+        
+        result_upper = obj.final_result.upper()
+        if 'PASS' in result_upper:
+            color = 'green'
+            icon = '✓'
+        elif 'FAIL' in result_upper:
+            color = 'red'
+            icon = '✗'
+        elif 'PROMOTED' in result_upper:
+            color = 'blue'
+            icon = '↑'
+        elif 'ABSENT' in result_upper:
+            color = 'orange'
+            icon = '⊘'
+        else:
+            color = 'gray'
+            icon = '•'
+        
+        return format_html(
+            '<span style="color: {}; font-weight: bold;">{} {}</span>',
+            color, icon, obj.final_result
+        )
+    final_result_badge.short_description = 'Final Result'

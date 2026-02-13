@@ -1,0 +1,378 @@
+"""
+UG Before CBCS Data Migration Script - SIMPLIFIED VERSION
+==========================================================
+
+Migrates data from staging.UGResultCurrent to the simplified ug_before_cbcs app.
+Covers ALL 42 columns from staging table.
+
+HOW TO RUN:
+-----------
+1. Run the migration:
+   PYTHONPATH=. poetry run python scripts/ug_before_cbcs/migrate_staging_to_app_v2.py
+
+2. Monitor progress (script shows progress every 100 records)
+
+WHAT IT DOES:
+-------------
+- Creates UGBeforeCBCSStudentProfile (one per student)
+- Creates UGBeforeCBCSSubject (unique paper codes)
+- Creates UGBeforeCBCSExam (unique exam events)
+- Creates UGBeforeCBCSStudentResult (one per student per subject per exam)
+- Creates UGBeforeCBCSExamSummary (one per student per exam)
+
+ALL 42 STAGING COLUMNS ARE PRESERVED!
+"""
+
+import os
+import sys
+import django
+from collections import defaultdict
+
+# Add the project root to sys.path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(PROJECT_ROOT)
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
+django.setup()
+
+from django.db import transaction
+from staging.models import UGResultCurrent
+from accounts.models import UserAccount
+from colleges.models import College
+from ug_before_cbcs.models import (
+    UGBeforeCBCSStudentProfile,
+    UGBeforeCBCSSubject,
+    UGBeforeCBCSExam,
+    UGBeforeCBCSStudentResult,
+    UGBeforeCBCSExamSummary
+)
+
+
+def generate_exam_code(batch_code, session_code, semester_code, course_code):
+    """Generate unique exam code from components"""
+    parts = []
+    if batch_code:
+        parts.append(batch_code)
+    if session_code:
+        parts.append(session_code.replace('-', ''))
+    if semester_code:
+        parts.append(semester_code)
+    if course_code:
+        parts.append(course_code)
+    return '_'.join(parts) if parts else 'UNKNOWN'
+
+
+def map_semester_to_part(semester_code):
+    """Map semester code to PART choices"""
+    if not semester_code:
+        return 'PART1'
+    
+    semester_upper = semester_code.upper()
+    if '1ST' in semester_upper or 'I' == semester_upper or 'PART1' in semester_upper:
+        return 'PART1'
+    elif '2ND' in semester_upper or 'II' == semester_upper or 'PART2' in semester_upper:
+        return 'PART2'
+    elif '3RD' in semester_upper or 'III' == semester_upper or 'PART3' in semester_upper:
+        return 'PART3'
+    else:
+        return 'PART1'  # Default
+
+
+def migrate_data():
+    """Main migration function"""
+    print("=" * 80)
+    print("UG BEFORE CBCS MIGRATION - SIMPLIFIED VERSION")
+    print("=" * 80)
+    print("\nThis script will migrate ALL staging data to the new simplified models.")
+    print("All 42 columns from staging will be preserved.\n")
+    
+    # Get total count
+    total_records = UGResultCurrent.objects.count()
+    print(f"Total staging records to process: {total_records:,}\n")
+    
+    # Caches to avoid duplicate queries
+    student_cache = {}
+    subject_cache = {}
+    exam_cache = {}
+    college_cache = {}
+    
+    # Statistics
+    stats = {
+        'students_created': 0,
+        'students_updated': 0,
+        'subjects_created': 0,
+        'exams_created': 0,
+        'results_created': 0,
+        'summaries_created': 0,
+        'summaries_updated': 0,
+        'errors': 0
+    }
+    
+    # Process records
+    print("Processing staging records...")
+    print("-" * 80)
+    
+    records = UGResultCurrent.objects.all().select_related().iterator(chunk_size=500)
+    
+    for idx, record in enumerate(records, 1):
+        try:
+            with transaction.atomic():
+                # ============================================================
+                # 1. GET OR CREATE COLLEGE
+                # ============================================================
+                college = None
+                if record.institute_code:
+                    if record.institute_code not in college_cache:
+                        college_cache[record.institute_code] = College.objects.filter(
+                            college_code=record.institute_code
+                        ).first()
+                    college = college_cache[record.institute_code]
+                
+                # ============================================================
+                # 2. GET OR CREATE STUDENT PROFILE
+                # ============================================================
+                reg_no = record.college_reg_no
+                if not reg_no:
+                    print(f"  ⚠ Skipping record {idx}: No registration number")
+                    continue
+                
+                if reg_no not in student_cache:
+                    # Create or get user
+                    user, user_created = UserAccount.objects.get_or_create(
+                        username=reg_no,
+                        defaults={
+                            'first_name': record.student_name or 'Student',
+                            'user_type': 'student',
+                            'current_profile': 'ug_before_cbcs',
+                            'college': college
+                        }
+                    )
+                    
+                    if not user_created and college and not user.college:
+                        user.college = college
+                        user.save(update_fields=['college'])
+                    
+                    # Create or get student profile
+                    profile, profile_created = UGBeforeCBCSStudentProfile.objects.get_or_create(
+                        registration_no=reg_no,
+                        defaults={
+                            'user': user,
+                            'roll_no': record.college_roll_no,
+                            'student_name': record.student_name or 'Unknown',
+                            'fathers_name': record.fathers_name,
+                            'mothers_name': record.mothers_name,
+                            'college': college,
+                            'course_code': record.course_code,
+                            'discipline_code': record.discipline_code,
+                            'source_user_id': record.user_id,
+                        }
+                    )
+                    
+                    student_cache[reg_no] = profile
+                    
+                    if profile_created:
+                        stats['students_created'] += 1
+                    else:
+                        stats['students_updated'] += 1
+                else:
+                    profile = student_cache[reg_no]
+                
+                # ============================================================
+                # 3. GET OR CREATE SUBJECT
+                # ============================================================
+                paper_code = record.paper_code or record.subject_code or f"UNKNOWN_{idx}"
+                
+                if paper_code not in subject_cache:
+                    subject, subject_created = UGBeforeCBCSSubject.objects.get_or_create(
+                        paper_code=paper_code,
+                        defaults={
+                            'subject_code': record.subject_code,
+                            'subject_name': record.subject_name or paper_code,
+                            'temp_paper_code': record.temp_paper_code,
+                            'paper_code_correction': record.paper_code_correction,
+                            'subject_code_correction': record.subject_code_correction,
+                            'paper_type_code': record.paper_type_code,
+                            'maximum_mark': 100,
+                            'pass_mark': 33,
+                        }
+                    )
+                    
+                    subject_cache[paper_code] = subject
+                    
+                    if subject_created:
+                        stats['subjects_created'] += 1
+                else:
+                    subject = subject_cache[paper_code]
+                
+                # ============================================================
+                # 4. GET OR CREATE EXAM
+                # ============================================================
+                exam_code = generate_exam_code(
+                    record.batch_code,
+                    record.session_code,
+                    record.semester_code,
+                    record.course_code
+                )
+                
+                if exam_code not in exam_cache:
+                    part = map_semester_to_part(record.semester_code)
+                    
+                    # Extract year from batch_code
+                    exam_year = 2000
+                    if record.batch_code and record.batch_code.isdigit():
+                        exam_year = int(record.batch_code)
+                    
+                    # Generate exam name
+                    exam_name = f"{record.course_code or 'UG'} {record.semester_code or 'Part-I'} Exam {record.batch_code or ''}"
+                    
+                    exam, exam_created = UGBeforeCBCSExam.objects.get_or_create(
+                        exam_code=exam_code,
+                        defaults={
+                            'name': exam_name.strip(),
+                            'part': part,
+                            'semester_code': record.semester_code,
+                            'exam_year': exam_year,
+                            'exam_month_year': record.session_code,
+                            'session_code': record.session_code,
+                            'batch_code': record.batch_code,
+                            'course_code': record.course_code,
+                            'discipline_code': record.discipline_code,
+                        }
+                    )
+                    
+                    exam_cache[exam_code] = exam
+                    
+                    if exam_created:
+                        stats['exams_created'] += 1
+                else:
+                    exam = exam_cache[exam_code]
+                
+                # ============================================================
+                # 5. CREATE STUDENT RESULT (ONE PER SUBJECT)
+                # ============================================================
+                result, result_created = UGBeforeCBCSStudentResult.objects.update_or_create(
+                    student=profile,
+                    exam=exam,
+                    subject=subject,
+                    defaults={
+                        # Exam Type & Status
+                        'exam_type': record.exam_type,
+                        'exam_type_his': record.exam_type_his,
+                        'is_ex_regular': record.ExRegular_chk == 'YES' if record.ExRegular_chk else False,
+                        'status': record.status,
+                        
+                        # Marks
+                        'theory': record.theory,
+                        'practical': record.pra,
+                        'sessional': record.sessional,
+                        
+                        # Calculated Marks
+                        'mark_secured': record.mark_secured,
+                        'mark_secured_history': record.mark_secured_history,
+                        'subject_total_mark': record.subject_total_mark,
+                        'maximum_mark': record.maximum_mark,
+                        'pass_mark': record.pass_mark,
+                        
+                        # Subject Results
+                        'subject_result': record.subject_result,
+                        'subject_result_1': record.subject_result_1,
+                        'subject_result_2': record.subject_result_2,
+                        'sub_reult_com': record.sub_reult_com,
+                        
+                        # Additional Fields
+                        'is_absent': 'ABS' in (record.theory or '') or 'ABS' in (record.pra or ''),
+                        'grace_chk': record.grace_chk,
+                        'remark': record.remark,
+                        'student_check': record.student_check,
+                        
+                        # Source tracking
+                        'source_id': record.source_id,
+                    }
+                )
+                
+                if result_created:
+                    stats['results_created'] += 1
+                
+                # ============================================================
+                # 6. UPDATE EXAM SUMMARY (ONE PER STUDENT PER EXAM)
+                # ============================================================
+                summary, summary_created = UGBeforeCBCSExamSummary.objects.get_or_create(
+                    student=profile,
+                    exam=exam,
+                    defaults={
+                        'grand_total_mark': record.grand_total_mark,
+                        'total_secured_mark': record.total_secured_mark,
+                        'total_secured_mark_1': record.total_secured_mark_1,
+                        'total_secured_mark_2': record.total_secured_mark_2,
+                        'hon': record.hon,
+                        'total_per': record.total_per,
+                        'grade': record.grade,
+                        'final_result': record.final_result,
+                        'agreegate': record.agreegate,
+                        'aggregate_hindi': record.aggregate_hindi,
+                        'record_status': record.record_status,
+                        'record_status_check': record.record_status_check,
+                        'subject_count': record.subject_count,
+                    }
+                )
+                
+                # Update summary if it already exists (to capture latest values)
+                if not summary_created:
+                    summary.grand_total_mark = record.grand_total_mark or summary.grand_total_mark
+                    summary.total_secured_mark = record.total_secured_mark or summary.total_secured_mark
+                    summary.total_secured_mark_1 = record.total_secured_mark_1 or summary.total_secured_mark_1
+                    summary.total_secured_mark_2 = record.total_secured_mark_2 or summary.total_secured_mark_2
+                    summary.hon = record.hon or summary.hon
+                    summary.total_per = record.total_per or summary.total_per
+                    summary.grade = record.grade or summary.grade
+                    summary.final_result = record.final_result or summary.final_result
+                    summary.agreegate = record.agreegate or summary.agreegate
+                    summary.aggregate_hindi = record.aggregate_hindi or summary.aggregate_hindi
+                    summary.record_status = record.record_status or summary.record_status
+                    summary.record_status_check = record.record_status_check or summary.record_status_check
+                    summary.subject_count = record.subject_count or summary.subject_count
+                    summary.save()
+                    stats['summaries_updated'] += 1
+                else:
+                    stats['summaries_created'] += 1
+                
+        except Exception as e:
+            stats['errors'] += 1
+            print(f"  ✗ Error processing record {idx}: {str(e)}")
+            continue
+        
+        # Progress indicator
+        if idx % 100 == 0:
+            print(f"  ✓ Processed {idx:,} / {total_records:,} records...")
+    
+    # ============================================================
+    # FINAL STATISTICS
+    # ============================================================
+    print("\n" + "=" * 80)
+    print("MIGRATION COMPLETED!")
+    print("=" * 80)
+    print(f"\n📊 STATISTICS:")
+    print(f"  • Students Created:       {stats['students_created']:,}")
+    print(f"  • Students Updated:       {stats['students_updated']:,}")
+    print(f"  • Subjects Created:       {stats['subjects_created']:,}")
+    print(f"  • Exams Created:          {stats['exams_created']:,}")
+    print(f"  • Results Created:        {stats['results_created']:,}")
+    print(f"  • Summaries Created:      {stats['summaries_created']:,}")
+    print(f"  • Summaries Updated:      {stats['summaries_updated']:,}")
+    print(f"  • Errors:                 {stats['errors']:,}")
+    print("\n" + "=" * 80)
+    
+    # Verify counts
+    print("\n📈 VERIFICATION:")
+    print(f"  • Total Student Profiles: {UGBeforeCBCSStudentProfile.objects.count():,}")
+    print(f"  • Total Subjects:         {UGBeforeCBCSSubject.objects.count():,}")
+    print(f"  • Total Exams:            {UGBeforeCBCSExam.objects.count():,}")
+    print(f"  • Total Results:          {UGBeforeCBCSStudentResult.objects.count():,}")
+    print(f"  • Total Summaries:        {UGBeforeCBCSExamSummary.objects.count():,}")
+    print("\n" + "=" * 80)
+    print("\n✅ All staging columns have been migrated!")
+    print("   You can now use the Django admin or APIs to view the data.\n")
+
+
+if __name__ == "__main__":
+    migrate_data()

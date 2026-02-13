@@ -1,76 +1,66 @@
+"""Serializers for UG Before CBCS - Simplified Models"""
 from rest_framework import serializers
 from .models import (
-    UGBeforeCBCSCourse, UGBeforeCBCSDiscipline, UGBeforeCBCSSession,
-    UGBeforeCBCSBatch, UGBeforeCBCSSubject, UGBeforeCBCSCourseStructure,
-    UGBeforeCBCSStudentProfile, UGBeforeCBCSExam, UGBeforeCBCSExamRegistration,
-    UGBeforeCBCSStudentAssessment, UGBeforeCBCSExamResult
+    UGBeforeCBCSStudentProfile,
+    UGBeforeCBCSSubject,
+    UGBeforeCBCSExam,
+    UGBeforeCBCSStudentResult,
+    UGBeforeCBCSExamSummary
 )
 
-class UGBeforeCBCSCourseSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UGBeforeCBCSCourse
-        fields = '__all__'
-
-class UGBeforeCBCSDisciplineSerializer(serializers.ModelSerializer):
-    course_name = serializers.ReadOnlyField(source='course.name')
-    class Meta:
-        model = UGBeforeCBCSDiscipline
-        fields = '__all__'
-
-class UGBeforeCBCSSessionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UGBeforeCBCSSession
-        fields = '__all__'
-
-class UGBeforeCBCSBatchSerializer(serializers.ModelSerializer):
-    session_name = serializers.ReadOnlyField(source='session.name')
-    class Meta:
-        model = UGBeforeCBCSBatch
-        fields = '__all__'
-
-class UGBeforeCBCSSubjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UGBeforeCBCSSubject
-        fields = '__all__'
-
-class UGBeforeCBCSCourseStructureSerializer(serializers.ModelSerializer):
-    discipline_name = serializers.ReadOnlyField(source='discipline.name')
-    subject_name = serializers.ReadOnlyField(source='subject.name')
-    class Meta:
-        model = UGBeforeCBCSCourseStructure
-        fields = '__all__'
 
 class UGBeforeCBCSStudentProfileSerializer(serializers.ModelSerializer):
+    """Serializer for Student Profile"""
     college_name = serializers.ReadOnlyField(source='college.name')
-    course_name = serializers.ReadOnlyField(source='course.name')
-    discipline_name = serializers.ReadOnlyField(source='discipline.name')
-    batch_name = serializers.ReadOnlyField(source='batch.name')
-    session_name = serializers.ReadOnlyField(source='session.name')
+    user_username = serializers.ReadOnlyField(source='user.username')
     
     class Meta:
         model = UGBeforeCBCSStudentProfile
         fields = '__all__'
+        read_only_fields = ('uid', 'created_at', 'updated_at')
+
+
+class UGBeforeCBCSSubjectSerializer(serializers.ModelSerializer):
+    """Serializer for Subject"""
+    
+    class Meta:
+        model = UGBeforeCBCSSubject
+        fields = '__all__'
+        read_only_fields = ('uid', 'created_at', 'updated_at')
+
 
 class UGBeforeCBCSExamSerializer(serializers.ModelSerializer):
+    """Serializer for Exam"""
+    
     class Meta:
         model = UGBeforeCBCSExam
         fields = '__all__'
+        read_only_fields = ('uid', 'created_at', 'updated_at')
 
-class UGBeforeCBCSExamRegistrationSerializer(serializers.ModelSerializer):
+
+class UGBeforeCBCSStudentResultSerializer(serializers.ModelSerializer):
+    """Serializer for Student Result"""
     student_name = serializers.ReadOnlyField(source='student.student_name')
+    student_registration_no = serializers.ReadOnlyField(source='student.registration_no')
     exam_name = serializers.ReadOnlyField(source='exam.name')
+    exam_code = serializers.ReadOnlyField(source='exam.exam_code')
+    subject_name = serializers.ReadOnlyField(source='subject.subject_name')
+    subject_paper_code = serializers.ReadOnlyField(source='subject.paper_code')
+    
     class Meta:
-        model = UGBeforeCBCSExamRegistration
+        model = UGBeforeCBCSStudentResult
         fields = '__all__'
+        read_only_fields = ('uid', 'created_at', 'updated_at')
 
-class UGBeforeCBCSStudentAssessmentSerializer(serializers.ModelSerializer):
-    subject_name = serializers.ReadOnlyField(source='subject.name')
-    class Meta:
-        model = UGBeforeCBCSStudentAssessment
-        fields = '__all__'
 
-class UGBeforeCBCSExamResultSerializer(serializers.ModelSerializer):
-    student_name = serializers.ReadOnlyField(source='registration.student.student_name')
+class UGBeforeCBCSExamSummarySerializer(serializers.ModelSerializer):
+    """Serializer for Exam Summary"""
+    student_name = serializers.ReadOnlyField(source='student.student_name')
+    student_registration_no = serializers.ReadOnlyField(source='student.registration_no')
+    exam_name = serializers.ReadOnlyField(source='exam.name')
+    exam_code = serializers.ReadOnlyField(source='exam.exam_code')
+    
     class Meta:
-        model = UGBeforeCBCSExamResult
+        model = UGBeforeCBCSExamSummary
         fields = '__all__'
+        read_only_fields = ('uid', 'created_at', 'updated_at')
