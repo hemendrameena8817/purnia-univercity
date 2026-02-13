@@ -303,19 +303,34 @@ class UGSemResultCurrentAdmin(admin.ModelAdmin):
 class UGResultCurrentAdmin(admin.ModelAdmin):
     show_full_result_count = False
     list_display = (
-        'source_id', 'college_roll_no', 'student_name', 'semester_code', 
-        'course_code', 'discipline_code', 'paper_code', 'subject_code',
-        'subject_result', 'final_result', 'exam_type',
-        'institute_code', 'is_migrated'
+        'source_id', 'user_id', 'uid', 'college_roll_no', 'college_reg_no', 
+        'student_name', 'fathers_name', 'mothers_name', 
+        'semester_code', 'batch_code', 'session_code', 'course_code', 'discipline_code', 
+        'paper_code', 'subject_code', 'subject_name', 
+        'theory', 'sessional', 'status', 'pra', 
+        'exam_type', 'exam_type_his', 
+        'maximum_mark', 'pass_mark', 'mark_secured', 'mark_secured_history', 
+        'subject_total_mark', 'subject_result', 'subject_result_1', 'subject_result_2', 
+        'final_result', 
+        'grand_total_mark', 'total_secured_mark_1', 'total_secured_mark_2', 'total_secured_mark', 
+        'hon', 'total_per', 'agreegate', 
+        'institute_code', 
+        'record_status_check', 'record_status', 
+        'grade', 'student_check', 'grace_chk', 'remark', 
+        'paper_type_code', 'sub_reult_com', 'ExRegular_chk', 'subject_count', 
+        'aggregate_hindi', 
+        'temp_paper_code', 'paper_code_correction', 'subject_code_correction', 
+        'is_migrated', 'migration_notes', 'imported_at'
     )
     list_filter = (
         'is_migrated', 'semester_code', 'course_code', 'discipline_code',
-        'batch_code', 'session_code', 'institute_code', 'subject_result', 
-        'final_result', 'exam_type'
+        'batch_code', 'session_code', 'institute_code', 
+        'subject_result', 'final_result', 'exam_type', 'status', 'grade'
     )
     search_fields = (
-        'college_roll_no', 'college_reg_no', 'student_name', 'fathers_name',
-        'mothers_name', 'user_id', 'source_id', 'paper_code', 'subject_code', 'exam_type'
+        'college_roll_no', 'college_reg_no', 'student_name', 
+        'fathers_name', 'mothers_name', 'user_id', 'source_id', 
+        'paper_code', 'subject_code', 'exam_type', 'uid'
     )
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
@@ -326,7 +341,7 @@ class UGResultCurrentAdmin(admin.ModelAdmin):
             'fields': (
                 ('student_name', 'fathers_name', 'mothers_name'),
                 ('college_roll_no', 'college_reg_no'),
-                ('user_id', 'source_id'),
+                ('user_id', 'source_id', 'uid'),
             )
         }),
         ('Course Information', {
@@ -367,7 +382,7 @@ class UGResultCurrentAdmin(admin.ModelAdmin):
         }),
         ('Migration Status', {
             'fields': (
-                ('uid', 'imported_at'),
+                ('imported_at'),
                 'is_migrated',
                 'migration_notes',
             )
