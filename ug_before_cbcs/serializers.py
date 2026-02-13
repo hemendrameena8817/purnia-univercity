@@ -2,10 +2,10 @@
 from rest_framework import serializers
 from .models import (
     UGBeforeCBCSStudentProfile,
-    UGBeforeCBCSSubject,
+
     UGBeforeCBCSExam,
     UGBeforeCBCSStudentResult,
-    UGBeforeCBCSExamSummary
+
 )
 
 
@@ -19,14 +19,6 @@ class UGBeforeCBCSStudentProfileSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('uid', 'created_at', 'updated_at')
 
-
-class UGBeforeCBCSSubjectSerializer(serializers.ModelSerializer):
-    """Serializer for Subject"""
-    
-    class Meta:
-        model = UGBeforeCBCSSubject
-        fields = '__all__'
-        read_only_fields = ('uid', 'created_at', 'updated_at')
 
 
 class UGBeforeCBCSExamSerializer(serializers.ModelSerializer):
@@ -53,14 +45,58 @@ class UGBeforeCBCSStudentResultSerializer(serializers.ModelSerializer):
         read_only_fields = ('uid', 'created_at', 'updated_at')
 
 
-class UGBeforeCBCSExamSummarySerializer(serializers.ModelSerializer):
-    """Serializer for Exam Summary"""
-    student_name = serializers.ReadOnlyField(source='student.student_name')
-    student_registration_no = serializers.ReadOnlyField(source='student.registration_no')
-    exam_name = serializers.ReadOnlyField(source='exam.name')
-    exam_code = serializers.ReadOnlyField(source='exam.exam_code')
+
+# Marksheet JSON Serializers
+class MarksheetStudentSerializer(serializers.Serializer):
+    """Serializer for student data in marksheet JSON response"""
+    uid = serializers.UUIDField()
+    registration_no = serializers.CharField()
+    roll_no = serializers.CharField(allow_null=True)
+    student_name = serializers.CharField()
+    student_name_hindi = serializers.CharField(allow_null=True)
+    fathers_name = serializers.CharField(allow_null=True)
+    mothers_name = serializers.CharField(allow_null=True)
+    gender = serializers.CharField(allow_null=True)
+    dob = serializers.DateField(allow_null=True)
+    course_code = serializers.CharField(allow_null=True)
+    discipline_code = serializers.CharField(allow_null=True)
+
+
+class MarksheetPaperSerializer(serializers.Serializer):
+    """Serializer for individual paper/subject in marksheet"""
+    name = serializers.CharField()
+    paper_code = serializers.CharField()
+    status = serializers.CharField()
+    max_marks = serializers.IntegerField()
+    pass_marks = serializers.IntegerField()
+    obtained = serializers.IntegerField()
+
+
+class MarksheetSubjectGroupSerializer(serializers.Serializer):
+    """Serializer for subject groups (honours, subsidiary, etc.)"""
+    name = serializers.CharField()
+    papers = MarksheetPaperSerializer(many=True)
+    total_max = serializers.IntegerField()
+    total_pass = serializers.IntegerField()
+    total_obtained = serializers.IntegerField()
+
+
+class MarksheetDataSerializer(serializers.Serializer):
+    """Main serializer for complete marksheet data"""
+    is_honours_with_practical = serializers.BooleanField()
+    student = MarksheetStudentSerializer()
+    exam_name = serializers.CharField()
+    exam_month_year = serializers.CharField()
+    exam_year = serializers.CharField()
+    batch_year = serializers.CharField()
+    session_year = serializers.CharField()
+    hons_subject = serializers.CharField()
+    center_name = serializers.CharField()
     
-    class Meta:
-        model = UGBeforeCBCSExamSummary
-        fields = '__all__'
-        read_only_fields = ('uid', 'created_at', 'updated_at')
+    # Nested subjects data
+    subjects = serializers.DictField(child=MarksheetSubjectGroupSerializer())
+    
+    grand_total = serializers.CharField()
+    result_status = serializers.CharField()
+    hons_total_words = serializers.CharField()
+    publication_date = serializers.CharField()

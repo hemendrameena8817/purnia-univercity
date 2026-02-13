@@ -12,9 +12,10 @@ from .choices import (
 # ============================================================================
 # SIMPLIFIED UG BEFORE CBCS MODELS - COVERS ALL STAGING COLUMNS
 # ============================================================================
-# This is a simplified structure for historical/legacy UG (Non-CBCS) data.
-# No separate tables for Course, Discipline, Batch, Session.
-# All data from staging.UGResultCurrent is preserved.
+# This is a SUPER SIMPLIFIED structure for historical/legacy UG (Non-CBCS) data.
+# Only 3 tables: StudentProfile, Exam, and StudentResult
+# NO separate tables for Subject, Course, Discipline, Batch, Session, ExamSummary
+# All data from staging.UGResultCurrent is preserved in StudentResult table.
 # ============================================================================
 
 
@@ -97,83 +98,7 @@ class UGBeforeCBCSStudentProfile(models.Model):
         return f"{self.registration_no} - {self.student_name}"
 
 
-class UGBeforeCBCSSubject(models.Model):
-    """
-    Master Subject/Paper List.
-    Stores all paper codes, subject codes, and names from staging.
-    Includes all code correction fields.
-    """
-    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    
-    # Subject Identification (ALL paper code fields from staging)
-    paper_code = models.CharField(
-        max_length=100, 
-        unique=True, 
-        db_index=True,
-        help_text='Primary paper code identifier'
-    )
-    subject_code = models.CharField(
-        max_length=50, 
-        null=True, 
-        blank=True,
-        help_text='Subject code from staging'
-    )
-    subject_name = models.CharField(
-        max_length=500,
-        help_text='Full subject/paper name'
-    )
-    
-    # Additional codes from staging
-    temp_paper_code = models.CharField(
-        max_length=50, 
-        null=True, 
-        blank=True,
-        help_text='Temporary paper code from staging'
-    )
-    paper_code_correction = models.CharField(
-        max_length=100, 
-        null=True, 
-        blank=True,
-        help_text='Paper code correction from staging'
-    )
-    subject_code_correction = models.CharField(
-        max_length=100, 
-        null=True, 
-        blank=True,
-        help_text='Subject code correction from staging'
-    )
-    paper_type_code = models.CharField(
-        max_length=50, 
-        null=True, 
-        blank=True,
-        help_text='Paper type code from staging'
-    )
-    
-    # Configuration
-    maximum_mark = models.IntegerField(default=100)
-    pass_mark = models.IntegerField(default=33)
-    has_theory = models.BooleanField(default=True)
-    has_practical = models.BooleanField(default=False)
-    has_sessional = models.BooleanField(default=False)
-    
-    # Subject type
-    subject_type = models.CharField(
-        max_length=20, 
-        choices=SUBJECT_TYPE_CHOICES, 
-        null=True, 
-        blank=True
-    )
-    
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name = 'UG Before CBCS Subject'
-        verbose_name_plural = 'UG Before CBCS Subjects'
-    
-    def __str__(self):
-        return f"{self.paper_code} - {self.subject_name}"
+
 
 
 class UGBeforeCBCSExam(models.Model):
@@ -269,9 +194,9 @@ class UGBeforeCBCSExam(models.Model):
 
 class UGBeforeCBCSStudentResult(models.Model):
     """
-    Student's Result for Each Subject.
-    ONE record per student per subject per exam.
-    Stores ALL marks and result data from staging.
+    Student's Result - ONE record per student per subject per exam.
+    Stores ALL 42 columns from staging.UGResultCurrent.
+    Includes subject details, marks, and summary data.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     
@@ -286,10 +211,48 @@ class UGBeforeCBCSStudentResult(models.Model):
         on_delete=models.CASCADE, 
         related_name='results'
     )
-    subject = models.ForeignKey(
-        UGBeforeCBCSSubject, 
-        on_delete=models.CASCADE, 
-        related_name='results'
+    
+    # ========== SUBJECT DETAILS (No separate Subject table) ==========
+    paper_code = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text='Paper code from staging'
+    )
+    subject_code = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text='Subject code from staging'
+    )
+    subject_name = models.CharField(
+        max_length=500,
+        null=True,
+        blank=True,
+        help_text='Full subject/paper name'
+    )
+    temp_paper_code = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text='Temporary paper code from staging'
+    )
+    paper_code_correction = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text='Paper code correction from staging'
+    )
+    subject_code_correction = models.CharField(
+        max_length=100, 
+        null=True, 
+        blank=True,
+        help_text='Subject code correction from staging'
+    )
+    paper_type_code = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text='Paper type code from staging (HONS, SUB, etc.)'
     )
     
     # Exam Type & Status
@@ -415,51 +378,8 @@ class UGBeforeCBCSStudentResult(models.Model):
         help_text='Student check flag from staging'
     )
     
-    # Source tracking
-    source_id = models.CharField(
-        max_length=50, 
-        null=True, 
-        blank=True, 
-        help_text='Original id from staging'
-    )
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name = 'UG Before CBCS Student Result'
-        verbose_name_plural = 'UG Before CBCS Student Results'
-        unique_together = ('student', 'exam', 'subject')
-        indexes = [
-            models.Index(fields=['student', 'exam']),
-            models.Index(fields=['exam', 'subject']),
-        ]
-    
-    def __str__(self):
-        return f"{self.student.student_name} - {self.subject.subject_name} - {self.exam.name}"
-
-
-class UGBeforeCBCSExamSummary(models.Model):
-    """
-    Final Exam Summary for Each Student.
-    ONE record per student per exam.
-    Contains all aggregated totals, final result, and division.
-    """
-    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    
-    # Relationships
-    student = models.ForeignKey(
-        UGBeforeCBCSStudentProfile, 
-        on_delete=models.CASCADE, 
-        related_name='exam_summaries'
-    )
-    exam = models.ForeignKey(
-        UGBeforeCBCSExam, 
-        on_delete=models.CASCADE, 
-        related_name='summaries'
-    )
-    
-    # Grand Totals (ALL variants from staging)
+    # ========== EXAM SUMMARY DATA (No separate ExamSummary table) ==========
+    # These fields store aggregated data per student per exam
     grand_total_mark = models.CharField(
         max_length=50, 
         null=True, 
@@ -484,16 +404,12 @@ class UGBeforeCBCSExamSummary(models.Model):
         blank=True,
         help_text='Total secured marks variant 2 from staging'
     )
-    
-    # Honours Total
     hon = models.CharField(
         max_length=50, 
         null=True, 
         blank=True,
         help_text='Honours indicator/total from staging'
     )
-    
-    # Percentage & Grade
     total_per = models.CharField(
         max_length=50, 
         null=True, 
@@ -506,8 +422,6 @@ class UGBeforeCBCSExamSummary(models.Model):
         blank=True,
         help_text='Grade from staging'
     )
-    
-    # Final Result & Aggregate
     final_result = models.CharField(
         max_length=100, 
         null=True, 
@@ -525,8 +439,6 @@ class UGBeforeCBCSExamSummary(models.Model):
         blank=True,
         help_text='Aggregate in Hindi from staging'
     )
-    
-    # Status & Checks
     record_status = models.CharField(
         max_length=50, 
         null=True, 
@@ -546,22 +458,38 @@ class UGBeforeCBCSExamSummary(models.Model):
         help_text='Subject count from staging'
     )
     
-    # Publication
-    is_published = models.BooleanField(default=False)
-    published_at = models.DateTimeField(null=True, blank=True)
+    # Source tracking
+    source_id = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True, 
+        help_text='Original id from staging'
+    )
+    
+    # For tracking which student profile this belongs to (denormalized for faster queries)
+    registration_no = models.CharField(
+        max_length=100,
+        db_index=True,
+        null=True,
+        blank=True,
+        help_text='Denormalized registration number for faster lookups'
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = 'UG Before CBCS Exam Summary'
-        verbose_name_plural = 'UG Before CBCS Exam Summaries'
-        unique_together = ('student', 'exam')
+        verbose_name = 'UG Before CBCS Student Result'
+        verbose_name_plural = 'UG Before CBCS Student Results'
         indexes = [
-            models.Index(fields=['student']),
-            models.Index(fields=['exam']),
-            models.Index(fields=['final_result']),
+            models.Index(fields=['student', 'exam']),
+            models.Index(fields=['exam', 'paper_code']),
+            models.Index(fields=['registration_no', 'paper_code']),
+            models.Index(fields=['paper_code']),
         ]
     
     def __str__(self):
-        return f"{self.student.student_name} - {self.exam.name} - {self.final_result}"
+        return f"{self.student.student_name} - {self.subject_name} - {self.exam.name}"
+
+
+

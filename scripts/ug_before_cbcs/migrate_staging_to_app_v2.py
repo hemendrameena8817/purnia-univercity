@@ -78,13 +78,23 @@ def map_semester_to_part(semester_code):
         return 'PART1'  # Default
 
 
-def migrate_data():
-    """Main migration function"""
+def migrate_data(skip_existing=True, start_from=0):
+    """Main migration function
+    
+    Args:
+        skip_existing: If True, skips records that already have results created
+        start_from: Start processing from this record number (0-based)
+    """
     print("=" * 80)
     print("UG BEFORE CBCS MIGRATION - SIMPLIFIED VERSION")
     print("=" * 80)
     print("\nThis script will migrate ALL staging data to the new simplified models.")
     print("All 42 columns from staging will be preserved.\n")
+    
+    if skip_existing:
+        print("⚠️  SKIP MODE: Already processed records will be skipped.\n")
+    if start_from > 0:
+        print(f"⏩ STARTING FROM: Record #{start_from:,}\n")
     
     # Get total count
     total_records = UGResultCurrent.objects.count()
@@ -105,6 +115,7 @@ def migrate_data():
         'results_created': 0,
         'summaries_created': 0,
         'summaries_updated': 0,
+        'skipped': 0,
         'errors': 0
     }
     
@@ -112,10 +123,29 @@ def migrate_data():
     print("Processing staging records...")
     print("-" * 80)
     
-    records = UGResultCurrent.objects.all().select_related().iterator(chunk_size=500)
+    # Get records with offset if starting from a specific point
+    if start_from > 0:
+        records = UGResultCurrent.objects.all().select_related()[start_from:].iterator(chunk_size=500)
+    else:
+        records = UGResultCurrent.objects.all().select_related().iterator(chunk_size=500)
     
-    for idx, record in enumerate(records, 1):
+    for idx, record in enumerate(records, start_from + 1):
         try:
+            # Skip if this record already has a result created (duplicate check)
+            if skip_existing and record.registration_no and record.paper_code:
+                existing_result = UGBeforeCBCSStudentResult.objects.filter(
+                    registration_no=record.registration_no,
+                    subject__paper_code=record.paper_code,
+                    exam__batch_code=record.batch_code,
+                    exam__semester_code=record.semester_code
+                ).exists()
+                
+                if existing_result:
+                    stats['skipped'] += 1
+                    if idx % 100 == 0:
+                        print(f"  ⏭️  Skipped {idx:,} / {total_records:,} records (already exists)...")
+                    continue
+            
             with transaction.atomic():
                 # ============================================================
                 # 1. GET OR CREATE COLLEGE
@@ -359,6 +389,7 @@ def migrate_data():
     print(f"  • Results Created:        {stats['results_created']:,}")
     print(f"  • Summaries Created:      {stats['summaries_created']:,}")
     print(f"  • Summaries Updated:      {stats['summaries_updated']:,}")
+    print(f"  • Skipped (Duplicates):   {stats['skipped']:,}")
     print(f"  • Errors:                 {stats['errors']:,}")
     print("\n" + "=" * 80)
     
@@ -375,4 +406,24 @@ def migrate_data():
 
 
 if __name__ == "__main__":
-    migrate_data()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Migrate UG Before CBCS data from staging')
+    parser.add_argument(
+        '--no-skip', 
+        action='store_true', 
+        help='Process all records including duplicates (default: skip existing)'
+    )
+    parser.add_argument(
+        '--start-from', 
+        type=int, 
+        default=0, 
+        help='Start processing from this record number (default: 0)'
+    )
+    
+    args = parser.parse_args()
+    
+    migrate_data(
+        skip_existing=not args.no_skip,
+        start_from=args.start_from
+    )
