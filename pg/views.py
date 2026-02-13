@@ -6,6 +6,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import transaction
 from .models import PGStudentCourseAssessment, PGDepartment
 from .serializers import PGStudentCourseAssessmentSerializer
+from django.utils import timezone
 
 class PGCIAMarksEntryView(APIView):
     """
@@ -188,7 +189,7 @@ class PGCollegeStudentsView(APIView):
                 'ind_marks_obtained': assessment.ind_marks_obtained,
                 'ind_is_absent': assessment.ind_is_absent,
                 'is_cia_fill': assessment.is_cia_fill,
-                'updated_at': assessment.updated_at.strftime('%d-%m-%Y %I:%M %p') if assessment.updated_at else None
+                'updated_at': timezone.localtime(assessment.updated_at).strftime('%d-%m-%Y %I:%M %p') if assessment.updated_at else None
             })
         
         # Apply pagination
