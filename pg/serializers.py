@@ -156,5 +156,6 @@ class PGCollegeStudentSerializer(serializers.Serializer):
     ind_max_marks = serializers.IntegerField(allow_null=True)
     ind_pass_marks = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
     ind_marks_obtained = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    ind_is_absent = serializers.BooleanField(allow_null=True)
     is_cia_fill = serializers.BooleanField()
     updated_at = serializers.DateTimeField()
