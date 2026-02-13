@@ -71,7 +71,7 @@ class CIAResultProcessingService:
         
         # Get all students in batch who have assessments in this semester
         students = UGStudentProfile.objects.filter(
-            batch=self.batch,
+            batch__name=self.batch,
             course_assessments__semester=self.semester
         ).distinct()
         self.stats['total_students'] = students.count()

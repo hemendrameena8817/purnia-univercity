@@ -7,6 +7,7 @@ from .choices import (
     GENDER_CHOICES,
     EXAM_TYPE_CHOICES,
     PROMOTION_STATUS_CHOICES,
+    REGISTRATION_STATUS_CHOICES,
 )
 
 
@@ -200,7 +201,14 @@ class UGStudentProfile(models.Model):
     caste = models.CharField(max_length=20, null=True, blank=True)
     enrollment_date = models.DateField(null=True, blank=True)
     roll_no = models.CharField(max_length=50, null=True, blank=True)
-    batch = models.CharField(max_length=50, null=True, blank=True)
+    batch = models.ForeignKey(
+        UGBatch,
+        on_delete=models.SET_NULL,
+        related_name='students',
+        null=True,
+        blank=True,
+        help_text="Student Batch"
+    )
 
     # Family Information
     father_name = models.CharField(max_length=255, null=True, blank=True)
@@ -539,11 +547,19 @@ class SemesterRegistration(models.Model):
         on_delete=models.CASCADE,
         related_name='semester_registrations'
     )
+    batch = models.ForeignKey(
+        'ug.UGBatch',
+        on_delete=models.SET_NULL,
+        related_name='semester_registrations',
+        null=True,
+        blank=True,
+        help_text="Student Batch"
+    )
     start_date = models.DateTimeField(null=True, blank=True, help_text="Start Date")
     end_date = models.DateTimeField(null=True, blank=True, help_text="End Date")
     is_open = models.BooleanField(default=False, help_text="Is Open")
     sem = models.IntegerField(null=True, blank=True, help_text="Semester")
-    status = models.CharField(max_length=10, null=True, blank=True, help_text="Status open/closed")
+    status = models.CharField(max_length=15, choices=REGISTRATION_STATUS_CHOICES, default='PENDING', help_text="Registration Status")
     exam_eligible = models.BooleanField(default=False, help_text="Eligible for Exam")
     remarks = models.TextField(null=True, blank=True, help_text="Remarks")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
@@ -555,10 +571,11 @@ class SemesterRegistration(models.Model):
         verbose_name = 'Semester Registration'
         verbose_name_plural = 'Semester Registrations'
         
-        # Composite index for eligibility checking (used during registration)
         indexes = [
-            models.Index(fields=['student', 'sem', 'is_open', 'status'], 
-                        name='idx_eligibility_check'),
+            models.Index(fields=['student', 'sem', 'status'], 
+                        name='idx_eligibility_check_v2'),
+            models.Index(fields=['batch', 'sem', 'status'],
+                        name='idx_batch_sem_status'),
         ]
 
 

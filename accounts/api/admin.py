@@ -141,7 +141,7 @@ class RegistrationWindowControlView(APIView):
             if semester:
                 queryset = queryset.filter(sem=semester)
             if batch:
-                queryset = queryset.filter(student__batch=batch)
+                queryset = queryset.filter(student__batch__name=batch)
             
             # Prepare update data
             update_data = {'is_open': action == 'open'}

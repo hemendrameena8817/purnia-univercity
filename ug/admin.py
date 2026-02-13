@@ -59,10 +59,10 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     
     # Performance optimizations for large datasets
-    list_select_related = ('college', 'department', 'program', 'degree')
+    list_select_related = ('college', 'department', 'program', 'degree', 'batch')
     show_full_result_count = False
     list_per_page = 50
-    raw_id_fields = ('user', 'college', 'department', 'program', 'degree')
+    raw_id_fields = ('user', 'college', 'department', 'program', 'degree', 'batch')
     
     fieldsets = (
         ('Personal Information', {
@@ -128,7 +128,7 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
     )
     
     # Filters for easy navigation
-    list_filter = ('semester', 'label', 'course_type', 'ind_is_absent', 'ind_is_pass')
+    list_filter = ('semester', 'label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass')
     
     # Search by student registration number AND name
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
@@ -226,14 +226,15 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
 
 @admin.register(SemesterRegistration)
 class SemesterRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date')
-    list_filter = ('sem', 'status', 'exam_eligible', 'is_open', 'student__batch')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__batch')
+    list_display = ('student', 'batch', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date', 'session')
+    list_filter = ('batch', 'sem', 'status', 'exam_eligible', 'is_open')
+    search_fields = ('student__registration_no', 'student__first_name', 'batch__name')
     ordering = ('-sem', 'student')
     list_per_page = 50
-    raw_id_fields = ('student',)
-    list_select_related = ('student',)
+    raw_id_fields = ('student', 'batch')
+    list_select_related = ('student', 'batch')
     show_full_result_count = False
+    list_editable = ('status', 'exam_eligible')
 
 
 @admin.register(ExamRegistration)
@@ -257,11 +258,11 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
 class UGExamResultAdmin(admin.ModelAdmin):
     list_display = ('get_student_name', 'get_registration_no', 'semester', 'session', 
                     'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 'cia_pass', 'ese_pass')
-    list_filter = ('semester', 'semester_result', 'session', 'is_legacy', 'created_at')
+    list_filter = ('semester', 'semester_result','cia_pass', 'ese_pass', 'next_sem_status', 'session', 'is_legacy', 'created_at')
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'semester')
     ordering = ('-created_at', 'student__registration_no')
     readonly_fields = ('created_at', 'updated_at')
-    
+    raw_id_fields = ('student',)
     # Performance optimizations
     list_select_related = ('student',)
     show_full_result_count = False
