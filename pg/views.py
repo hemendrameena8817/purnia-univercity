@@ -187,6 +187,7 @@ class PGCollegeStudentsView(APIView):
                 'ind_pass_marks': assessment.ind_pass_marks,
                 'ind_marks_obtained': assessment.ind_marks_obtained,
                 'is_cia_fill': assessment.is_cia_fill,
+                'updated_at': assessment.updated_at.strftime('%d-%m-%Y %I:%M %p') if assessment.updated_at else None
             })
         
         # Apply pagination
