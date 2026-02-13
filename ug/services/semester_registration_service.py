@@ -23,7 +23,17 @@ from ug.models import (
     UGDepartment,
     UGBatch
 )
+from ug.choices import REGISTRATION_STATUS_CHOICES
 from django.utils import timezone
+
+# Extract status values from choices for easy reference
+REG_STATUS = {label: value for value, label in REGISTRATION_STATUS_CHOICES}
+# REG_STATUS = {'Pending': 'PENDING', 'Open': 'OPEN', 'Registered': 'REGISTERED', 'Closed': 'CLOSED'}
+# For cleaner access, define constants:
+STATUS_PENDING = 'PENDING'
+STATUS_OPEN = 'OPEN'
+STATUS_REGISTERED = 'REGISTERED'
+STATUS_CLOSED = 'CLOSED'
 
 class SemesterRegistrationService:
     """Service for handling semester registration operations"""
@@ -34,6 +44,12 @@ class SemesterRegistrationService:
         '5TH': 5, '6TH': 6, '7TH': 7, '8TH': 8
     }
     
+    # Reverse mapping: number -> text
+    SEMESTER_NUM_TO_TEXT = {
+        1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH',
+        5: '5TH', 6: '6TH', 7: '7TH', 8: '8TH'
+    }
+    
     @staticmethod
     def check_registration_eligibility(student: UGStudentProfile) -> Dict:
         """
@@ -42,7 +58,7 @@ class SemesterRegistrationService:
         
         Logic:
         1. Find latest SemesterRegistration for student
-        2. If is_open=True AND today is within start_date/end_date (if set) -> Eligible & Open
+        2. If status=OPEN AND today is within start_date/end_date (if set) -> Eligible & Open
         
         Args:
             student: UGStudentProfile instance
@@ -50,9 +66,10 @@ class SemesterRegistrationService:
         Returns:
             Dict with eligibility status and details
         """
-        # 1. Get the latest registration record (by sem mainly)
+        # 1. Get the latest registration record for this student's batch
         registration = SemesterRegistration.objects.filter(
-            student=student
+            student=student,
+            batch=student.batch
         ).order_by('-sem').first()
         
         if not registration:
@@ -63,12 +80,7 @@ class SemesterRegistrationService:
             }
             
         current_semester = registration.sem ## created entry first in semesterregistration then open it
-        # current_semester = next_semester - 1 if next_semester > 1 else 1 # Infer current sem
 
-        # 2. Check simple eligibility (record exists = eligible contextually)
-        # But we need to check if it represents an OPEN registration window
-        
-        is_open = registration.is_open
         now = timezone.now()
         
         # Check date validity if dates are present
@@ -79,14 +91,12 @@ class SemesterRegistrationService:
             date_valid = False
         
         # Convert semester number to text format
-        semester_text_map = {
-            1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH',
-            5: '5TH', 6: '6TH', 7: '7TH', 8: '8TH'
-        }
-        semester_name = semester_text_map.get(int(current_semester), f'{current_semester}TH')
+        semester_name = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(
+            int(current_semester), str(current_semester)
+        )
         
         # Check if already registered
-        if registration.status == 'REGISTERED':
+        if registration.status == STATUS_REGISTERED:
             return {
                 'eligible': False,
                 'already_registered': True,
@@ -97,31 +107,31 @@ class SemesterRegistrationService:
                 'reason': f'Already registered for Semester {semester_name}'
             }
             
-        if is_open and date_valid:
+        if registration.status == STATUS_OPEN and date_valid:
              return {
                 'eligible': True,
                 'current_semester': int(current_semester) - 1,
                 'next_semester': current_semester,
                 'registration_open': True,
                 'registration_window': {
-                    'start_date': registration.start_date.isoformat() if registration.start_date else None,
-                    'end_date': registration.end_date.isoformat() if registration.end_date else None,
-                    'is_open': True
+                    'start_date': timezone.localtime(registration.start_date).strftime('%d %b %Y, %I:%M %p') if registration.start_date else None,
+                    'end_date': timezone.localtime(registration.end_date).strftime('%d %b %Y, %I:%M %p') if registration.end_date else None,
+                    'status': registration.status
                 },  
                 'message': f'You are eligible to register for Semester {semester_name}'
             }
         
-        # Record exists but closed
+        # Record exists but not open (PENDING / CLOSED)
         return {
-            'eligible': True, # User says "those entry already created... are eligible"
+            'eligible': True,
             'registration_open': False,
-            'reason': 'Registration window is currently closed',
+            'reason': f'Registration window is currently {registration.status}',
             'current_semester': int(current_semester) - 1,
             'next_semester': current_semester,
             'registration_window': {
-                'start_date': registration.start_date.isoformat() if registration.start_date else None,
-                'end_date': registration.end_date.isoformat() if registration.end_date else None,
-                'is_open': False
+                'start_date': timezone.localtime(registration.start_date).strftime('%d %b %Y, %I:%M %p') if registration.start_date else None,
+                'end_date': timezone.localtime(registration.end_date).strftime('%d %b %Y, %I:%M %p') if registration.end_date else None,
+                'status': registration.status
             }
         }
     
@@ -328,67 +338,116 @@ class SemesterRegistrationService:
         return requirements
     
     @staticmethod
-    def _consolidate_courses_by_type(courses_queryset):
+    def get_registered_paper_codes(student, semester_num, session=None):
         """
-        Consolidate courses by course_type (course_code).
-        Returns a dictionary keyed by course_type with unique course info
-        and all assessment entries (CIA, ESE, Theory, Practical).
+        Get set of (paper_code, label) tuples the student is already registered for.
+        
+        Args:
+            student: UGStudentProfile instance
+            semester_num: Semester number (int or str)
+            session: Optional session string
         
         Returns:
-            Dictionary where keys are course_types (e.g., MJC-3, AEC-3)
+            Set of (paper_code, label) tuples
         """
+        # Query by both text ('3RD') and numeric ('3') for backward compatibility
+        semester_text = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(
+            int(semester_num), str(semester_num)
+        )
+        qs = StudentCourseAssessment.objects.filter(
+            student=student,
+            semester__in=[str(semester_num), semester_text],
+        )
+        if session:
+            qs = qs.filter(session=session)
+        
+        return set(
+            qs.values_list('paper_code', 'label')
+        )
+
+    @staticmethod
+    def _consolidate_courses_by_type(courses_queryset, registered_keys=None):
+        """
+        Consolidate courses by course_code (e.g., MJC-3, MJC-4).
+        Each unique course_code appears once with course info (name, code, uid, credit)
+        and all its assessment entries (CIA-Theory, ESE-Theory, etc.) nested inside.
+        
+        Args:
+            courses_queryset: QuerySet of CourseStructure objects
+            registered_keys: Optional set of (paper_code, label) tuples already registered
+        
+        Returns:
+            Dictionary where keys are course_codes (e.g., MJC-3, AEC-3)
+        """
+        if registered_keys is None:
+            registered_keys = set()
+        
         courses_dict = {}
         
         for course in courses_queryset:
             course_type = course.course_code  # e.g., MJC-3, AEC-3
             
-            if course_type:
-                if course_type not in courses_dict:
-                    # First entry for this course type - initialize the structure
-                    courses_dict[course_type] = {
-                        'uid': str(course.uid),
-                        'code': course.paper_code or course.course_code,
-                        'name': course.course_name,
-                        'department': course.department.name if course.department else None,
-                        'total_credit': course.max_credit or 0,
-                        'assessments': []
-                    }
-                
-                # Add assessment entry
-                assessment = {
+            if not course_type:
+                continue
+            
+            if course_type not in courses_dict:
+                # First entry for this course_code - initialize with course info
+                courses_dict[course_type] = {
                     'uid': str(course.uid),
-                    'label': course.label or 'Assessment',
-                    'type': course.course_type or 'General',
-                    'marks': float(course.max_marks) if course.max_marks else 0,
-                    'min_marks': float(course.min_marks) if course.min_marks else 0,
+                    'code': course.paper_code or course.course_code,
+                    'course_code': course.course_code,
+                    'name': course.course_name,
+                    'department': course.department.name if course.department else None,
+                    'total_credit': course.max_credit or 0,
+                    'assessments': []
                 }
-                courses_dict[course_type]['assessments'].append(assessment)
+            
+            paper_code = course.paper_code or course.course_code
+            label = course.label or 'Assessment'
+            is_registered = (paper_code, label) in registered_keys
+            
+            # Add assessment entry
+            assessment = {
+                'uid': str(course.uid),
+                'label': label,
+                'type': course.course_type or 'General',
+                'marks': float(course.max_marks) if course.max_marks else 0,
+                'min_marks': float(course.min_marks) if course.min_marks else 0,
+                'is_registered': is_registered,
+            }
+            courses_dict[course_type]['assessments'].append(assessment)
         
-        # Calculate total marks for each course
+        # Calculate total marks and per-course is_registered flag
         for course_data in courses_dict.values():
             course_data['total_marks'] = sum(a['marks'] for a in course_data['assessments'])
+            # A course is registered if ALL its assessments are registered
+            course_data['is_registered'] = (
+                len(course_data['assessments']) > 0
+                and all(a['is_registered'] for a in course_data['assessments'])
+            )
         
         return courses_dict
 
 
     
     @staticmethod
-
-    def get_available_courses(student: UGStudentProfile, semester: str) -> Dict:
+    def get_available_courses(student: UGStudentProfile, semester: str,
+                              registration_status: str = None) -> Dict:
         """
-        Get all available courses for student registration
+        Get all available courses for student registration.
+        If the student is already registered, each course and assessment will
+        include an `is_registered` flag so the UI can show registration status.
         
         Args:
             student: UGStudentProfile instance
             semester: Target semester (e.g., '3RD')
+            registration_status: Optional status string (e.g., STATUS_REGISTERED)
             
         Returns:
             Dict with categorized course options
         """
-        # Get the UGBatch object from student's batch string
-        batch_obj = None
-        if student.batch:
-            batch_obj = UGBatch.objects.filter(name=student.batch).first()
+        # student.batch is already a UGBatch FK object
+        batch_obj = student.batch
         
         # Map semester name to number using class constant
         semester_num = SemesterRegistrationService.SEMESTER_MAP.get(semester, 3)
@@ -399,10 +458,16 @@ class SemesterRegistrationService:
         registration = SemesterRegistration.objects.filter(
             student=student,
             sem=semester_num,
-            is_open=True
         ).order_by('-created_at').first()
         
         session = registration.session if registration and registration.session else student.session
+        
+        # Build set of already-registered (paper_code, label) keys
+        registered_keys = set()
+        if registration_status == STATUS_REGISTERED:
+            registered_keys = SemesterRegistrationService.get_registered_paper_codes(
+                student, semester_num, session
+            )
         
         # Get course types from CommonCourseStructure for this semester
         common_courses = CommonCourseStructure.objects.filter(
@@ -420,44 +485,45 @@ class SemesterRegistrationService:
         # === MAJOR COURSES (MJC) ===
         mjc_patterns = [ct for ct in course_types_in_semester if ct.startswith('MJC')]
         
-        if mjc_patterns:
-            mjc_query = base_query.filter(course_code__in=mjc_patterns)
-            if student.major_course:
-                mjc_query = mjc_query.filter(
-                    department=student.major_course,
-                    department__is_publish=True
-                )
-            
-            major_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(mjc_query)
+        if mjc_patterns and student.major_course:
+            mjc_query = base_query.filter(
+                course_code__in=mjc_patterns,
+                department=student.major_course,
+                department__is_publish=True
+            )
+            major_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(
+                mjc_query, registered_keys
+            )
         else:
             major_courses_dict = {}
         
         # === MINOR COURSES (MIC) ===
         mic_patterns = [ct for ct in course_types_in_semester if ct.startswith('MIC')]
         
-        if mic_patterns:
-            mic_query = base_query.filter(course_code__in=mic_patterns)
-            if student.minor_course:
-                mic_query = mic_query.filter(
-                    department=student.minor_course,
-                    department__is_publish=True
-                )
-            
-            minor_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(mic_query)
+        if mic_patterns and student.minor_course:
+            mic_query = base_query.filter(
+                course_code__in=mic_patterns,
+                department=student.minor_course,
+                department__is_publish=True
+            )
+            minor_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(
+                mic_query, registered_keys
+            )
         else:
             minor_courses_dict = {}
         
         # === MDC COURSES ===
         mdc_patterns = [ct for ct in course_types_in_semester if ct.startswith('MDC')]
         
-        if mdc_patterns:
-            mdc_query = base_query.filter(course_code__in=mdc_patterns)
-            if student.mdc_course:
-                mdc_query = mdc_query.filter(
-                    department=student.mdc_course,
-                    department__is_publish=True
-                )
-            mdc_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(mdc_query)
+        if mdc_patterns and student.mdc_course:
+            mdc_query = base_query.filter(
+                course_code__in=mdc_patterns,
+                department=student.mdc_course,
+                department__is_publish=True
+            )
+            mdc_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(
+                mdc_query, registered_keys
+            )
         else:
             mdc_courses_dict = {}
         
@@ -469,7 +535,9 @@ class SemesterRegistrationService:
         
         if other_patterns:
             other_query = base_query.filter(course_code__in=other_patterns)
-            other_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(other_query)
+            other_courses_dict = SemesterRegistrationService._consolidate_courses_by_type(
+                other_query, registered_keys
+            )
         else:
             other_courses_dict = {}
         
@@ -481,9 +549,10 @@ class SemesterRegistrationService:
         all_courses.update(other_courses_dict)
         
         return {
-            'batch': student.batch,
+            'batch': student.batch.name if student.batch else None,
             'semester': semester,
             'session': session,
+            'already_registered': registration_status == STATUS_REGISTERED,
             'courses': all_courses,
         }
     
@@ -558,20 +627,19 @@ class SemesterRegistrationService:
         registration = SemesterRegistration.objects.select_related('student').filter(
             student=student,
             sem=semester_num,
-            is_open=True
+            status=STATUS_OPEN,
+            batch=student.batch
         ).first()
         
         if not registration:
-            raise ValueError(f"No open registration window for semester {semester}")
+            raise ValueError(f"No open registration window for semester {semester}. Current status: {registration.status if registration else 'Not Found'}")
         
-        if registration.status == 'REGISTERED':
+        if registration.status == STATUS_REGISTERED:
             raise ValueError(f"Already registered for semester {semester}")
         
-        # Get session and batch (optimize batch query)
+        # Get session and batch
         session = registration.session or student.session
-        batch_obj = None
-        if student.batch:
-            batch_obj = UGBatch.objects.only('id', 'name').filter(name=student.batch).first()
+        batch_obj = student.batch  # Already a UGBatch FK object
         
         # 2. FETCH COURSESTRUCTURE DATA (Optimized query with select_related)
         course_structures = list(
@@ -610,10 +678,12 @@ class SemesterRegistrationService:
         for paper_code, label, exam_type in assessment_keys:
             existing_query |= Q(paper_code=paper_code, label=label, exam_type=exam_type)
         
+        # Query both text ('3RD') and numeric ('3') for backward compatibility
+        semester_text = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(semester_num, semester)
         existing_assessments = set(
             StudentCourseAssessment.objects.filter(
                 student=student,
-                semester=str(semester_num),
+                semester__in=[str(semester_num), semester_text],
                 session=session
             ).filter(existing_query).values_list('paper_code', 'label', 'exam_type')
         )
@@ -647,9 +717,11 @@ class SemesterRegistrationService:
             )
             
             # Create assessment object (don't save yet)
+            # Save semester as text format (e.g., '3RD' not '3')
+            semester_text = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(semester_num, semester)
             assessment = StudentCourseAssessment(
                 student=student,
-                semester=str(semester_num),
+                semester=semester_text,
                 session=session,
                 batch=batch_obj,
                 
@@ -702,13 +774,13 @@ class SemesterRegistrationService:
             )
             
             # Update registration status
-            registration.status = 'REGISTERED'
+            registration.status = STATUS_REGISTERED
             registration.save(update_fields=['status'])
         
         return {
             'success': True,
             'message': f'Successfully registered for Semester {semester}',
-            'batch': student.batch,
+            'batch': student.batch.name if student.batch else None,
             'registered_assessments': registered_assessments,
             'total_courses': len(courses_registered),
             'total_credits': total_credits,

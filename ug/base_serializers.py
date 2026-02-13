@@ -40,6 +40,7 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
     degree = UGDegreeSerializer(read_only=True)
     program = UGProgramSerializer(read_only=True)
     college = UGCollegeSerializer(read_only=True)
+    batch = serializers.CharField(source='batch.name', read_only=True)
 
     class Meta:
         model = UGStudentProfile
@@ -54,3 +55,4 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
             'status', 'session', 'batch', 'is_active'
         ]
         read_only_fields = ['uid']
+    

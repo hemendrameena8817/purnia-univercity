@@ -10,7 +10,9 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 from rest_framework import status
 
-from ug.services.semester_registration_service import SemesterRegistrationService
+from ug.services.semester_registration_service import (
+    SemesterRegistrationService, STATUS_REGISTERED
+)
 from ug.utils.api_response import (
     success_response, error_response,
     already_registered_response, not_eligible_response, 
@@ -96,9 +98,15 @@ class AvailableCoursesView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # First check eligibility
+            # Check eligibility
             eligibility = SemesterRegistrationService.check_registration_eligibility(student)
-            if not eligibility['eligible']:
+            
+            # Determine registration status
+            already_registered = eligibility.get('already_registered', False)
+            registration_status = STATUS_REGISTERED if already_registered else None
+            
+            # If not eligible AND not already registered, block
+            if not eligibility['eligible'] and not already_registered:
                 return Response(
                     {
                         'error': 'Not eligible for registration',
@@ -108,24 +116,24 @@ class AvailableCoursesView(APIView):
                 )
             
             # Verify semester matches next semester
-            semester_map = {
-                1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH',
-                5: '5TH', 6: '6TH', 7: '7TH', 8: '8TH'
-            }
-            expected_semester = semester_map.get(eligibility['next_semester'])
+            expected_semester = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(
+                eligibility['next_semester']
+            )
             
             if semester != expected_semester:
                 return Response(
                     {
-                        'error': f"Can only register for next semester ({expected_semester})",
+                        'error': f"Can only view courses for semester ({expected_semester})",
                         'current_semester': eligibility['current_semester'],
                         'next_semester': eligibility['next_semester']
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get available courses
-            courses_data = SemesterRegistrationService.get_available_courses(student, semester)
+            # Get available courses (with is_registered flags if already registered)
+            courses_data = SemesterRegistrationService.get_available_courses(
+                student, semester, registration_status=registration_status
+            )
             
             # Add student and college information
             student_info = {
@@ -134,8 +142,13 @@ class AvailableCoursesView(APIView):
                 'college_code': student.college.college_code if student.college else None
             }
             
-            # Add student info to response
+            # Add student info, registration window, and message to response
             courses_data['student_info'] = student_info
+            courses_data['registration_window'] = eligibility.get('registration_window', {})
+            courses_data['registration_open'] = eligibility.get('registration_open', False)
+            
+            if already_registered:
+                courses_data['message'] = eligibility.get('message', 'You are already registered for this semester')
             
             return Response(courses_data, status=status.HTTP_200_OK)
         
