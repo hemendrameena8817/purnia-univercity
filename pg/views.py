@@ -161,8 +161,14 @@ class PGCollegeStudentsView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
         
         
-        # Only show assessments where CIA marks have NOT been filled
-        filters['is_cia_fill'] = False
+        # Status Filter
+        status_filter = request.query_params.get('status', 'pending').lower() # Default to pending
+        
+        if status_filter == 'filled':
+            filters['is_cia_fill'] = True
+        elif status_filter == 'pending':
+            filters['is_cia_fill'] = False
+        # If 'all', we don't filter by is_cia_fill
         
         # Get assessments with student data
         assessments = PGStudentCourseAssessment.objects.filter(**filters).select_related('student')
@@ -179,7 +185,8 @@ class PGCollegeStudentsView(APIView):
                 'name': f"{assessment.student.first_name} {assessment.student.last_name or ''}".strip(),
                 'ind_max_marks': assessment.ind_max_marks,
                 'ind_pass_marks': assessment.ind_pass_marks,
-                'is_cia_fill': assessment.is_cia_fill
+                'ind_marks_obtained': assessment.ind_marks_obtained,
+                'is_cia_fill': assessment.is_cia_fill,
             })
         
         # Apply pagination
@@ -387,10 +394,192 @@ class PGSubjectDropdownView(APIView):
         
         serializer = PGSubjectDropdownSerializer(unique_subjects, many=True)
         
+
         return Response({
             'total': len(unique_subjects),
             'subjects': serializer.data
         }, status=status.HTTP_200_OK)
 
 
+class PGStudentFilterView(APIView):
+    """
+    API View to get students filtered by Department and optionally by Subject.
+    
+    Query Parameters:
+    - department: Department UID (required)
+    - subject: Subject (Course) UID (optional)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        department_uid = request.query_params.get('department')
+        subject_uid = request.query_params.get('subject') # This corresponds to PGCourseStructure UID
+        
+        if not department_uid:
+            return Response({'error': 'Department UID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Base query: Active students in the department
+        from .models import PGStudentProfile, PGCourseStructure
+
+        students = PGStudentProfile.objects.filter(
+            department__uid=department_uid,
+            is_active=True
+        ).select_related('department', 'degree', 'program', 'college')
+
+        # Filter by Subject if provided
+        if subject_uid:
+            try:
+                subject = PGCourseStructure.objects.get(uid=subject_uid)
+                # Filter students who have an assessment entry for this subject
+                # We match on paper_code or course_code/code as needed. 
+                # Ideally, assessment.paper_code matches course.code
+                
+                # Using paper_code from PGCourseStructure (which seems to be 'code' in the model based on previous view)
+                target_code = subject.code 
+                
+                if target_code:
+                     students = students.filter(
+                        course_assessments__paper_code=target_code,
+                        course_assessments__semester=subject.semester # Ensure semester matches too
+                     ).distinct()
+                else:
+                    # If subject has no code, we might not be able to filter accurately by assessment
+                     return Response({'error': 'Selected subject has no code'}, status=status.HTTP_400_BAD_REQUEST)
+
+            except PGCourseStructure.DoesNotExist:
+                return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Serialize
+        # Use a lightweight serializer for the list view
+        data = []
+        for student in students:
+            data.append({
+                'uid': student.uid,
+                'registration_no': student.registration_no,
+                'name': student.get_full_name(),
+                'father_name': student.father_name,
+                'roll_no': student.roll_no,
+                'program': student.program.name if student.program else None,
+                'session': student.session,
+                'semester': student.current_semester,
+                'department': student.department.name if student.department else None
+            })
+            
+        return Response(data, status=status.HTTP_200_OK)
+
+
+
+
+class PGFillDataView(APIView):
+    """
+    API View to get 'fill data' (json_data) for a specific assessment.
+    
+    URL: /api/pg/fill-data/<uid>/
+    Method: GET
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, uid):
+        # 1. Fetch the assessment
+        try:
+            assessment = PGStudentCourseAssessment.objects.get(uid=uid)
+        except PGStudentCourseAssessment.DoesNotExist:
+            return Response({
+                "error": "Assessment not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Check permissions (Optional but recommended)
+        # If the user is a college user, ensure the student belongs to their college
+        if request.user.user_type == 'college_user':
+            try:
+                college_profile = request.user.college_profile
+                user_college = college_profile.college
+                if assessment.student.college != user_college:
+                     return Response({
+                        "error": "Access denied. Student does not belong to your college."
+                    }, status=status.HTTP_403_FORBIDDEN)
+            except AttributeError:
+                 return Response({
+                    "error": "College profile not found."
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # 3. Return the json_data
+        return Response({
+            "uid": assessment.uid,
+            "json_data": assessment.json_data
+        }, status=status.HTTP_200_OK)
+
+class PGFillDataLookupView(APIView):
+    """
+    API View to get 'fill data' (json_data) by Student UID and Subject UID.
+    
+    URL: /api/pg/fill-data/lookup/?student=<uid>&subject=<uid>
+    Method: GET
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        student_uid = request.query_params.get('student')
+        subject_uid = request.query_params.get('subject')
+
+        if not student_uid or not subject_uid:
+            return Response({
+                "error": "Both 'student' and 'subject' query parameters are required."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Fetch Subject to get the paper code
+        from .models import PGCourseStructure
+        try:
+            subject = PGCourseStructure.objects.get(uid=subject_uid)
+            target_code = subject.code
+            if not target_code:
+                 return Response({
+                    "error": "The selected subject does not have a valid code."
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except PGCourseStructure.DoesNotExist:
+            return Response({
+                "error": "Subject not found."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Fetch Assessment matching Student and Subject Code
+        try:
+            # We filter by student and paper_code (or course_code which seems to be used interchangeably)
+            # Taking the most recent one if multiple exist (though ideally unique per semester/session)
+            assessment = PGStudentCourseAssessment.objects.filter(
+                student__uid=student_uid,
+                paper_code=target_code,
+                semester=subject.semester # Ensure semester matches
+            ).order_by('-created_at').first()
+
+            if not assessment:
+                 return Response({
+                    "error": "No assessment found for this student and subject."
+                }, status=status.HTTP_404_NOT_FOUND)
+        
+        except Exception as e:
+             return Response({
+                "error": f"Error finding assessment: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 3. Check permissions
+        if request.user.user_type == 'college_user':
+            try:
+                college_profile = request.user.college_profile
+                user_college = college_profile.college
+                if assessment.student.college != user_college:
+                     return Response({
+                        "error": "Access denied. Student does not belong to your college."
+                    }, status=status.HTTP_403_FORBIDDEN)
+            except AttributeError:
+                 return Response({
+                    "error": "College profile not found."
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # 4. Return Data
+        return Response({
+            "uid": assessment.uid,
+            "json_data": assessment.json_data
+        }, status=status.HTTP_200_OK)
