@@ -10,6 +10,8 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 from rest_framework import status
 
+import json
+from django.db import transaction
 from ug.services.semester_registration_service import (
     SemesterRegistrationService, STATUS_REGISTERED
 )
@@ -23,7 +25,8 @@ from ug.serializers import (
     EligibilityResponseSerializer,
     AvailableCoursesResponseSerializer,
     CourseSelectionRequestSerializer,
-    RegistrationResponseSerializer
+    RegistrationResponseSerializer,
+    SubmitRegistrationSerializer
 )
 
 
@@ -182,59 +185,43 @@ class SubmitRegistrationView(APIView):
     
     The assessment UIDs come from the available-courses API.
     
-    Optimizations:
-    - Uses bulk_create for performance (handles 30k+ students)
-    - Fetches CourseStructure data using UIDs
-    - Sets exam_type='Regular' for new registrations
-    - Checks for duplicates in single bulk query
-    
-    Updates SemesterRegistration.status to 'REGISTERED'
+    Implementation:
+    - Uses SubmitRegistrationSerializer for robust validation (handling multipart/form-data)
+    - Delegates processing to `SemesterRegistrationService.process_registration_submission`
+    - Atomic transaction ensures profile update and registration happen together
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        """Submit assessment UIDs and create registrations"""
+        """Submit assessment UIDs, profile image, signature and create registrations"""
         try:
             # Get student profile
             student = request.user.ug_student_profile
             
-            # Extract data from request
-            semester = request.data.get('semester')
-            assessment_uids = request.data.get('assessment_uids', [])
+            # Use Serializer for robust parsing & validation
+            serializer = SubmitRegistrationSerializer(data=request.data)
+            if not serializer.is_valid():
+                return validation_error_response(serializer.errors)
+                
+            validated_data = serializer.validated_data
             
-            # Validate required fields
-            if not semester:
-                return missing_field_response('semester')
-            
-            if not assessment_uids or not isinstance(assessment_uids, list):
-                return validation_error_response('assessment_uids must be a non-empty list')
-            
-            # Check eligibility
-            eligibility = SemesterRegistrationService.check_registration_eligibility(student)
-            if not eligibility.get('eligible', False):
-                return not_eligible_response(
-                    reason=eligibility.get('reason'),
-                    message=eligibility.get('message')
-                )
-            
-            # Create registrations (optimized bulk operation)
-            result = SemesterRegistrationService.create_course_registrations(
-                student, semester, assessment_uids
+            # Delegate logic to service
+            result = SemesterRegistrationService.process_registration_submission(
+                student=student,
+                semester=validated_data['semester'],
+                assessment_uids=validated_data.get('assessment_uids'),
+                profile_image=validated_data.get('profile_image'),
+                signature=validated_data.get('signature'),
+                gender=validated_data.get('gender')
             )
             
-            # Add status to success response
-            result['status'] = 'success'
             return Response(result, status=status.HTTP_200_OK)
         
         except ValueError as e:
             error_message = str(e)
-            
-            # Check if it's an "already registered" error
             if "already registered" in error_message.lower():
-                return already_registered_response(semester)
-            
-            # Other validation errors (400 Bad Request)
+                return already_registered_response(request.data.get('semester'))
             return validation_error_response(error_message)
         except AttributeError:
             return profile_not_found_response()
