@@ -167,10 +167,14 @@ def sync_students():
                 
                 success += len(batch)
                 
-            except OperationalError:
+            except OperationalError as e:
+                if failed == 0:
+                    print(f"\n❌ DATABASE ERROR: {e}\n", flush=True)
                 connections['live'].close()
                 failed += len(batch)
             except Exception as e:
+                if failed == 0:
+                    print(f"\n❌ ERROR: {type(e).__name__}: {e}\n", flush=True)
                 failed += len(batch)
             
             # Clear batch
