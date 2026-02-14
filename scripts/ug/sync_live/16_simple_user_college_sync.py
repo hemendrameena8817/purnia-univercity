@@ -29,6 +29,11 @@ def simple_college_sync():
         live_college_map = {
             c.college_code: c.id 
             for c in College.objects.using('live').exclude(college_code__isnull=True)
+        }
+    except Exception as e:
+        print(f"   ❌ Error fetching live colleges: {e}")
+        return
+
     print(f"   📊 Live College Map Size: {len(live_college_map)}")
     
     # 2. Get Target Users (Local Semester Registration)
