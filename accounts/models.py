@@ -97,6 +97,10 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = "User Account"
         verbose_name_plural = "User Accounts"
+        indexes = [
+            models.Index(fields=['user_type'], name='idx_user_type'),
+            models.Index(fields=['username', 'user_type'], name='idx_username_type'),
+        ]
 
     def __str__(self):
         return f"{self.email} ({self.get_user_type_display()})"
