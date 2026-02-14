@@ -23,7 +23,7 @@ def update_registration_dates():
     tz = pytz.timezone('Asia/Kolkata')
     
     # Feb 15, 2026 at 10:00 AM
-    start_dt = tz.localize(datetime(2026, 2, 15, 10, 0, 0))
+    start_dt = tz.localize(datetime(2026, 2, 15, 3, 30, 0))
     
     # Feb 20, 2026 at 11:59 PM
     end_dt = tz.localize(datetime(2026, 2, 20, 23, 59, 59))
@@ -42,7 +42,8 @@ def update_registration_dates():
         ).update(
             start_date=start_dt,
             end_date=end_dt,
-            is_open=True # Ensure it's marked as open since dates are valid
+            is_open=True ,
+            status='OPEN'
         )
         
         print(f"\n✅ Successfully updated {updated_count} records!")
