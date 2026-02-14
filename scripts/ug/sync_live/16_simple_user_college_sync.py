@@ -29,13 +29,9 @@ def simple_college_sync():
         live_college_map = {
             c.college_code: c.id 
             for c in College.objects.using('live').exclude(college_code__isnull=True)
-        }
-    except Exception as e:
-        print(f"   ❌ Error fetching live colleges: {e}")
-        return
-
+    print(f"   📊 Live College Map Size: {len(live_college_map)}")
+    
     # 2. Get Target Users (Local Semester Registration)
-    # We use this to identify WHICH users to update
     print("   📥 Fetching Local Users (Sem 3, 2024-28)...")
     source_regs = SemesterRegistration.objects.using('default').filter(
         sem=3,
@@ -47,6 +43,7 @@ def simple_college_sync():
     updated_count = 0
     skipped_count = 0
     error_count = 0
+    debug_count = 0
     
     print("   🔄 Starting Loop...")
     
@@ -60,26 +57,19 @@ def simple_college_sync():
             local_college = student.college
             
             if not local_college or not local_college.college_code:
-                # print(f"      ⚠️ No College Code for {local_user.username}")
+                if debug_count < 10: print(f"      ⚠️ No Local Code: {local_user.username}")
+                debug_count += 1
                 skipped_count += 1
                 continue
                 
-            # Get Target College ID from Map
             target_college_id = live_college_map.get(local_college.college_code)
             
             if not target_college_id:
-                # print(f"      ⚠️ Code {local_college.college_code} not found in Live.")
+                if debug_count < 10: print(f"      ⚠️ Code Not In Live: {local_college.college_code}")
+                debug_count += 1
                 skipped_count += 1
                 continue
 
-            # Update Live User
-            # We fetch by Username to be safe (IDs might differ)
-            # Efficient Update: directly update the field if it exists
-            
-            # Check/Update Logic
-            # We use filter().update() to avoid fetching the full object if possible, 
-            # maximizing speed and minimizing memory.
-            
             rows = UserAccount.objects.using('live').filter(
                 username=local_user.username
             ).update(college_id=target_college_id)
@@ -87,7 +77,8 @@ def simple_college_sync():
             if rows > 0:
                 updated_count += 1
             else:
-                # User might not exist in live?
+                if debug_count < 10: print(f"      ⚠️ User Not Found in Live: {local_user.username}")
+                debug_count += 1
                 skipped_count += 1
 
         except Exception as e:
