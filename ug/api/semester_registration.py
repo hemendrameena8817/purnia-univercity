@@ -141,8 +141,8 @@ class AvailableCoursesView(APIView):
             # Add student and college information
             student_info = {
                 'applicant_name': student.first_name or '',
-                'college_name': student.college.name if student.college else None,
-                'college_code': student.college.college_code if student.college else None
+                'college_name': student.user.college.name if student.user.college else None,
+                'college_code': student.user.college.college_code if student.user.college else None
             }
             
             # Add student info, registration window, and message to response
