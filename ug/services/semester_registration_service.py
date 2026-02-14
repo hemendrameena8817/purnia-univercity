@@ -742,6 +742,7 @@ class SemesterRegistrationService:
                 # Student info
                 college_code=college_code,
                 degree=degree_code,
+                ind_is_absent=False
             )
             
             assessments_to_create.append(assessment)
@@ -786,3 +787,64 @@ class SemesterRegistrationService:
             'total_credits': total_credits,
             'total_assessments': len(registered_assessments)
         }
+    
+    @staticmethod
+    def process_registration_submission(student: UGStudentProfile, semester: str,
+                                      assessment_uids: list, profile_image=None, 
+                                      signature=None, gender=None) -> Dict:
+        """
+        Process the entire registration submission:
+        1. Update profile images & gender (mandatory)
+        2. Check eligibility
+        3. Create registrations
+        
+        Args:
+            student: UGStudentProfile instance
+            semester: Semester string (e.g., '3RD')
+            assessment_uids: List of assessment UIDs
+            profile_image: Image file for profile
+            signature: Image file for signature
+            gender: Student gender
+            
+        Returns:
+            Dict with success result
+        """
+        from django.db import transaction
+        
+        # Transactional Process
+        with transaction.atomic():
+            # 1. Update Profile (Images & Gender)
+            update_fields = []
+            
+            if profile_image:
+                student.profile_image = profile_image
+                update_fields.append('profile_image')
+                
+            if signature:
+                student.signature = signature
+                update_fields.append('signature')
+                
+            if gender:
+                student.gender = gender
+                update_fields.append('gender')
+                
+            if update_fields:
+                student.save(update_fields=update_fields + ['updated_at'])
+
+            # 2. Check Eligibility (Fail-fast)
+            eligibility = SemesterRegistrationService.check_registration_eligibility(student)
+            if not eligibility.get('eligible', False):
+                # Manual rollback via exception
+                raise ValueError(f"Registration eligibility failed: {eligibility.get('reason')}")
+            
+            # 3. Create Registrations (Optimized Bulk)
+            result = SemesterRegistrationService.create_course_registrations(
+                student, semester, assessment_uids
+            )
+            
+            # Add image URLs to result for frontend display
+            result['status'] = 'success'
+            result['profile_image'] = student.profile_image.url if student.profile_image else None
+            result['signature'] = student.signature.url if student.signature else None
+            
+            return result

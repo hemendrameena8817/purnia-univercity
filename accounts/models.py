@@ -81,6 +81,10 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(_("staff status"), default=False)
     is_active = models.BooleanField(_("active"), default=True)
+    
+    # Password Change Tracking
+    is_password_changed = models.BooleanField(default=False, help_text="True if password has been changed by user/admin")
+    password_changed_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='changed_passwords', help_text="User who last changed the password")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

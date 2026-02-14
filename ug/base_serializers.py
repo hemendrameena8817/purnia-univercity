@@ -41,6 +41,7 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
     program = UGProgramSerializer(read_only=True)
     college = UGCollegeSerializer(read_only=True)
     batch = serializers.CharField(source='batch.name', read_only=True)
+    date_of_birth = serializers.DateField(read_only=True, format='%d-%m-%y')
 
     class Meta:
         model = UGStudentProfile
