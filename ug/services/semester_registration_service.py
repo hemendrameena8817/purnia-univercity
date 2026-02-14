@@ -98,7 +98,7 @@ class SemesterRegistrationService:
         # Check if already registered
         if registration.status == STATUS_REGISTERED:
             return {
-                'eligible': False,
+                'eligible': True,
                 'already_registered': True,
                 'current_semester': int(current_semester) - 1,
                 'next_semester': current_semester,

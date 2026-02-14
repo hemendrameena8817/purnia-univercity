@@ -51,7 +51,7 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
             'mobile_no', 'aadhar_no', 'address',
-            'college',
+            'college', 'profile_image', 'signature',
             'department', 'degree', 'program',
             'status', 'session', 'batch', 'is_active'
         ]
