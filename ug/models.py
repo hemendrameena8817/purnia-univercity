@@ -259,8 +259,8 @@ class UGStudentProfile(models.Model):
     # mdc_course = models.CharField(max_length=250, null=True, blank=True, help_text="Multi-Disciplinary Course (MDC)")
 
     # Documents
-    profile_image = models.ImageField(storage=DocumentStorage(), upload_to=unique_file_path('ug_students/profiles/'), null=True, blank=True)
-    signature = models.ImageField(storage=DocumentStorage(), upload_to=unique_file_path('ug_students/signatures/'), null=True, blank=True)
+    profile_image = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('ug_students/profiles/'), null=True, blank=True)
+    signature = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('ug_students/signatures/'), null=True, blank=True)
     is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

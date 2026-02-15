@@ -139,10 +139,21 @@ class AvailableCoursesView(APIView):
             )
             
             # Add student and college information
+            # Build absolute URLs
+            img_url = student.profile_image.url if student.profile_image else None
+            if img_url and not img_url.startswith('http'):
+                img_url = request.build_absolute_uri(img_url)
+                
+            sig_url = student.signature.url if student.signature else None
+            if sig_url and not sig_url.startswith('http'):
+                sig_url = request.build_absolute_uri(sig_url)
+
             student_info = {
                 'applicant_name': student.first_name or '',
                 'college_name': student.user.college.name if student.user.college else None,
-                'college_code': student.user.college.college_code if student.user.college else None
+                'college_code': student.user.college.college_code if student.user.college else None,
+                'profile_image': img_url,
+                'signature': sig_url
             }
             
             # Add student info, registration window, and message to response
@@ -207,6 +218,7 @@ class SubmitRegistrationView(APIView):
             validated_data = serializer.validated_data
             
             # Delegate logic to service
+            # Delegate logic to service
             result = SemesterRegistrationService.process_registration_submission(
                 student=student,
                 semester=validated_data['semester'],
@@ -215,6 +227,13 @@ class SubmitRegistrationView(APIView):
                 signature=validated_data.get('signature'),
                 gender=validated_data.get('gender')
             )
+            
+            # Ensure proper absolute URLs
+            if result.get('profile_image') and not result['profile_image'].startswith('http'):
+                result['profile_image'] = request.build_absolute_uri(result['profile_image'])
+                
+            if result.get('signature') and not result['signature'].startswith('http'):
+                result['signature'] = request.build_absolute_uri(result['signature'])
             
             return Response(result, status=status.HTTP_200_OK)
         
