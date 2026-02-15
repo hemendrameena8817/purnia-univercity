@@ -23,7 +23,7 @@ def update_registration_dates():
     tz = pytz.timezone('Asia/Kolkata')
     
     # Feb 15, 2026 at 10:00 AM
-    start_dt = tz.localize(datetime(2026, 2, 15, 3, 30, 0))
+    start_dt = tz.localize(datetime(2026, 2, 15, 10, 00, 0))
     
     # Feb 20, 2026 at 11:59 PM
     end_dt = tz.localize(datetime(2026, 2, 20, 23, 59, 59))
