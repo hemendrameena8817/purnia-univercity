@@ -42,7 +42,7 @@ def simple_college_sync():
         sem=3,
         batch__name='2024-28',
         session='2025-26'
-    ).select_related('student__user', 'student__college')
+    ).select_related('student__user', 'student__college', 'student__user__college')
     
     # 3. Iterate and Update
     updated_count = 0
@@ -59,18 +59,22 @@ def simple_college_sync():
                 continue
                 
             local_user = student.user
-            local_college = student.college
+            local_college = local_user.college
+            local_college_code = None
             
-            if not local_college or not local_college.college_code:
-                if debug_count < 10: print(f"      ⚠️ No Local Code: {local_user.username}")
+            if local_college and local_college.college_code:
+                local_college_code = local_college.college_code
+            
+            if not local_college_code:
+                if debug_count < 10: print(f"      ⚠️ No Local Code (UserAccount): {local_user.username}")
                 debug_count += 1
                 skipped_count += 1
                 continue
                 
-            target_college_id = live_college_map.get(local_college.college_code)
+            target_college_id = live_college_map.get(local_college_code)
             
             if not target_college_id:
-                if debug_count < 10: print(f"      ⚠️ Code Not In Live: {local_college.college_code}")
+                if debug_count < 10: print(f"      ⚠️ Code Not In Live: {local_college_code}")
                 debug_count += 1
                 skipped_count += 1
                 continue
