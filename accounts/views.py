@@ -10,7 +10,8 @@ from .serializers import (
     LoginSerializer, 
     UserProfileSerializer,
     ProfileSerializer,
-    CollegeUserCreateSerializer
+    CollegeUserCreateSerializer,
+    ChangePasswordSerializer,
 )
 from .permissions import IsUniversityAdmin, IsCollegeUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -33,17 +34,19 @@ class LoginView(DjRestAuthLoginView):
         self.request = request
         self.serializer = self.get_serializer(data=request.data)
         
-        # CAPTCHA verification from query parameters
-        # captcha_key = request.query_params.get('captcha_key')
-        # captcha_value = request.query_params.get('captcha_value')
-        
-        # if not captcha_key or not captcha_value:
-        #     return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # try:
-        #     CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
-        # except CaptchaStore.DoesNotExist:
-        #     return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+        #captcha only for production
+        if not settings.DEBUG:
+            # CAPTCHA verification from query parameter
+            captcha_key = request.query_params.get('captcha_key')
+            captcha_value = request.query_params.get('captcha_value')
+            
+            if not captcha_key or not captcha_value:
+                return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+            except CaptchaStore.DoesNotExist:
+                return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
 
         self.serializer.is_valid(raise_exception=True)
         
@@ -164,3 +167,32 @@ class DashboardView(APIView):
             error_msg = f'{current_profile.upper()} profile not found' if 'DoesNotExist' in str(type(e).__name__) else 'An unexpected error occurred'
             status_code = status.HTTP_404_NOT_FOUND if 'DoesNotExist' in str(type(e).__name__) else status.HTTP_500_INTERNAL_SERVER_ERROR
             return Response({'success': False, 'error': error_msg}, status=status_code)
+
+
+class ChangePasswordView(APIView):
+    """
+    Change password endpoint.
+    Requires old_password, new_password, confirm_new_password.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        # if not settings.DEBUG:
+            # CAPTCHA verification
+        captcha_key = request.data.get('captcha_key') or request.query_params.get('captcha_key')
+        captcha_value = request.data.get('captcha_value') or request.query_params.get('captcha_value')
+        
+        if not captcha_key or not captcha_value:
+            return Response({"error": "Captcha required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+        except CaptchaStore.DoesNotExist:
+            return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"success": True, "message": "Password changed successfully."}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

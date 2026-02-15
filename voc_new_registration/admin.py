@@ -83,14 +83,12 @@ class NewRegistrationAdmin(ImportExportModelAdmin):
             'fields': ('uid', 'student_name', 'student_name_hindi', 'father_name', 'mother_name')
         }),
         ('Personal Details', {
-            'fields': ('date_of_birth', 'gender', 'caste', 'religion', 'nationality')
+            'fields': ('dob', 'gender', 'caste')
         }),
         ('Contact Information', {
             'fields': ('mobile_no', 'email', 'aadhaar_no', 'apaar_no')
         }),
-        ('Address', {
-            'fields': ('address', 'city', 'state', 'pincode')
-        }),
+        
         ('Academic Details', {
             'fields': ('course', 'batch', 'session', 'college')
         }),

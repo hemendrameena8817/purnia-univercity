@@ -60,15 +60,23 @@ class UserProfileSerializer(serializers.ModelSerializer):
     """
 
     college = CollegeSerializer(read_only=True)
+    is_pass_change = serializers.BooleanField(source='is_password_changed', read_only=True)
+    changed_by = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'uid', 'email', 'username', 'first_name', 'last_name',
             'phone', 'user_type', 'current_profile', 'is_verified', 'is_active', 
-            'created_at', 'college'
+            'created_at', 'college',
+            'is_pass_change', 'changed_by'
         ]
-        read_only_fields = ['uid', 'email', 'created_at']
+        read_only_fields = ['uid', 'email', 'created_at', 'is_pass_change', 'changed_by']
+
+    def get_changed_by(self, obj):
+        if obj.password_changed_by:
+             return obj.password_changed_by.get_full_name() or obj.password_changed_by.username
+        return None
 
 
 class CollegeUserProfileSerializer(serializers.ModelSerializer):
@@ -223,3 +231,36 @@ class DashboardResponseSerializer(serializers.Serializer):
     user = DashboardUserSerializer()
     student_info = StudentInfoSerializer(allow_null=True)
     registration = RegistrationStatusSerializer(allow_null=True)
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """
+    Serializer for changing user password.
+    """
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    confirm_new_password = serializers.CharField(required=True)
+
+    def validate(self, attrs):
+        user = self.context['request'].user
+        if not user.check_password(attrs['old_password']):
+            raise serializers.ValidationError({"old_password": "Old password is incorrect."})
+            
+        if attrs['new_password'] != attrs['confirm_new_password']:
+             raise serializers.ValidationError({"confirm_new_password": "New passwords must match."})
+             
+        if attrs['old_password'] == attrs['new_password']:
+             raise serializers.ValidationError({"new_password": "New password must be different from old password."})
+             
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        user.set_password(self.validated_data['new_password'])
+        
+        # Update tracking fields
+        user.is_password_changed = True
+        user.password_changed_by = user
+        
+        user.save()
+        return user

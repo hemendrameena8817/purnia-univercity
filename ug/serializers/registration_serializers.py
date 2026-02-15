@@ -4,6 +4,7 @@ Semester Registration Serializers
 from rest_framework import serializers
 
 
+
 class CourseOptionSerializer(serializers.Serializer):
     """Serializer for course option"""
     code = serializers.CharField()
@@ -51,11 +52,30 @@ class AvailableCoursesResponseSerializer(serializers.Serializer):
     courses = serializers.DictField(child=CourseGroupSerializer())
 
 
+class SubmitRegistrationSerializer(serializers.Serializer):
+    """
+    Handles multipart/form-data for semester registration
+    """
+    semester = serializers.CharField(required=True)
+    assessment_uids = serializers.JSONField(required=True)
+    profile_image = serializers.ImageField(required=True)
+    signature = serializers.ImageField(required=True)
+    gender = serializers.CharField(required=True)
+    
+    def validate_assessment_uids(self, value):
+        if not value:
+             raise serializers.ValidationError("Must be a non-empty list of UIDs.")
+        if not isinstance(value, list):
+             raise serializers.ValidationError("Must be a list.")
+        return value
+
+
 class CourseSelectionRequestSerializer(serializers.Serializer):
-    """Serializer for course selection request"""
     semester = serializers.CharField()
     session = serializers.CharField()
     selections = serializers.DictField()
+    profile_image = serializers.ImageField(required=True)
+    signature = serializers.ImageField(required=True)
     
     def validate_selections(self, value):
         """Validate selections structure"""
@@ -85,3 +105,5 @@ class RegistrationResponseSerializer(serializers.Serializer):
     registered_courses = RegisteredCourseSerializer(many=True)
     total_credits = serializers.IntegerField()
     total_courses = serializers.IntegerField()
+    profile_image = serializers.CharField(required=False, allow_null=True)
+    signature = serializers.CharField(required=False, allow_null=True)

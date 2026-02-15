@@ -51,21 +51,22 @@ class DashboardService:
     def _get_ug_data(cls, user) -> Dict:
         """Get UG student dashboard data"""
         student = UGStudentProfile.objects.select_related(
-            'program', 'department', 'college'
+            'program', 'department', 'college', 'batch'
         ).get(user=user)
-        
+
         return {
-            # 'student_info': {
-            #     'registration_no': student.registration_no,
-            #     'roll_no': student.roll_no,
-            #     'name': f"{student.first_name or ''} {student.last_name or ''}".strip(),
-            #     'program': student.program.name if student.program else None,
-            #     'department': student.department.name if student.department else None,
-            #     'college': student.college.name if student.college else None,
-            #     'batch': student.batch,
-            #     'current_semester': student.current_semester,
-            #     'session': student.session,
-            # },
+            'student_info': {
+                'registration_no': student.registration_no,
+                'roll_no': student.roll_no,
+                'name': f"{student.first_name or ''} {student.last_name or ''}".strip(),
+                'program': student.program.name if student.program else None,
+                'department': student.department.name if student.department else None,
+                'college': student.college.name if student.college else None,
+                'current_semester': student.current_semester,
+                'session': student.session,
+                'profile_image': student.profile_image.url if student.profile_image else None,
+            },
+            'batch': student.batch.name if student.batch else None,
             'registration': SemesterRegistrationService.check_registration_eligibility(student)
         }
     

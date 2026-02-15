@@ -1,4 +1,11 @@
 from django.contrib import admin
+from django.http import HttpResponse
+import openpyxl
+from django.db.models import Exists, OuterRef
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+from import_export.fields import Field
+from ug.services.semester_registration_service import SemesterRegistrationService
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
@@ -59,10 +66,10 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     
     # Performance optimizations for large datasets
-    list_select_related = ('college', 'department', 'program', 'degree')
+    list_select_related = ('college', 'department', 'program', 'degree', 'batch')
     show_full_result_count = False
     list_per_page = 50
-    raw_id_fields = ('user', 'college', 'department', 'program', 'degree')
+    raw_id_fields = ('user', 'college', 'department', 'program', 'degree', 'batch')
     
     fieldsets = (
         ('Personal Information', {
@@ -107,8 +114,65 @@ class CourseStructureAdmin(admin.ModelAdmin):
     raw_id_fields = ('department',)
 
 
+
+class StudentCourseAssessmentResource(resources.ModelResource):
+    student_registration_no = resources.Field(attribute='student__registration_no', column_name='Registration No')
+    student_roll_no = resources.Field(attribute='student__roll_no', column_name='Roll No')
+    student_name = resources.Field(attribute='student__first_name', column_name='Student Name')
+    student_batch = resources.Field(attribute='student__batch', column_name='Batch')
+    paper_department = resources.Field(attribute='department__name', column_name='Paper Department')
+    semester_result = resources.Field(column_name='Semester Result')
+    
+    class Meta:
+        model = StudentCourseAssessment
+        fields = ('student_registration_no', 'student_roll_no', 'student_name', 'student_batch', 'semester', 'session', 'semester_result',
+                 'course_name', 'course_code', 'paper_department', 'course_type', 'label', 
+                 'ind_pass_marks', 'ind_marks_obtained', 'ind_max_marks', 'ind_is_pass', 'ind_is_absent')
+        export_order = ('student_registration_no', 'student_roll_no', 'student_name', 'student_batch', 'semester', 'session', 'semester_result',
+                       'course_name', 'course_code', 'paper_department', 'course_type', 'label', 
+                       'ind_marks_obtained', 'ind_pass_marks', 'ind_is_pass')
+
+    def dehydrate_semester_result(self, assessment):
+        from .models import UGExamResult
+        # Attempt direct match
+        res = UGExamResult.objects.filter(
+            student_id=assessment.student_id,
+            semester=assessment.semester,
+            session=assessment.session
+        ).first()
+        
+        # If not found, try robust semester check (e.g. '3' vs '3RD')
+        if not res and assessment.semester.isdigit():
+             pass # Logic matching service mapping if needed, simplified for speed
+             
+        return res.semester_result if res else ''
+
+
+class ExamResultFilter(admin.SimpleListFilter):
+    title = 'Semester Result (from ExamResult)'
+    parameter_name = 'sem_result'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('PROMOTED', 'Promoted'),
+            ('PASSED', 'Passed'),
+            ('FAILED', 'Failed')
+        ]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            results = UGExamResult.objects.filter(
+                student=OuterRef('student'),
+                semester=OuterRef('semester'),
+                semester_result=self.value()
+            )
+            return queryset.filter(Exists(results))
+        return queryset
+
+
 @admin.register(StudentCourseAssessment)
-class StudentCourseAssessmentAdmin(admin.ModelAdmin):
+class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
+    resource_class = StudentCourseAssessmentResource
     # Display all marks and calculation fields directly from database
     # Display all marks and calculation fields directly from database
     list_display = (
@@ -128,7 +192,7 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
     )
     
     # Filters for easy navigation
-    list_filter = ('semester', 'label', 'course_type', 'ind_is_absent', 'ind_is_pass')
+    list_filter = ('semester', 'label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass', ExamResultFilter)
     
     # Search by student registration number AND name
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
@@ -226,14 +290,15 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
 
 @admin.register(SemesterRegistration)
 class SemesterRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date')
-    list_filter = ('sem', 'status', 'exam_eligible', 'is_open', 'student__batch')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__batch')
+    list_display = ('student', 'batch', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date', 'session')
+    list_filter = ('batch', 'sem', 'status', 'exam_eligible', 'is_open')
+    search_fields = ('student__registration_no', 'student__first_name', 'batch__name')
     ordering = ('-sem', 'student')
     list_per_page = 50
-    raw_id_fields = ('student',)
-    list_select_related = ('student',)
+    raw_id_fields = ('student', 'batch')
+    list_select_related = ('student', 'batch')
     show_full_result_count = False
+    list_editable = ('status', 'exam_eligible')
 
 
 @admin.register(ExamRegistration)
@@ -253,19 +318,136 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
     list_editable = ('semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
 
 
+
+class UGExamResultResource(resources.ModelResource):
+    registration_no = resources.Field(attribute='student__registration_no', column_name='Registration No')
+    student_name = resources.Field(attribute='student__first_name', column_name='Student Name')
+    student_batch = resources.Field(attribute='student__batch', column_name='Batch')
+    failed_ese_papers = resources.Field(column_name='Failed ESE Papers')
+    
+    class Meta:
+        model = UGExamResult
+        fields = ('id', 'registration_no', 'student_name', 'student_batch', 'semester', 'session', 
+                 'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 
+                 'cia_pass', 'ese_pass', 'next_sem_status', 'is_legacy', 'failed_ese_papers')
+        export_order = ('id', 'registration_no', 'student_name', 'student_batch', 'semester', 'session', 'semester_result', 'sgpa', 'failed_ese_papers')
+
+    def dehydrate_failed_ese_papers(self, exam_result):
+        # Fetch ESE failures for this specific semester result
+        failures = StudentCourseAssessment.objects.filter(
+            student=exam_result.student,
+            # Match semester by text (e.g. '3RD') from exam_result
+            semester=exam_result.semester,
+            session=exam_result.session,
+            label__icontains='ESE',
+            ind_is_pass=False
+        )
+        return ", ".join([a.paper_code for a in failures])
+
+
 @admin.register(UGExamResult)
-class UGExamResultAdmin(admin.ModelAdmin):
+class UGExamResultAdmin(ImportExportModelAdmin):
+    resource_class = UGExamResultResource
     list_display = ('get_student_name', 'get_registration_no', 'semester', 'session', 
                     'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 'cia_pass', 'ese_pass')
-    list_filter = ('semester', 'semester_result', 'session', 'is_legacy', 'created_at')
+    list_filter = ('semester', 'student__batch', 'semester_result','cia_pass', 'ese_pass', 'next_sem_status', 'session', 'is_legacy', 'created_at')
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'semester')
     ordering = ('-created_at', 'student__registration_no')
     readonly_fields = ('created_at', 'updated_at')
-    
+    raw_id_fields = ('student',)
     # Performance optimizations
     list_select_related = ('student',)
     show_full_result_count = False
     list_per_page = 50
+    
+    actions = ['export_failed_subjects_xls']
+
+    @admin.action(description='Export Failed ESE Details (XLSX)')
+    def export_failed_subjects_xls(self, request, queryset):
+        """
+        Export failed ESE subjects for selected students in XLSX format.
+        Useful for identifying backlog subjects for PROMOTED students.
+        """
+        # Create response
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = 'attachment; filename=failed_ese_details.xlsx'
+        
+        # Create workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Failed ESE Details"
+        
+        # Define headers
+        headers = [
+            'Registration No', 'Student Name', 'Department', 'Batch', 'Semester', 'Session', 
+            'Result Status', 'Course Code', 'Paper Code', 'Course Name', 
+            'Course Type', 'Label', 'Pass Marks', 'Marks Obtained', 'Is Absent'
+        ]
+        ws.append(headers)
+        
+        # Filter for PROMOTED records only
+        queryset = queryset.filter(semester_result='PROMOTED')
+        
+        if not queryset.exists():
+            wb.save(response)
+            return response
+
+        # Get relevant filters
+        student_ids = queryset.values_list('student_id', flat=True)
+        semesters = set(queryset.values_list('semester', flat=True))
+        
+        # Expand semesters to handle "3" vs "3RD" mismatch
+        expanded_semesters = set()
+        for sem in semesters:
+            expanded_semesters.add(sem)
+            expanded_semesters.add(str(SemesterRegistrationService.SEMESTER_MAP.get(sem, sem)))
+
+        # Query Assessments directly (Paper-wise optimization)
+        failures = StudentCourseAssessment.objects.filter(
+            student_id__in=student_ids,
+            semester__in=expanded_semesters,
+            label__icontains='ESE',
+            ind_is_pass=False
+        ).select_related('student', 'department').order_by('paper_code', 'student__registration_no')
+        
+        # Fallback if label filter is too strict
+        if not failures.exists():
+             failures = StudentCourseAssessment.objects.filter(
+                student_id__in=student_ids,
+                semester__in=expanded_semesters,
+                ind_is_pass=False
+            ).exclude(label__icontains='CIA').select_related('student', 'department').order_by('paper_code', 'student__registration_no')
+
+        for fail in failures:
+            # Need to find the corresponding result for this student/semester to get semester_result (always PROMOTED here)
+            # Since we know we filtered for PROMOTED, we can hardcode or just assume.
+            # But wait, result status is in UGExamResult.
+            # We can skip fetching UGExamResult for every row since we know they are promoted.
+            # Or we can just put "PROMOTED" since we filtered for it.
+            
+            row = [
+                str(fail.student.registration_no),
+                f"{fail.student.first_name} {fail.student.last_name}",
+                fail.department.name if fail.department else '',
+                str(fail.student.batch) if fail.student.batch else '',
+                fail.semester,
+                fail.session,
+                "PROMOTED", # We filtered for this
+                fail.course_code,
+                fail.paper_code,
+                fail.course_name,
+                fail.course_type,
+                fail.label,
+                fail.ind_pass_marks,
+                fail.ind_marks_obtained,
+                "Yes" if fail.ind_is_absent else "No"
+            ]
+            ws.append(row)
+                
+        wb.save(response)
+        return response
     
     # Custom display methods
     @admin.display(description='Student Name', ordering='student__first_name')

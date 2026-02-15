@@ -109,7 +109,8 @@ class UserAccountAdmin(BaseUserAdmin):
         "updated_at",
         "is_staff",
         "is_active",
-        "college"
+        "college",
+        "is_password_changed"
     )
 
     list_filter = (
@@ -118,6 +119,7 @@ class UserAccountAdmin(BaseUserAdmin):
         "is_staff",
         "is_active",
         "is_verified",
+        "is_password_changed"
     )
 
     search_fields = (
@@ -129,7 +131,7 @@ class UserAccountAdmin(BaseUserAdmin):
     )
 
     ordering = ("-created_at",)
-
+    raw_id_fields = ("college", "password_changed_by")
     fieldsets = (
         (None, {"fields": ("email", "password")} ),
         ("Personal Info", {"fields": ("username", "first_name", "last_name", "phone", "college")} ),
@@ -148,6 +150,7 @@ class UserAccountAdmin(BaseUserAdmin):
                 )
             },
         ),
+        ("Password Change Info", {"fields": ("is_password_changed", "password_changed_by")}),
         ("Important dates", {"fields": ("last_login", "created_at", "updated_at")}),
         ("System Info", {"fields": ("uid",)}),
     )
