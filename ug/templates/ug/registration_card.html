@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registration Card</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+
+            /* M = 8 */
+            @bottom-center {
+                content: "";
+            }
+        }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* OUTER BORDER: doc.rect(M, M, W, pageH - M * 2) */
+        /* Since @page margin is 8mm, the body content is inside that.
+           We just need a border around the body content. */
+        .main-container {
+            border: 0.6mm solid black;
+            /* doc.setLineWidth(0.6) */
+            width: 100%;
+            height: 280mm;
+            /* A4(297) - 16mm margin = 281mm approx. Safe 280mm */
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        /* WATERMARK */
+        .watermark {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90mm;
+            /* 90 */
+            height: 90mm;
+            opacity: 0.2;
+            /* opacity: 0.2 */
+            z-index: -1;
+        }
+
+        /* HEADER */
+        .header {
+            position: relative;
+            height: 33mm;
+            /* y = y + 33 */
+            text-align: center;
+            padding-top: 5mm;
+        }
+
+        .logo {
+            position: absolute;
+            left: 4mm;
+            top: 4mm;
+            /* Added padding from top */
+            width: 22mm;
+            height: 22mm;
+        }
+
+        .uni-name-hindi {
+            font-family: 'Noto Sans Devanagari', 'Mangal', sans-serif;
+            font-size: 16pt;
+            /* Approx 28px in code, scaled differently, keeping readable */
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2mm;
+        }
+
+        .uni-name-eng {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 14pt;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2mm;
+        }
+
+        .card-type {
+            font-size: 12pt;
+            font-weight: normal;
+            /* Code doesn't explicitly bold "REGISTRATION CARD" in separate line, but typical */
+            display: block;
+            margin-bottom: 2mm;
+        }
+
+        .session-line {
+            font-size: 10pt;
+            font-weight: normal;
+        }
+
+        /* STUDENT DETAILS TABLE */
+        /* Left col (Details) width = W - 35 - 3 
+           Right col (Photo) width = 35 */
+
+        .details-wrapper {
+            margin-left: 1mm;
+            /* M + 1 */
+            margin-right: 1mm;
+            margin-top: 2mm;
+            display: flex;
+            border-bottom: 0.3mm solid black;
+            /* Bottom of the whole block match line width */
+        }
+
+        .details-table {
+            width: calc(100% - 36mm);
+            /* W - 35 - small gap */
+            border-collapse: collapse;
+            border-top: 0.3mm solid black;
+            border-left: 0.3mm solid black;
+        }
+
+        .details-table td {
+            height: 8mm;
+            /* rh = 8 */
+            border-bottom: 0.3mm solid black;
+            border-right: 0.3mm solid black;
+            padding-left: 1.5mm;
+            vertical-align: middle;
+            font-size: 8pt;
+        }
+
+        .label-col {
+            width: 48mm;
+            /* labelW = 48 */
+            font-weight: bold;
+        }
+
+        .value-col {
+            font-weight: normal;
+        }
+
+        /* Year cell handling */
+        .year-label {
+            border-left: 0.3mm solid black;
+            font-weight: bold;
+            padding-left: 1.5mm;
+            width: 15mm;
+            text-align: center;
+        }
+
+        .year-val {
+            border-left: 0.3mm solid black;
+            width: 15mm;
+            text-align: center;
+        }
+
+        /* PHOTO BOX */
+        .photo-box {
+            width: 35mm;
+            /* photoColW = 35 */
+            height: 56mm;
+            /* rh(8) * 7 = 56 */
+            border: 0.3mm solid black;
+            /* In jsPDF: doc.rect(photoX, y, photoW, photoH); */
+            /* It's positioned to the right of the table */
+            margin-left: -0.3mm;
+            /* Overlap borders */
+            position: relative;
+            text-align: center;
+        }
+
+        .photo-img {
+            margin-top: 2mm;
+            /* pad = 2 */
+            width: 31mm;
+            /* 35 - 4 */
+            height: 40mm;
+            /* photoH - 16 = 56 - 16 = 40 */
+            object-fit: contain;
+            border: 1px solid #ddd;
+        }
+
+        .sign-img-student {
+            position: absolute;
+            bottom: 2mm;
+            /* y + photoH - 14... approx bottom */
+            left: 1.5mm;
+            width: 32mm;
+            /* 35 - 3 */
+            height: 10mm;
+            /* 12 */
+            object-fit: contain;
+        }
+
+        /* COURSE DETAILS TABLE */
+        .course-table {
+            margin-left: 1mm;
+            margin-right: 1mm;
+            width: calc(100% - 2mm);
+            margin-top: 4mm;
+            /* courseY = r7 + rh + 4 */
+            border-collapse: collapse;
+            border: 0.3mm solid black;
+        }
+
+        .course-table td {
+            height: 9mm;
+            /* ctRowH = 9 */
+            border: 0.3mm solid black;
+            vertical-align: middle;
+            padding-left: 1.5mm;
+            font-size: 8.5pt;
+        }
+
+        .ct-label {
+            width: 48%;
+            /* ctLabelW = ctW * 0.48 */
+            font-weight: bold;
+            text-align: left;
+        }
+
+        .ct-val {
+            text-align: left;
+        }
+
+        /* SIGNATURES */
+        .signatures-container {
+            margin-top: 15mm;
+            /* sigY = ctY + 15 */
+            display: flex;
+            justify-content: space-between;
+            padding-left: 10mm;
+            /* M is 8, layout adds padding */
+            padding-right: 10mm;
+        }
+
+        .sig-block {
+            text-align: center;
+            width: 30mm;
+        }
+
+        .sig-img-official {
+            width: 28mm;
+            /* sigImgW = 28 */
+            height: 14mm;
+            /* sigImgH = 14 */
+            display: block;
+            margin: 0 auto 1mm auto;
+        }
+
+        .sig-text {
+            font-size: 7pt;
+            font-weight: bold;
+            color: black;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="main-container">
+
+        <!-- Watermark -->
+        {% if logo_url %}
+        <img src="{{ logo_url }}" class="watermark" alt="Watermark">
+        {% endif %}
+
+        <!-- Header -->
+        <div class="header">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" class="logo" alt="Logo">
+            {% endif %}
+
+            <div class="uni-name-hindi">पूर्णियाँ विश्वविद्यालय पूर्णियाँ</div>
+            <div class="uni-name-eng">Purnea University, Purnia</div>
+            <div class="card-type">REGISTRATION CARD</div>
+            <div class="session-line">{{ semester_text }} SEMESTER, SESSION: {{ session }}</div>
+        </div>
+
+        <!-- Student Details & Photo Wrapper -->
+        <div class="details-wrapper">
+
+            <!-- Left Table -->
+            <table class="details-table">
+                <!-- R1: Reg No | Year -->
+                <tr>
+                    <td class="label-col">REGISTRATION NUMBER</td>
+                    <td class="value-col" style="border-right: none;">{{ student.registration_no }}</td>
+                    <td class="year-label" style="border-left: 0.3mm solid black; width: 15mm; border-right: none;">YEAR
+                    </td>
+                    <td class="year-val" style="border-left: 0.3mm solid black; width: 15mm;">2026</td>
+                </tr>
+                <!-- R2: Student Name -->
+                <tr>
+                    <td class="label-col">NAME OF THE STUDENT</td>
+                    <td class="value-col" colspan="3">{{ student.full_name }}</td>
+                </tr>
+                <!-- R3: Mother -->
+                <tr>
+                    <td class="label-col">MOTHER'S NAME</td>
+                    <td class="value-col" colspan="3">{{ student.mother_name }}</td>
+                </tr>
+                <!-- R4: Father -->
+                <tr>
+                    <td class="label-col">FATHER'S NAME</td>
+                    <td class="value-col" colspan="3">{{ student.father_name }}</td>
+                </tr>
+                <!-- R5: College -->
+                <tr>
+                    <td class="label-col">NAME OF THE COLLEGE</td>
+                    <td class="value-col" colspan="3">{{ college_name }}</td>
+                </tr>
+                <!-- R6: Gender -->
+                <tr>
+                    <td class="label-col">GENDER</td>
+                    <td class="value-col" colspan="3">{{ student.gender }}</td>
+                </tr>
+                <!-- R7: Course -->
+                <tr>
+                    <td class="label-col">COURSE</td>
+                    <td class="value-col" colspan="3">{{ course_name }}</td>
+                </tr>
+            </table>
+
+            <!-- Right Photo Box -->
+            <div class="photo-box">
+                {% if student.profile_image_url %}
+                <img src="{{ student.profile_image_url }}" class="photo-img" alt="Photo">
+                {% else %}
+                <div style="height: 40mm; display: flex; align-items: center; justify-content: center; font-size: 8pt;">
+                    No Photo</div>
+                {% endif %}
+
+                {% if student.signature_url %}
+                <img src="{{ student.signature_url }}" class="sign-img-student" alt="Sign">
+                {% else %}
+                <div style="position: absolute; bottom: 5mm; width: 100%; text-align: center; font-size: 6pt;">Signature
+                </div>
+                {% endif %}
+            </div>
+
+        </div>
+
+        <!-- Course Details Table -->
+        <table class="course-table">
+            <!-- Major -->
+            <tr>
+                <td class="ct-label">1.Major Subject Name</td>
+                <td class="ct-val">{{ major_subject_name }}</td>
+            </tr>
+            {% for c in mjc_courses %}
+            <tr>
+                <td class="ct-label" style="padding-left: 5mm;">{{ c.code }}</td>
+                <td class="ct-val">{{ c.name }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- Minor -->
+            <tr>
+                <td class="ct-label">2.Minor Subject Name</td>
+                <td class="ct-val">{{ minor_subject_name }}</td>
+            </tr>
+            {% for c in mic_courses %}
+            <tr>
+                <td class="ct-label" style="padding-left: 5mm;">{{ c.code }}</td>
+                <td class="ct-val">{{ c.name }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- MDC -->
+            <tr>
+                <td class="ct-label">3. MDC Subject name</td>
+                <td class="ct-val">{{ mdc_subject_name }}</td>
+            </tr>
+            {% for c in mdc_courses %}
+            <tr>
+                <td class="ct-label" style="padding-left: 5mm;">{{ c.code }} (Multi-Disciplinary Course)</td>
+                <td class="ct-val">{{ c.name }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- AEC -->
+            {% for c in aec_courses %}
+            <tr>
+                <td class="ct-label">4.Ability Enhancement Course({{ c.code }})</td>
+                <td class="ct-val">{{ c.name }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- SEC -->
+            {% for c in sec_courses %}
+            <tr>
+                <td class="ct-label">5.Skill Enhancement Course({{ c.code }})</td>
+                <td class="ct-val">{{ c.name }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <!-- Signatures -->
+        <div class="signatures-container">
+            <!-- Assistant -->
+            <div class="sig-block">
+                {% if signatures.assistant %}
+                <img src="{{ signatures.assistant }}" class="sig-img-official" alt="Assistant">
+                {% else %}
+                <div style="height: 14mm;"></div>
+                {% endif %}
+                <div class="sig-text">Assistant/SO</div>
+            </div>
+
+            <!-- Deputy -->
+            <div class="sig-block">
+                {% if signatures.deputy %}
+                <img src="{{ signatures.deputy }}" class="sig-img-official" alt="Deputy">
+                {% else %}
+                <div style="height: 14mm;"></div>
+                {% endif %}
+                <div class="sig-text">Deputy Registrar(Registration)</div>
+            </div>
+
+            <!-- Registrar -->
+            <div class="sig-block">
+                {% if signatures.registrar %}
+                <img src="{{ signatures.registrar }}" class="sig-img-official" alt="Registrar">
+                {% else %}
+                <div style="height: 14mm;"></div>
+                {% endif %}
+                <div class="sig-text">Registrar</div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+
+</html>
