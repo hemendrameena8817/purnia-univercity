@@ -126,7 +126,7 @@ def generate_registration_card(student, registration, assessments):
             sec_courses.append(item)
     
     # Subject Names
-    major_subject_name = student.major_course if student.major_course else (mjc_courses[0]['dept'] if mjc_courses else "")
+    major_subject_name = student.major_course.name if student.major_course else (mjc_courses[0]['dept'] if mjc_courses else "")
     minor_subject_name = student.minor_course.name if student.minor_course else (mic_courses[0]['dept'] if mic_courses else "")
     mdc_subject_name = student.mdc_course.name if student.mdc_course else (mdc_courses[0]['dept'] if mdc_courses else "")
     
