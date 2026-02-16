@@ -7,76 +7,73 @@ from io import BytesIO
 from django.conf import settings
 import os
 
+from PIL import Image, ImageOps
+
 def get_base64_image(image_file_or_url):
     """
-    Convert an image (FileField or URL) to base64 string for PDF embedding.
-    This handles S3 private buckets by reading the file content directly via Django storage,
-    bypassing URL access issues.
+    Convert an image (FileField or URL) to base64 string using Pillow.
+    Robustly handles S3 (boto3), Local Storage, and HTTP URLs.
     """
     if not image_file_or_url:
         return None
         
+    img = None
+    
     try:
-        image_data = None
-        extension = "jpeg" # Default
-        
-        # Case 1: Django FileField/ImageField (S3 or Local)
+        # 1. Try Django Storage (.open) - Works for S3 & Local
         if hasattr(image_file_or_url, 'open'):
-            # This works for both S3 (boto3) and Local storage
             try:
+                # We interpret file content as BytesIO for Pillow
+                # .open('rb') ensures we get bytes even from S3
                 with image_file_or_url.open('rb') as f:
-                    image_data = f.read()
-                    if hasattr(image_file_or_url, 'name') and image_file_or_url.name:
-                        ext = image_file_or_url.name.split('.')[-1].lower()
-                        if ext in ['png', 'jpg', 'jpeg']:
-                            extension = ext
+                    img = Image.open(BytesIO(f.read()))
             except Exception as e:
-                # Fallback: try reading path if local
+                print(f"Storage open failed: {e}")
+                
+                # 2. Fallback: Try Local Filesystem Path directly
                 try:
-                    if hasattr(image_file_or_url, 'path'):
+                    if hasattr(image_file_or_url, 'path') and os.path.exists(image_file_or_url.path):
                         with open(image_file_or_url.path, 'rb') as f:
-                            image_data = f.read()
-                except:
+                            img = Image.open(BytesIO(f.read()))
+                except Exception:
                     pass
-                
-                # Double Fallback: Check if URL works (e.g. S3 but open failed, or public URL)
-                if not image_data:
-                    try:
-                        url = image_file_or_url.url
-                        if url and url.startswith('http'):
-                             response = requests.get(url, timeout=5)
-                             if response.status_code == 200:
-                                 image_data = response.content
-                    except:
-                        pass
-                
-                if not image_data:
-                    print(f"Error reading file field: {e}")
-                    return None
 
-        # Case 2: String URL (External Link)
-        elif isinstance(image_file_or_url, str) and image_file_or_url.startswith('http'):
-            response = requests.get(image_file_or_url, timeout=5)
-            if response.status_code == 200:
-                image_data = response.content
-                # Try to guess extension from url or content-type
-                if image_file_or_url.lower().endswith('.png'):
-                    extension = 'png'
-            else:
-                print(f"Failed to fetch URL: {image_file_or_url} - {response.status_code}")
-                return None
-        
-        if image_data:
-            # Fix extension mapping
-            if extension == 'jpg': extension = 'jpeg'
+        # 3. Fallback: Try HTTP URL (External or S3 signed/public URL)
+        if img is None:
+            url = None
+            if isinstance(image_file_or_url, str):
+                url = image_file_or_url
+            elif hasattr(image_file_or_url, 'url'):
+                # Handle cases where .url might be relative or absolute
+                url = image_file_or_url.url
+                
+            if url and url.startswith('http'):
+                try:
+                    response = requests.get(url, timeout=5, stream=True)
+                    if response.status_code == 200:
+                        img = Image.open(BytesIO(response.content))
+                except Exception as e:
+                    print(f"URL Fetch failed: {e}")
+
+        # 4. Final Processing: Convert to RGB JPEG (strips EXIF/Target Errors)
+        if img:
+            # Handle Orientation/EXIF if present (optional but good practice)
+            try:
+                img = ImageOps.exif_transpose(img) 
+            except: 
+                pass
+                
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
             
-            b64_data = base64.b64encode(image_data).decode('utf-8')
-            return f"data:image/{extension};base64,{b64_data}"
+            buffer = BytesIO()
+            img.save(buffer, format="JPEG", quality=85)
+            b64_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            return f"data:image/jpeg;base64,{b64_data}"
             
     except Exception as e:
-        print(f"Error converting image to base64: {e}")
+        print(f"Critical error in get_base64_image: {e}")
         return None
-    
     return None
 
 def generate_registration_card(student, registration, assessments):
