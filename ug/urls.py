@@ -5,7 +5,8 @@ from django.urls import path
 from ug.api.semester_registration import (
     RegistrationEligibilityView,
     AvailableCoursesView,
-    SubmitRegistrationView
+    SubmitRegistrationView,
+    RegistrationCardView
 )
 
 app_name = 'ug'
@@ -26,5 +27,10 @@ urlpatterns = [
         'semester-registration/submit/',
         SubmitRegistrationView.as_view(),
         name='submit-registration'
+    ),
+    path(
+        'semester-registration/card/',
+        RegistrationCardView.as_view(),
+        name='registration-card'
     ),
 ]
