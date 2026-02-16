@@ -75,7 +75,7 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     if exam_type:
         results_query = results_query.filter(exam_type__iexact=exam_type)
         
-    first_result = results_query.select_related('exam', 'subject').order_by('-exam__exam_year').first()
+    first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
     if not first_result:
         logger.warning(f"No results found for {student.registration_no} / {part_code}")
@@ -87,17 +87,15 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     results = UGBeforeCBCSStudentResult.objects.filter(
         student=student,
         exam=exam
-    ).select_related('subject').order_by('subject__paper_code')
+    ).order_by('paper_code')
 
     # 3. Get exam summary
     # Exam summary fields are now part of StudentResult; aggregate as needed.
-    summary = None  # Set to None or aggregate from results if needed.
+    summary = first_result
 
-    # 4. Group Papers by subject type
-    honours_papers = []
-    subsidiary_papers = []
-    composition_papers = []
-    general_studies_papers = []
+    # 4. Group Papers by subject
+    subjects_map = {} # { subject_name: { papers: [], type: '' } }
+
 
     # Helper to clean marks
     def clean_mark(val):
@@ -112,8 +110,7 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     student_discipline = student.discipline_code.upper() if student.discipline_code else ""
 
     for result in results:
-        subject = result.subject
-        sub_name = subject.subject_name.upper() if subject.subject_name else ""
+        sub_name = result.subject_name.upper() if result.subject_name else "UNKNOWN"
         
         # Calculate total marks obtained (theory + practical + sessional)
         theory_marks = clean_mark(result.theory)
@@ -121,38 +118,75 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
         sessional_marks = clean_mark(result.sessional)
         
         # Sum only numeric marks
-        total_obtained = 0
+        total_obtained_calc = 0
         for mark in [theory_marks, practical_marks, sessional_marks]:
             if isinstance(mark, (int, float)):
-                total_obtained += mark
+                total_obtained_calc += mark
         
         # Paper Data Structure
+        paper_max = clean_mark(result.maximum_mark) or 100
+        paper_pass = clean_mark(result.pass_mark) or 33
+        paper_obt = clean_mark(result.mark_secured) or total_obtained_calc
+
         paper_data = {
-            'name': subject.subject_name or subject.paper_code,
-            'paper_code': subject.paper_code,
+            'name': result.subject_name or result.paper_code,
+            'paper_code': result.paper_code,
             'status': result.status.upper() if result.status else '',
-            'max_marks': clean_mark(result.maximum_mark) or 100,
-            'pass_marks': clean_mark(result.pass_mark) or 33,
-            'obtained': clean_mark(result.mark_secured) or total_obtained
+            'max_marks': paper_max,
+            'pass_marks': paper_pass,
+            'obtained': paper_obt
         }
         
-        # Identification Logic: Prioritize paper_type_code
-        is_honours = False
-        if subject.paper_type_code and subject.paper_type_code.upper() == 'HONS':
-            is_honours = True
-        elif subject.subject_type and 'HON' in subject.subject_type.upper():
-            is_honours = True
-        elif student_discipline and student_discipline in sub_name:
-            is_honours = True
+        # Categorize the subject
+        if sub_name not in subjects_map:
+            # Identification Logic: Prioritize paper_type_code
+            is_honours = False
+            if result.paper_type_code and result.paper_type_code.upper() == 'HONS':
+                is_honours = True
+            elif student_discipline and student_discipline in sub_name:
+                is_honours = True
+            
+            sub_type = 'subsidiary'
+            if is_honours:
+                sub_type = 'honours'
+            elif part_code == 'PART3' and ('GES' in sub_name or 'GENERAL' in sub_name or 'STUDIES' in sub_name):
+                sub_type = 'general_studies'
+            elif 'HINDI' in sub_name or 'MB' in sub_name or 'COMP' in sub_name or 'RB' in sub_name or 'COMPOSITION' in sub_name:
+                sub_type = 'composition'
+                
+            subjects_map[sub_name] = {
+                'name': result.subject_name,
+                'type': sub_type,
+                'papers': [],
+                'total_max': 0,
+                'total_pass': 0,
+                'total_obtained': 0
+            }
         
-        if is_honours:
-            honours_papers.append(paper_data)
-        elif part_code == 'PART3' and ('GES' in sub_name or 'GENERAL' in sub_name or 'STUDIES' in sub_name):
-            general_studies_papers.append(paper_data)
-        elif 'HINDI' in sub_name or 'MB' in sub_name or 'COMP' in sub_name or 'RB' in sub_name or 'COMPOSITION' in sub_name:
-            composition_papers.append(paper_data)
+        subjects_map[sub_name]['papers'].append(paper_data)
+        subjects_map[sub_name]['total_max'] += paper_max
+        # Pass marks logic is tricky: usually 45% for hons total, 33% for subs
+        # For now, we take the pass mark from the result if provided
+        subjects_map[sub_name]['total_pass'] = max(subjects_map[sub_name]['total_pass'], paper_pass)
+        
+        if isinstance(paper_obt, (int, float)):
+            subjects_map[sub_name]['total_obtained'] += paper_obt
+
+    # Separate subjects into groups
+    honours_papers = []
+    subsidiary_subjects = []
+    composition_papers = []
+    general_studies_papers = []
+
+    for sub in subjects_map.values():
+        if sub['type'] == 'honours':
+            honours_papers.extend(sub['papers'])
+        elif sub['type'] == 'composition':
+            composition_papers.extend(sub['papers'])
+        elif sub['type'] == 'general_studies':
+            general_studies_papers.extend(sub['papers'])
         else:
-            subsidiary_papers.append(paper_data)
+            subsidiary_subjects.append(sub)
 
     # Organize and rename Honours papers
     is_honours_with_practical = False
@@ -185,8 +219,8 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     honours_papers = organized_honours
 
     # Assign Subsidiaries (Only for Part 1/2)
-    sub1 = subsidiary_papers[0] if len(subsidiary_papers) > 0 else None
-    sub2 = subsidiary_papers[1] if len(subsidiary_papers) > 1 else None
+    sub1 = subsidiary_subjects[0] if len(subsidiary_subjects) > 0 else None
+    sub2 = subsidiary_subjects[1] if len(subsidiary_subjects) > 1 else None
 
     # Calculate Totals
     def sum_marks(papers):
@@ -215,6 +249,15 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     elif student.discipline_code:
         honours_subject_name = student.discipline_code
 
+    # Calculate Grand Total
+    calculated_grand_total = hons_total_obt + comp_total_obt + gs_total_obt
+    if sub1: calculated_grand_total += sub1.get('total_obtained', 0)
+    if sub2: calculated_grand_total += sub2.get('total_obtained', 0)
+
+    # Use stored total if valid and non-zero, otherwise use calculated
+    stored_total = clean_mark(summary.total_secured_mark) if summary else 0
+    final_grand_total = stored_total if stored_total and stored_total != 0 else calculated_grand_total
+
     # Prepare Context
     context = {
         'is_honours_with_practical': is_honours_with_practical,
@@ -225,7 +268,7 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
         'batch_year': exam.batch_code or "N/A",
         'session_year': exam.session_code or "N/A",
         'hons_subject': honours_subject_name,
-        'center_name': "N/A",
+        'center_name': exam.centre_name or "N/A",
         
         'subjects': {
             'honours': {
@@ -237,17 +280,17 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
             },
             'subsidiary_1': {
                 'name': sub1['name'] if sub1 else '',
-                'papers': [sub1] if sub1 else [],
-                'total_max': sub1['max_marks'] if sub1 else 0,
-                'total_pass': sub1['pass_marks'] if sub1 else 0,
-                'total_obtained': sub1['obtained'] if sub1 else 0
+                'papers': sub1['papers'] if sub1 else [],
+                'total_max': sub1['total_max'] if sub1 else 0,
+                'total_pass': sub1['total_pass'] if sub1 else 0,
+                'total_obtained': sub1['total_obtained'] if sub1 else 0
             },
             'subsidiary_2': {
                 'name': sub2['name'] if sub2 else '',
-                'papers': [sub2] if sub2 else [],
-                'total_max': sub2['max_marks'] if sub2 else 0,
-                'total_pass': sub2['pass_marks'] if sub2 else 0,
-                'total_obtained': sub2['obtained'] if sub2 else 0
+                'papers': sub2['papers'] if sub2 else [],
+                'total_max': sub2['total_max'] if sub2 else 0,
+                'total_pass': sub2['total_pass'] if sub2 else 0,
+                'total_obtained': sub2['total_obtained'] if sub2 else 0
             },
             'composition': {
                 'name': 'Composition',
@@ -264,9 +307,10 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
                 'total_obtained': gs_total_obt
             }
         },
-        'grand_total': clean_mark(summary.total_secured_mark) if summary else "N/A",
+        'grand_total': final_grand_total,
         'result_status': summary.final_result if summary else "PENDING",
-        'hons_total_words': num2words(hons_total_obt) + " Only",
+        'hons_total_words': num2words(hons_total_obt),
+        'grand_total_words': num2words(final_grand_total) + " Only",
         'publication_date': exam.publication_date.strftime("%d-%m-%Y") if exam.publication_date else "N/A",
         
         # Generate QR code
@@ -274,7 +318,7 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
             generate_ug_marksheet_qr_text(
                 student, 
                 exam, 
-                clean_mark(summary.total_secured_mark) if summary else 0
+                final_grand_total
             )
         ),
         

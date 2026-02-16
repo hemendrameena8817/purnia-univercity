@@ -8,7 +8,8 @@ All 42 columns from staging are migrated directly into UGBeforeCBCSStudentProfil
 HOW TO RUN:
 -----------
 1. Run the migration:
-   PYTHONPATH=. poetry run python scripts/ug_before_cbcs/migrate_staging_to_app_v2.py
+   a) PYTHONPATH=. poetry run python scripts/ug_before_cbcs/migrate_staging_to_app_v2.py
+   b) poetry run python scripts/ug_before_cbcs/migrate_staging_to_app_v2.py --semester 1ST
 2. Monitor progress (script shows progress every 100 records)
 
 WHAT IT DOES:
@@ -74,15 +75,17 @@ def map_semester_to_part(semester_code):
         return 'PART1'  # Default
 
 
-def migrate_data(skip_existing=True, start_from=0):
+def migrate_data(skip_existing=True, start_from=0, semester_code=None):
     """Main migration function
     
     Args:
         skip_existing: If True, skips records that already have results created
         start_from: Start processing from this record number (0-based)
+        semester_code: Optional semester to filter (e.g. '1ST')
     """
     print("=" * 80)
     print("UG BEFORE CBCS MIGRATION - SIMPLIFIED VERSION")
+    print(f"SEMESTER FILTER: {semester_code or 'ALL'}")
     print("=" * 80)
     print("\nThis script will migrate ALL staging data to the new simplified models.")
     print("All 42 columns from staging will be preserved.\n")
@@ -115,29 +118,24 @@ def migrate_data(skip_existing=True, start_from=0):
     print("Processing staging records...")
     print("-" * 80)
     
+    # Base Query
+    queryset = UGResultCurrent.objects.all().select_related()
+    
+    # Filter by semester if provided
+    if semester_code:
+        queryset = queryset.filter(semester_code=semester_code)
+    
+    total_records = queryset.count()
+    print(f"Total records to process: {total_records:,}")
+
     # Get records with offset if starting from a specific point
     if start_from > 0:
-        records = UGResultCurrent.objects.all().select_related()[start_from:].iterator(chunk_size=500)
+        records = queryset[start_from:].iterator(chunk_size=500)
     else:
-        records = UGResultCurrent.objects.all().select_related().iterator(chunk_size=500)
+        records = queryset.iterator(chunk_size=500)
     
     for idx, record in enumerate(records, start_from + 1):
         try:
-            # Skip if this record already has a result created (duplicate check)
-            if skip_existing and record.registration_no and record.paper_code:
-                existing_result = UGBeforeCBCSStudentResult.objects.filter(
-                    registration_no=record.registration_no,
-                    subject__paper_code=record.paper_code,
-                    exam__batch_code=record.batch_code,
-                    exam__semester_code=record.semester_code
-                ).exists()
-                
-                if existing_result:
-                    stats['skipped'] += 1
-                    if idx % 100 == 0:
-                        print(f"  ⏭️  Skipped {idx:,} / {total_records:,} records (already exists)...")
-                    continue
-            
             with transaction.atomic():
                 # ============================================================
                 # 1. GET OR CREATE COLLEGE
@@ -248,106 +246,70 @@ def migrate_data(skip_existing=True, start_from=0):
                 # ============================================================
                 # 4. CREATE STUDENT RESULT (ALL FIELDS)
                 # ============================================================
-                result, result_created = UGBeforeCBCSStudentResult.objects.update_or_create(
+                # Result Entry
+                UGBeforeCBCSStudentResult.objects.create(
                     student=profile,
                     exam=exam,
                     paper_code=record.paper_code,
                     subject_code=record.subject_code,
                     subject_name=record.subject_name,
                     paper_type_code=record.paper_type_code,
+                    exam_type=record.exam_type,
                     temp_paper_code=record.temp_paper_code,
                     paper_code_correction=record.paper_code_correction,
                     subject_code_correction=record.subject_code_correction,
-                    defaults={
-                        # Exam Type & Status
-                        'exam_type': record.exam_type,
-                        'exam_type_his': record.exam_type_his,
-                        'is_ex_regular': record.ExRegular_chk == 'YES' if record.ExRegular_chk else False,
-                        'status': record.status,
-                        # Marks
-                        'theory': record.theory,
-                        'practical': record.pra,
-                        'sessional': record.sessional,
-                        # Calculated Marks
-                        'mark_secured': record.mark_secured,
-                        'mark_secured_history': record.mark_secured_history,
-                        'subject_total_mark': record.subject_total_mark,
-                        'maximum_mark': record.maximum_mark,
-                        'pass_mark': record.pass_mark,
-                        # Subject Results
-                        'subject_result': record.subject_result,
-                        'subject_result_1': record.subject_result_1,
-                        'subject_result_2': record.subject_result_2,
-                        'sub_reult_com': record.sub_reult_com,
-                        # Exam Summary Fields (now in result)
-                        'grand_total_mark': record.grand_total_mark,
-                        'total_secured_mark': record.total_secured_mark,
-                        'total_secured_mark_1': record.total_secured_mark_1,
-                        'total_secured_mark_2': record.total_secured_mark_2,
-                        'hon': record.hon,
-                        'total_per': record.total_per,
-                        'grade': record.grade,
-                        'final_result': record.final_result,
-                        'agreegate': record.agreegate,
-                        'aggregate_hindi': record.aggregate_hindi,
-                        'record_status': record.record_status,
-                        'record_status_check': record.record_status_check,
-                        'subject_count': record.subject_count,
-                        # Additional Fields
-                        'is_absent': 'ABS' in (record.theory or '') or 'ABS' in (record.pra or ''),
-                        'grace_chk': record.grace_chk,
-                        'remark': record.remark,
-                        'student_check': record.student_check,
-                        # Source tracking
-                        'source_id': record.source_id,
-                        'registration_no': record.registration_no,
-                    }
+                    # Details
+                    exam_type_his=record.exam_type_his,
+                    is_ex_regular=record.ExRegular_chk == 'YES' if record.ExRegular_chk else False,
+                    status=record.status,
+                    # Marks
+                    theory=record.theory,
+                    practical=record.pra,
+                    sessional=record.sessional,
+                    # Calculated Marks
+                    mark_secured=record.mark_secured,
+                    mark_secured_history=record.mark_secured_history,
+                    subject_total_mark=record.subject_total_mark,
+                    maximum_mark=record.maximum_mark,
+                    pass_mark=record.pass_mark,
+                    # Subject Results
+                    subject_result=record.subject_result,
+                    subject_result_1=record.subject_result_1,
+                    subject_result_2=record.subject_result_2,
+                    sub_reult_com=record.sub_reult_com,
+                    # Exam Summary Fields (now in result)
+                    grand_total_mark=record.grand_total_mark,
+                    total_secured_mark=record.total_secured_mark,
+                    total_secured_mark_1=record.total_secured_mark_1,
+                    total_secured_mark_2=record.total_secured_mark_2,
+                    hon=record.hon,
+                    total_per=record.total_per,
+                    grade=record.grade,
+                    final_result=record.final_result,
+                    agreegate=record.agreegate,
+                    aggregate_hindi=record.aggregate_hindi,
+                    record_status=record.record_status,
+                    record_status_check=record.record_status_check,
+                    subject_count=record.subject_count,
+                    # Additional Fields
+                    is_absent='ABS' in (record.theory or '') or 'ABS' in (record.pra or ''),
+                    grace_chk=record.grace_chk,
+                    remark=record.remark,
+                    student_check=record.student_check,
+                    # Source tracking
+                    source_id=record.source_id,
+                    registration_no=record.college_reg_no,
                 )
-                if result_created:
-                    stats['results_created'] += 1
+                stats['results_created'] += 1
+                
                 
                 # ============================================================
-                # 6. UPDATE EXAM SUMMARY (ONE PER STUDENT PER EXAM)
+                # 6. EXAM SUMMARY IS STORED IN STUDENT RESULT
                 # ============================================================
-                summary, summary_created = UGBeforeCBCSExamSummary.objects.get_or_create(
-                    student=profile,
-                    exam=exam,
-                    defaults={
-                        'grand_total_mark': record.grand_total_mark,
-                        'total_secured_mark': record.total_secured_mark,
-                        'total_secured_mark_1': record.total_secured_mark_1,
-                        'total_secured_mark_2': record.total_secured_mark_2,
-                        'hon': record.hon,
-                        'total_per': record.total_per,
-                        'grade': record.grade,
-                        'final_result': record.final_result,
-                        'agreegate': record.agreegate,
-                        'aggregate_hindi': record.aggregate_hindi,
-                        'record_status': record.record_status,
-                        'record_status_check': record.record_status_check,
-                        'subject_count': record.subject_count,
-                    }
-                )
-                
-                # Update summary if it already exists (to capture latest values)
-                if not summary_created:
-                    summary.grand_total_mark = record.grand_total_mark or summary.grand_total_mark
-                    summary.total_secured_mark = record.total_secured_mark or summary.total_secured_mark
-                    summary.total_secured_mark_1 = record.total_secured_mark_1 or summary.total_secured_mark_1
-                    summary.total_secured_mark_2 = record.total_secured_mark_2 or summary.total_secured_mark_2
-                    summary.hon = record.hon or summary.hon
-                    summary.total_per = record.total_per or summary.total_per
-                    summary.grade = record.grade or summary.grade
-                    summary.final_result = record.final_result or summary.final_result
-                    summary.agreegate = record.agreegate or summary.agreegate
-                    summary.aggregate_hindi = record.aggregate_hindi or summary.aggregate_hindi
-                    summary.record_status = record.record_status or summary.record_status
-                    summary.record_status_check = record.record_status_check or summary.record_status_check
-                    summary.subject_count = record.subject_count or summary.subject_count
-                    summary.save()
-                    stats['summaries_updated'] += 1
-                else:
-                    stats['summaries_created'] += 1
+                # The UGBeforeCBCSExamSummary model does not exist.
+                # All 42 staging columns (including summary fields) are stored in UGBeforeCBCSStudentResult.
+                # References to summary model removed.
+                pass
                 
         except Exception as e:
             stats['errors'] += 1
@@ -399,9 +361,17 @@ if __name__ == "__main__":
         help='Start processing from this record number (default: 0)'
     )
     
+    parser.add_argument(
+        '--semester', 
+        type=str, 
+        default=None, 
+        help='Migrate only this semester (e.g., 1ST, 2ND, 3RD)'
+    )
+    
     args = parser.parse_args()
     
     migrate_data(
         skip_existing=not args.no_skip,
-        start_from=args.start_from
+        start_from=args.start_from,
+        semester_code=args.semester
     )

@@ -14,6 +14,7 @@ from .models import (
 
 @admin.register(UGBeforeCBCSStudentProfile)
 class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
+    show_full_result_count = False  # Faster loading for large tables
     list_display = (
         'registration_no',
         'student_name',
@@ -23,28 +24,28 @@ class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
         'gender',
         'course_code',
         'discipline_code',
-        'college_display',
+        'college',
         'is_active',
         'created_at'
     )
     list_per_page = 50
+    list_select_related = ('user', 'college')
     list_filter = (
         'is_active',
         'course_code',
         'discipline_code',
-        'college',
         'gender',
-        'created_at'
+        'college'
     )
     search_fields = (
         'registration_no',
         'roll_no',
         'student_name',
-        'fathers_name',
-        'mothers_name',
-        'source_user_id'
+        'fathers_name'
     )
+    autocomplete_fields = ['user', 'college']
     readonly_fields = ('uid', 'created_at', 'updated_at')
+    
     fieldsets = (
         ('Basic Information', {
             'fields': ('uid', 'user', 'registration_no', 'roll_no')
@@ -71,26 +72,19 @@ class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    def college_display(self, obj):
-        if obj.college:
-            return obj.college.name
-        return '-'
-    college_display.short_description = 'College'
 
 @admin.register(UGBeforeCBCSExam)
 class UGBeforeCBCSExamAdmin(admin.ModelAdmin):
+    show_full_result_count = False
     list_display = (
         'exam_code',
         'name',
         'part',
         'semester_code',
         'exam_year',
-        'exam_month_year',
         'batch_code',
         'session_code',
         'course_code',
-        'discipline_code',
-        'publication_date',
         'is_published',
         'is_active'
     )
@@ -114,7 +108,7 @@ class UGBeforeCBCSExamAdmin(admin.ModelAdmin):
     date_hierarchy = 'publication_date'
     fieldsets = (
         ('Exam Identity', {
-            'fields': ('uid', 'name', 'exam_code')
+            'fields': ('uid', 'name', 'exam_code', 'centre_name')
         }),
         ('Part & Year', {
             'fields': (
@@ -145,55 +139,51 @@ class UGBeforeCBCSExamAdmin(admin.ModelAdmin):
 
 @admin.register(UGBeforeCBCSStudentResult)
 class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
-    """Admin for Student Results with optimized list view"""
+    """Admin for Student Results optimized for 2.5 Million+ records"""
+    show_full_result_count = False  # DO NOT remove - critical for performance on 2M+ rows
+    
     list_display = (
-        'student_display',
-        'exam_display',
+        'registration_no',  # Display denormalized reg_no for speed
+        'student_link',
+        'exam_link',
         'paper_code',
         'subject_name',
         'exam_type',
         'theory',
         'practical',
-        'sessional',
         'mark_secured',
         'maximum_mark',
-        'pass_mark',
         'subject_result_badge',
-        'is_absent',
-        'is_ex_regular',
-        'total_secured_mark',
-        'grade',
-        'final_result'
+        'final_result',
+        'is_absent'
     )
     
     list_per_page = 50
-    list_select_related = ('student', 'exam')  # Optimize DB queries
+    list_select_related = ('student', 'exam')
     
     list_filter = (
+        'exam__part',
         'exam_type',
         'is_ex_regular',
         'is_absent',
         'subject_result',
-        'final_result',
-        'exam__part',
-        'exam__exam_year'
+        'final_result'
     )
     
     search_fields = (
-        'student__registration_no',
+        'registration_no',  # Search denormalized field directly (Indexed)
         'student__student_name',
         'paper_code',
-        'subject_name',
-        'exam__exam_code',
-        'source_id'
+        'exam__exam_code'
     )
     
+    autocomplete_fields = ['student', 'exam']
     readonly_fields = ('uid', 'created_at', 'updated_at')
-    list_editable = ('is_absent', 'is_ex_regular')  # Allow quick editing
+    list_editable = ('is_absent',)
     
     fieldsets = (
-        ('Relationships', {
-            'fields': ('uid', 'student', 'exam')
+        ('Identity', {
+            'fields': ('uid', 'registration_no', 'student', 'exam')
         }),
         ('Subject Details', {
             'fields': (
@@ -238,10 +228,9 @@ class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
             ),
             'classes': ('collapse',)
         }),
-        ('Source & Metadata', {
+        ('Source \u0026 Metadata', {
             'fields': (
                 'source_id',
-                'registration_no',
                 'created_at',
                 'updated_at'
             ),
@@ -250,37 +239,15 @@ class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
     )
     
     def get_queryset(self, request):
-        """Optimize queryset to reduce database queries"""
-        return super().get_queryset(request).select_related(
-            'student', 'exam'
-        ).only(
-            'student__registration_no',
-            'student__student_name',
-            'exam__name',
-            'exam__exam_year',
-            'paper_code',
-            'subject_name',
-            'exam_type',
-            'theory',
-            'practical',
-            'sessional',
-            'mark_secured',
-            'maximum_mark',
-            'pass_mark',
-            'subject_result',
-            'is_absent',
-            'is_ex_regular',
-            'total_secured_mark',
-            'grade',
-            'final_result'
-        )
+        """Optimize queryset for massive tables"""
+        return super().get_queryset(request).select_related('student', 'exam')
     
-    @admin.display(description='Student')
-    def student_display(self, obj):
-        return f"{obj.student.registration_no} - {obj.student.student_name}"
+    @admin.display(description='Student', ordering='student__registration_no')
+    def student_link(self, obj):
+        return obj.student.student_name
     
-    @admin.display(description='Exam')
-    def exam_display(self, obj):
+    @admin.display(description='Exam', ordering='exam__exam_code')
+    def exam_link(self, obj):
         return f"{obj.exam.name} ({obj.exam.exam_year})"
     
     @admin.display(description='Result')
@@ -290,14 +257,14 @@ class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
         
         result = str(obj.subject_result).upper()
         if 'PASS' in result:
-            color = 'green'
+            color = '#28a745'  # Green
         elif 'FAIL' in result:
-            color = 'red'
+            color = '#dc3545'  # Red
         else:
-            color = 'orange'
+            color = '#ffc107'  # Amber
             
         return format_html(
-            '<span style="color: white; background-color: {}; padding: 2px 8px; border-radius: 4px; font-size: 12px;">{}</span>',
+            '<span style="color: white; background-color: {}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">{}</span>',
             color, obj.subject_result
         )
     

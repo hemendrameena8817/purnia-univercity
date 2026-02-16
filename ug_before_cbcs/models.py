@@ -169,6 +169,13 @@ class UGBeforeCBCSExam(models.Model):
         blank=True,
         help_text='Discipline code: PSY, HIN, PHY'
     )
+
+    centre_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='Examination centre name'
+    )
     
     # Publication
     publication_date = models.DateField(null=True, blank=True)
