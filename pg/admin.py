@@ -59,6 +59,22 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
+    # Performance optimizations
+    list_select_related = ('user', 'college', 'department', 'program', 'degree')
+    autocomplete_fields = ['user', 'college', 'department', 'program', 'degree']
+    list_per_page = 50  # Limit records per page for better performance
+    
+    def get_queryset(self, request):
+        """Optimize queryset with select_related for foreign keys"""
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            'user',
+            'college', 
+            'department',
+            'program',
+            'degree'
+        )
+    
     fieldsets = (
         ('Personal Information', {
             'fields': ('uid', 'user', 'first_name', 'last_name', 'hindi_name',
@@ -95,7 +111,7 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
 @admin.register(PGCourseStructure)
 class PGCourseStructureAdmin(admin.ModelAdmin):
     list_display = ('course_name', 'department', 'course_type', 'code', 'paper_code', 'semester', 'max_marks', 'max_credit', 'effective_credit', 'label')
-    list_filter = ('department__faculty', 'department', 'course_type', 'semester')
+    list_filter = ('department__faculty', 'department', 'course_type', 'semester','code',)
     search_fields = ('course_name', 'course_short_name', 'code', 'paper_code', 'department__name', 'label')
     ordering = ('department', 'semester', 'code')
     readonly_fields = ('uid', 'created_at', 'updated_at')
@@ -142,10 +158,20 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
     show_full_result_count = False
     
     # Keep only indexed and most useful filters
-    list_filter = ('semester', 'session', 'exam_type', 'label', 'ind_is_absent', 'sem_result')
+    list_filter = (
+        'semester', 'session', 'batch', 'department', 
+        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code",
+    )
     
     # Optimize search - use indexed fields only
-    search_fields = ('student__registration_no', 'course_code', 'paper_code')
+    search_fields = (
+        'student__registration_no', 
+        'student__first_name', 
+        'student__last_name',
+        'student__roll_no',
+        'course_code', 
+        'paper_code'
+    )
     
     # Smaller page size for faster rendering
     list_per_page = 50
@@ -259,7 +285,7 @@ class PGExamRegistrationAdmin(admin.ModelAdmin):
 @admin.register(PGCommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
     list_display = ('semester', 'course_code', 'course_type', 'course_name', 'get_departments_count', 'credit', 'marks', 'cia_marks', 'ese_marks')
-    list_filter = ('semester', 'credit', 'course_type')
+    list_filter = ('semester', 'credit', 'course_type', 'departments', 'course_code')
     search_fields = ('course_name', 'course_type', 'course_code', 'old_code', 'new_code')
     ordering = ('semester', 'course_code')
     readonly_fields = ('uid', 'created_at', 'updated_at', 'get_departments_list')
@@ -523,21 +549,24 @@ class PGExamResultAdmin(admin.ModelAdmin):
     get_student_full_info.short_description = 'Student Information'
     
     def get_cia_courses(self, obj):
-        """Show all CIA/MID_TERM courses for this student in this semester"""
+        """Show all CIA courses for this student in this semester"""
         from .models import PGStudentCourseAssessment
         from django.utils.html import format_html
         
-        assessments = PGStudentCourseAssessment.objects.filter(
-            student=obj.student,
-            semester=obj.semester,
-            label__icontains='MID_TERM'
+        student_id = obj.student.id
+        semester = obj.semester
+        
+        cia_courses = PGStudentCourseAssessment.objects.filter(
+            student_id=student_id,
+            semester=semester,
+            label__icontains='CIA'
         )
         
-        if not assessments.exists():
+        if not cia_courses.exists():
             return 'No CIA assessments found'
         
         rows = []
-        for assessment in assessments:
+        for assessment in cia_courses:
             # Calculate pass status
             is_pass = False
             if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
@@ -560,17 +589,20 @@ class PGExamResultAdmin(admin.ModelAdmin):
     get_cia_courses.short_description = 'CIA Course Details'
     
     def get_ese_courses(self, obj):
-        """Show all ESE/END_TERM courses for this student in this semester"""
+        """Show all ESE courses for this student in this semester"""
         from .models import PGStudentCourseAssessment
         from django.utils.html import format_html
         
-        assessments = PGStudentCourseAssessment.objects.filter(
-            student=obj.student,
-            semester=obj.semester,
-            label__icontains='END_TERM'
+        student_id = obj.student.id
+        semester = obj.semester
+        
+        ese_courses = PGStudentCourseAssessment.objects.filter(
+            student_id=student_id,
+            semester=semester,
+            label__icontains='ESE'
         )
         
-        if not assessments.exists():
+        if not ese_courses.exists():
             return 'No ESE assessments found (or not yet entered)'
         
         rows = []
@@ -605,11 +637,11 @@ class PGExamResultAdmin(admin.ModelAdmin):
         }),
         ('CIA Assessment', {
             'fields': ('cia_pass', 'get_cia_courses'),
-            'description': 'MID_TERM examination results'
+            'description': 'CIA examination results'
         }),
         ('ESE Assessment', {
             'fields': ('ese_pass', 'get_ese_courses'),
-            'description': 'END_TERM examination results'
+            'description': 'ESE examination results'
         }),
         ('Semester Result', {
             'fields': (

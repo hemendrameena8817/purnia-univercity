@@ -55,7 +55,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
 
     USER_TYPE_CHOICES = [
         ("university_admin", "University Admin"),
-        ("college_user", "College User"),
+        ("college_user", "College User"), 
         ("student", "Student"),
         ("examiner", "Examiner"),
     ]
@@ -81,6 +81,10 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     is_verified = models.BooleanField(default=False)
     is_staff = models.BooleanField(_("staff status"), default=False)
     is_active = models.BooleanField(_("active"), default=True)
+    
+    # Password Change Tracking
+    is_password_changed = models.BooleanField(default=False, help_text="True if password has been changed by user/admin")
+    password_changed_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='changed_passwords', help_text="User who last changed the password")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -93,6 +97,10 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = "User Account"
         verbose_name_plural = "User Accounts"
+        indexes = [
+            models.Index(fields=['user_type'], name='idx_user_type'),
+            models.Index(fields=['username', 'user_type'], name='idx_username_type'),
+        ]
 
     def __str__(self):
         return f"{self.email} ({self.get_user_type_display()})"
@@ -141,7 +149,13 @@ class CollegeUserProfile(models.Model):
     )
     
     designation = models.CharField(max_length=100, blank=True, null=True)
-    
+    PG_department = models.ForeignKey(
+        "pg.PGDepartment",
+        on_delete=models.CASCADE,
+        related_name='pg_department_users',
+        null=True,
+        blank=True
+    )
     # Permissions
     can_manage_students = models.BooleanField(default=False)
     can_manage_marks = models.BooleanField(default=False)
@@ -163,4 +177,43 @@ class CollegeUserProfile(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+
+
+class UniversityUserProfile(models.Model):
+    """
+    Profile for university admin users.
+    Allows granular permission control for different modules.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    user = models.OneToOneField(
+        UserAccount,
+        on_delete=models.CASCADE,
+        related_name='university_profile',
+        limit_choices_to={'user_type': 'university_admin'}
+    )
+    
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True, null=True) # e.g. Registration Section, Exam Section
+    
+    # Granular Module Permissions
+    can_manage_voc_registration = models.BooleanField(default=False)
+    can_manage_grievances = models.BooleanField(default=False)
+    can_manage_ug = models.BooleanField(default=False)
+    can_manage_pg = models.BooleanField(default=False)
+    can_manage_mca = models.BooleanField(default=False)
+    can_manage_btech = models.BooleanField(default=False)
+    can_manage_colleges = models.BooleanField(default=False)
+    can_manage_university_settings = models.BooleanField(default=False)
+    
+    is_active = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "University User Profile"
+        verbose_name_plural = "University User Profiles"
+
+    def __str__(self):
+        return f"{self.user.get_full_name()} - {self.designation or 'University Admin'}"
 

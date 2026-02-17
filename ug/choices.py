@@ -50,6 +50,14 @@ PROMOTION_STATUS_CHOICES = (
     ('NOT_ELIGIBLE', 'Not Eligible'),
 )
 
+# Semester Registration Status
+REGISTRATION_STATUS_CHOICES = (
+    ('PENDING', 'Pending'),
+    ('OPEN', 'Open'),
+    ('REGISTERED', 'Registered'),
+    ('CLOSED', 'Closed'),
+)
+
 # Semester Choices
 SEMESTER_CHOICES = (
     ('1ST', '1st Semester'),

@@ -27,8 +27,9 @@ INSTALLED_APPS = [
     
     # Third-party apps
     "rest_framework",
-    "rest_framework.authtoken",  # Required for dj-rest-auth
+    "rest_framework.authtoken",  
     "drf_yasg",
+    "import_export",  
     "simple_history",
     "corsheaders",
     "storages",
@@ -139,9 +140,6 @@ STATIC_ROOT = BASE_DIR / 'static'
 # -------------------------------------------------
 # Media files (User uploaded files)
 # -------------------------------------------------
-
-#MEDIA_URL = '/media/'
-#MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # -------------------------------------------------

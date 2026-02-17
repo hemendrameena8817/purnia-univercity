@@ -172,3 +172,27 @@ class IsSameCollege(permissions.BasePermission):
             obj_college = obj
         
         return user_college.id == obj_college.id if obj_college else False
+
+
+class CanManageVocRegistration(permissions.BasePermission):
+    """
+    Permission for university admin users who have access to VOC registration module.
+    """
+    message = "You don't have permission to manage Vocational Registrations."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        # Superuser always has access
+        if request.user.is_superuser:
+            return True
+            
+        # Check if user is university admin and has the specific permission in their profile
+        if request.user.user_type == "university_admin":
+            return (
+                hasattr(request.user, 'university_profile') and 
+                request.user.university_profile.can_manage_voc_registration
+            )
+        
+        return False

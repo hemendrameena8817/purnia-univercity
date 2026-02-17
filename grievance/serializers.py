@@ -98,6 +98,9 @@ class GrievanceListSerializer(serializers.ModelSerializer):
             'closed_at',
             'final_remark',
             'categories',
+            'status',
+            'is_assigned_to_college',
+            'is_assigned_to_university',
             'is_grievance_resolved'
         ]
         read_only_fields = ['uid', 'grievance_number', 'submitted_at', 'updated_at']
@@ -117,27 +120,12 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
     # Related data
-    comments = serializers.SerializerMethodField()
     attachments = serializers.SerializerMethodField()
 
     # -------------------------
     # Helper methods
     # -------------------------
 
-    def get_comments(self, obj):
-        comments = obj.comments.all()
-        return GrievanceCommentSerializer(
-            comments,
-            many=True,
-            context=self.context
-        ).data
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        request = self.context.get('request')
-        if request and request.user.user_type == 'student':
-            representation.pop('comments', None)
-        return representation
 
     def get_attachments(self, obj):
         attachments = obj.attachments.all()
@@ -227,7 +215,6 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
             'closed_at',
             'is_assigned_to_college',
             'is_assigned_to_university',
-            'comments',
         ]
 
         read_only_fields = [
@@ -251,8 +238,8 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         required=False,
         help_text="List of attachment UIDs to link to this grievance"
     )
-    college_uid = serializers.UUIDField(write_only=True, help_text="College UID where grievance is to be submitted")
-    active_profile = serializers.CharField(write_only=True, help_text="Active profile Type to verify the college")
+    college_uid = serializers.UUIDField(write_only=True, required=False, help_text="College UID where grievance is to be submitted")
+    active_profile = serializers.CharField(write_only=True, required=False, help_text="Active profile Type to verify the college")
     
     class Meta:
         model = Grievance
@@ -288,14 +275,19 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
         except GrievanceCategory.DoesNotExist:
             raise serializers.ValidationError({"error": "Invalid or inactive category"})
         
-        college_uid = validated_data.pop('college_uid')
-        active_profile = validated_data.pop('active_profile')
-        try:
-            college = verify_student_college_profile(user, college_uid, active_profile)
-            validated_data['assigned_to_college'] = college
-        except Exception as e:
-            message = format_django_validation_error(e)
-            raise serializers.ValidationError({"error": message})
+        college_uid = validated_data.pop('college_uid', None)
+        validated_data.pop('active_profile', None) # No longer strictly needed
+
+        if college_uid:
+            from colleges.models import College
+            try:
+                validated_data['assigned_to_college'] = College.objects.get(uid=college_uid)
+            except College.DoesNotExist:
+                raise serializers.ValidationError({"error": "Invalid college UID."})
+        elif user.college:
+            validated_data['assigned_to_college'] = user.college
+        else:
+            raise serializers.ValidationError({"error": "Please provide a college_uid or ensure your account is associated with a college."})
         
         attachment_uids = validated_data.pop('attachment_uids', [])
         
@@ -315,93 +307,6 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
                 print(f"Warning: Only {updated_count} of {len(attachment_uids)} attachments were linked")
         
         return grievance
-
-class GrievanceUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating grievance (college/university staff)"""
-    
-    class Meta:
-        model = Grievance
-        fields = [
-            'status',
-            'is_assigned_to_college',
-            'is_assigned_to_university',
-            'is_grievance_resolved',
-            'final_remark',
-        ]
-        extra_kwargs = {
-            'status': {'required': False},
-            'is_assigned_to_college': {'required': False},
-            'is_assigned_to_university': {'required': False},
-            'is_grievance_resolved': {'required': False},
-            'final_remark': {'required': False},
-        }
-    
-    def validate_status(self, value):
-        """Validate status transitions"""
-        request = self.context.get('request')
-        
-        # Only college/university staff can update status
-        if request and request.user.user_type not in ['college_user', 'university_admin']:
-            raise serializers.ValidationError("You don't have permission to update status")
-        
-        return value
-    
-    def update(self, instance, validated_data):
-        """Update grievance and auto-track as a comment log"""
-        request = self.context.get('request')
-        user = request.user
-        
-        # Track changes for audit log
-        changes = []
-        user_name = user.get_full_name() or user.username
-        old_status = instance.status
-        
-        if 'status' in validated_data and instance.status != validated_data['status']:
-            changes.append(f"changed status from '{instance.status}' to '{validated_data['status']}'")
-            
-        if 'is_assigned_to_college' in validated_data and instance.is_assigned_to_college != validated_data['is_assigned_to_college']:
-            if validated_data['is_assigned_to_college']:
-                changes.append("assigned this to college")
-            else:
-                changes.append("unassigned from college")
-                 
-        if 'is_assigned_to_university' in validated_data and instance.is_assigned_to_university != validated_data['is_assigned_to_university']:
-            if validated_data['is_assigned_to_university']:
-                changes.append("transferred this assigned to university")
-            else:
-                changes.append("unassigned from university")
-
-        if 'is_grievance_resolved' in validated_data and instance.is_grievance_resolved != validated_data['is_grievance_resolved']:
-            if validated_data['is_grievance_resolved']:
-                remark = validated_data.get('final_remark', instance.final_remark)
-                msg = "resolved this grievance"
-                if remark:
-                    msg += f" with remark: {remark}"
-                changes.append(msg)
-            else:
-                changes.append("marked this grievance as unresolved")
-
-        # Perform the actual update
-        validated_data['modified_by'] = user
-        instance = super().update(instance, validated_data)
-        
-        # Create comment log if changes occurred
-        if changes:
-            log_text = f"{user_name} " + " and ".join(changes)
-            GrievanceComment.objects.create(
-                grievance=instance,
-                commented_by=user,
-                comment_type='action_update',
-                comment=log_text,
-                previous_status=old_status,
-                new_status=instance.status,
-                is_internal=True
-            )
-        
-        return instance
-
-
-# In grievance/serializers.py
 
 class GrievanceCommentCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating comments with attachments"""
@@ -436,117 +341,136 @@ class GrievanceCommentCreateSerializer(serializers.ModelSerializer):
         }
 
     def create(self, validated_data):
-        # Get user and grievance
         request = self.context.get('request')
         grievance = self.context.get('grievance')
         user = request.user
-        
+
         if not request or not grievance:
             raise serializers.ValidationError("Required context missing")
-        
-        # Pop attachment_uids and grievance update fields
+
         attachment_uids = validated_data.pop('attachment_uids', [])
-        
-        # We check for presence in validated_data because they were write_only fields
-        # Note: .pop() removes them, so we capture them here
+
+        # Update fields
         status_update = validated_data.pop('new_status', None)
         transfer_college = validated_data.pop('is_assigned_to_college', None)
         transfer_university = validated_data.pop('is_assigned_to_university', None)
         resolve_update = validated_data.pop('is_grievance_resolved', None)
         remark_update = validated_data.pop('final_remark', None)
-        
-        # Track if ANY update flags were provided, even if value remains the same
-        update_fields_provided = status_update or transfer_college is not None or transfer_university is not None or resolve_update is not None or remark_update is not None
-        
-        # Track changes for audit log
-        changes = []
-        user_name = user.get_full_name() or user.username
+
+        user_name = user.first_name if user.first_name else user.username
+        gn = grievance.grievance_number
         old_status = grievance.status
-        
-        # Apply updates and record detailed changes
-        if status_update:
-            if grievance.status != status_update:
-                changes.append(f"changed status from '{grievance.status}' to '{status_update}'")
-                grievance.status = status_update
-            else:
-                changes.append(f"re-asserted status as '{status_update}'")
-            
-        if transfer_college is not None:
-            if grievance.is_assigned_to_college != transfer_college:
-                grievance.is_assigned_to_college = transfer_college
-                changes.append("assigned this to college" if transfer_college else "unassigned from college")
-            else:
-                 changes.append("confirmed assignment to college" if transfer_college else "confirmed assignment away from college")
-                 
-        if transfer_university is not None:
-            if grievance.is_assigned_to_university != transfer_university:
-                grievance.is_assigned_to_university = transfer_university
-                changes.append("transferred this assigned to university" if transfer_university else "unassigned from university")
-            else:
-                changes.append("confirmed assignment to university" if transfer_university else "confirmed assignment away from university")
 
-        if resolve_update is not None:
-            if grievance.is_grievance_resolved != resolve_update:
-                grievance.is_grievance_resolved = resolve_update
-                if resolve_update:
-                    remark = remark_update or grievance.final_remark
-                    msg = "resolved this grievance"
-                    if remark:
-                        msg += f" with remark: {remark}"
-                    changes.append(msg)
-                else:
-                    changes.append("marked this grievance as unresolved")
+        changes = []
+
+        # -------------------------
+        # STATUS CHANGE
+        # -------------------------
+        if status_update and grievance.status != status_update:
+            changes.append(
+                f"{user_name} changed the status from '{old_status}' to '{status_update}'"
+            )
+            grievance.status = status_update
+
+        # -------------------------
+        # ASSIGN TO COLLEGE
+        # -------------------------
+        if transfer_college is not None and grievance.is_assigned_to_college != transfer_college:
+            grievance.is_assigned_to_college = transfer_college
+
+            if transfer_college:
+                target = grievance.assigned_to_college.name if grievance.assigned_to_college else "college"
+                changes.append(
+                    f"{user_name} assigned grievance ({gn}) to {target}"
+                )
             else:
-                changes.append("confirmed resolution status")
+                changes.append(
+                    f"{user_name} unassigned grievance ({gn}) from college"
+                )
 
-        if remark_update is not None:
-            if grievance.final_remark != remark_update:
-                grievance.final_remark = remark_update
-                if resolve_update is not True:
-                    changes.append(f"updated final remark: {remark_update}")
+        # -------------------------
+        # ASSIGN TO UNIVERSITY
+        # -------------------------
+        if transfer_university is not None and grievance.is_assigned_to_university != transfer_university:
+            grievance.is_assigned_to_university = transfer_university
 
-        # Save grievance if modified or re-asserted
-        if update_fields_provided:
+            if transfer_university:
+                if not grievance.assigned_to_university and grievance.assigned_to_college:
+                    grievance.assigned_to_university = grievance.assigned_to_college.university
+
+                target = grievance.assigned_to_university.name if grievance.assigned_to_university else "university"
+                changes.append(
+                    f"{user_name} assigned grievance ({gn}) to {target}"
+                )
+            else:
+                changes.append(
+                    f"{user_name} unassigned grievance ({gn}) from university"
+                )
+
+        # -------------------------
+        # RESOLUTION
+        # -------------------------
+        if resolve_update is not None and grievance.is_grievance_resolved != resolve_update:
+            grievance.is_grievance_resolved = resolve_update
+
+            if resolve_update:
+                changes.append(
+                    f"{user_name} marked grievance ({gn}) as resolved"
+                )
+            else:
+                changes.append(
+                    f"{user_name} marked grievance ({gn}) as unresolved"
+                )
+
+        # -------------------------
+        # FINAL REMARK UPDATE
+        # -------------------------
+        if remark_update is not None and grievance.final_remark != remark_update:
+            grievance.final_remark = remark_update
+            changes.append(
+                f"{user_name} updated final remark"
+            )
+
+        # Save grievance if anything changed
+        if changes:
             grievance.modified_by = user
             grievance.save()
-            
-        # Build final comment text
-        system_log = f"{user_name} " + " and ".join(changes) if changes else ""
-        user_comment = validated_data.get('comment', '').strip()
-        
-        if user_comment and system_log:
-            validated_data['comment'] = f"{system_log}. Note: {user_comment}"
-        elif system_log and not user_comment:
-            validated_data['comment'] = system_log
-        elif not system_log and not user_comment:
-            # If neither, we need at least one if it's a manual comment post
-            if not update_fields_provided:
-                 raise serializers.ValidationError({"comment": "This field is required if no status changes are made."})
-            validated_data['comment'] = f"{user_name} updated the grievance"
 
-        # Set metadata
+        # Build final comment message
+        manual_comment = validated_data.get('comment', '').strip()
+
+        if manual_comment and changes:
+            final_comment = f"{' ; '.join(changes)}. Note: {manual_comment}"
+        elif changes:
+            final_comment = " ; ".join(changes)
+        elif manual_comment:
+            final_comment = manual_comment
+        else:
+            raise serializers.ValidationError(
+                {"comment": "Comment or status change is required."}
+            )
+
+        validated_data['comment'] = final_comment
         validated_data['commented_by'] = user
-        validated_data['comment_type'] = 'action_update' if update_fields_provided else 'comment'
+        validated_data['comment_type'] = 'action_update' if changes else 'comment'
         validated_data['previous_status'] = old_status
         validated_data['new_status'] = grievance.status
-        
-        # Create comment
+
         comment = super().create(validated_data)
-        
-        # Link attachments to comment
+
+        # -------------------------
+        # ATTACHMENTS
+        # -------------------------
         if attachment_uids:
             from .models import GrievanceAttachment
-            updated_count = GrievanceAttachment.objects.filter(
+            GrievanceAttachment.objects.filter(
                 uid__in=attachment_uids,
-                uploaded_by=request.user,
-                comment__isnull=True  # Only unlinked attachments
+                uploaded_by=user,
+                comment__isnull=True
             ).update(comment=comment)
-            
-            # Log for debugging
-            if updated_count != len(attachment_uids):
-                print(f"Warning: Only {updated_count} of {len(attachment_uids)} attachments were linked")
-        
+
         return comment
+
 
 class GrievanceEscalateSerializer(serializers.Serializer):
     """Serializer for escalating grievance to university"""

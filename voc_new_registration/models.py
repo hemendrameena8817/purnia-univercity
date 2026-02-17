@@ -1,6 +1,7 @@
 import uuid
 from django.db import models, transaction
 from django.utils import timezone
+from django.conf import settings
 from .options import CASTE_CHOICES, GENDER_CHOICES
 from pup_umis_backend.storage_backends import MediaStorage, DocumentStorage, ProfilePhotoStorage
 from pup_umis_backend.upload_paths import unique_file_path
@@ -13,6 +14,8 @@ class NewRegistrationCourse(models.Model):
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=100, unique=True)
     registration_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    registration_start_datetime = models.DateTimeField(null=True, blank=True, help_text="Registration start date and time")
+    registration_end_datetime = models.DateTimeField(null=True, blank=True, help_text="Registration end date and time")
     is_active = models.BooleanField(default=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -171,6 +174,8 @@ class NewRegistration(models.Model):
     # Additional metadata
     json_data = models.JSONField(null=True, blank=True, help_text="Additional data from Excel")
     
+    registration_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when registration was completed")
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -184,8 +189,14 @@ class NewRegistration(models.Model):
             models.Index(fields=['course']),
             models.Index(fields=['college']),
             models.Index(fields=['aadhaar_no']),
-            models.Index(fields=['-sr_no']),  # Descending index for fast MAX(sr_no) queries
+            models.Index(fields=['-sr_no']), 
         ]
+    
+    def save(self, *args, **kwargs):
+        # Auto-set registration_at when is_registration_completed becomes True
+        if self.is_registration_completed and not self.registration_at:
+            self.registration_at = timezone.now()
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.student_name} - {self.course} - {self.college}"

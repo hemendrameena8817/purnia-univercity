@@ -64,7 +64,7 @@ class FinalResultProcessingService:
         if self.registration_no:
             # Process single student
             students = UGStudentProfile.objects.filter(
-                batch=self.batch, 
+                batch__name=self.batch, 
                 registration_no=self.registration_no
             )
             print(f"\n🔍 Processing SINGLE student: {self.registration_no}")
@@ -77,7 +77,7 @@ class FinalResultProcessingService:
             
             students = UGStudentProfile.objects.filter(
                 id__in=active_ids,
-                batch=self.batch
+                batch__name=self.batch
             ).order_by('registration_no')
             
             # --- RESUME LOGIC ---
@@ -165,6 +165,23 @@ class FinalResultProcessingService:
             self.semester,
             all_assessments
         )
+        
+        # Ensure ind_final_marks_obtained is ALWAYS set for every assessment
+        # - If grace applied (ind_grace_obtained > 0): final = marks + grace
+        # - If no grace (0 or None): final = marks
+        assessments_to_update = []
+        for a in all_assessments:
+            if a.ind_marks_obtained is not None:
+                grace = a.ind_grace_obtained or 0
+                expected_final = a.ind_marks_obtained + grace
+                if a.ind_final_marks_obtained != expected_final:
+                    a.ind_final_marks_obtained = expected_final
+                    assessments_to_update.append(a)
+        
+        if assessments_to_update and not dry_run:
+            StudentCourseAssessment.objects.bulk_update(
+                assessments_to_update, ['ind_final_marks_obtained'], batch_size=100
+            )
         
         # 2. Combined Level (Theory+Practical Aggregation)
         # Pass the list for processing logic, but we still need QuerySets for UPDATE
@@ -463,6 +480,12 @@ class FinalResultProcessingService:
         """
         Calculates SGPA, Semester Result, and Promotion Eligibility.
         Updates UGExamResult and creates SemesterRegistration.
+        
+        IMPORTANT ORDER OF OPERATIONS:
+        1. Calculate SGPA and Result Status
+        2. Save Exam Result with credits to DB FIRST
+        3. THEN check promotion eligibility (reads fresh credits from DB)
+        4. Update next_sem_status and create registration
         """
         # OPTIMIZATION: Pass cached data
         # 1. Calculate SGPA (Pure Memory)
@@ -478,11 +501,6 @@ class FinalResultProcessingService:
             student.id, 
             self.semester,
             assessments=all_assessments_list
-        )
-        
-        # 3. Check Promotion Eligibility (Still needs DB for history, but specific query)
-        is_eligible, eligibility_reason = UGResultCalculator.check_promotion_eligibility(
-            student.id, self.semester, current_result_status=sem_result_status
         )
         
         # Update Stats
@@ -505,18 +523,28 @@ class FinalResultProcessingService:
                 print(f"      ⚠️ SKIPPING: No CIA data and no existing result for {student.registration_no}")
                 return
 
-            # Update Exam Result
-            self._update_exam_result_db(student, sgpa, sem_result_status, is_eligible, eligibility_reason, all_assessments_list)
+            # 3. Save Exam Result with credits FIRST (so promotion check reads fresh data)
+            self._update_exam_result_db(student, sgpa, sem_result_status, all_assessments_list)
             
             # Update Semester Fields on Assessments
             self._update_assessment_semester_fields_db(student, sgpa, sem_result_status)
             
-            # Create Next Sem Registration
+            # 4. NOW check promotion eligibility (reads fresh credits from DB)
+            is_eligible, eligibility_reason = UGResultCalculator.check_promotion_eligibility(
+                student.id, self.semester, current_result_status=sem_result_status
+            )
+            
+            # 5. Update next_sem_status on exam result
+            UGExamResult.objects.filter(
+                student=student, semester=self.semester, session=self.session
+            ).update(next_sem_status='ELIGIBLE' if is_eligible else 'NOT_ELIGIBLE')
+            
+            # 6. Create Next Sem Registration
             if is_eligible:
                 self._create_next_sem_registration(student)
 
-    def _update_exam_result_db(self, student, sgpa, status, is_eligible, reason, all_assessments_list):
-        """Update UGExamResult table"""
+    def _update_exam_result_db(self, student, sgpa, status, all_assessments_list):
+        """Update UGExamResult table (credits and result, next_sem_status set separately)"""
 
         # Calculate semester totals FROM MEMORY LIST
         paper_codes = set(a.paper_code for a in all_assessments_list if a.paper_code)
@@ -524,17 +552,6 @@ class FinalResultProcessingService:
         sem_credits_earned = Decimal(0)
         
         for paper_code in paper_codes:
-            # Find one assessment for this paper to get course stats
-            # Stats might not be in the objects in 'all_assessments_list' because
-            # we just updated the DB using .update() but didn't refresh the objects.
-            # Critical Point: .update() does NOT update in-memory objects.
-            # So 'all_assessments_list' still has old values for 'course_max_credits' etc.
-            # BUT, we just calculated them in `_process_course_level` memory result.
-            # We can re-calculate or just fetch? Re-fetching defeats optimization.
-            # Better: We can rely on `UGResultCalculator` logic again?
-            
-            # Option 2: Since we know the logic (Course Map + Passed Flag), we can Compute it.
-            # Retrieve cached course
             course_obj = self.course_map.get(paper_code)
             if not course_obj:
                import re
@@ -554,8 +571,6 @@ class FinalResultProcessingService:
             sem_max_credits += Decimal(result_data['max_credit'] or 0)
             
             # FIXED: Refresh assessments from DB to get updated comb_credit_obtained (with grace)
-            # The in-memory all_assessments_list has OLD values because .update() doesn't refresh objects
-            # We need fresh values that include grace marks applied at combined level
             from ug.models import StudentCourseAssessment
             paper_assessments_fresh = StudentCourseAssessment.objects.filter(
                 student=student,
@@ -565,14 +580,7 @@ class FinalResultProcessingService:
             paper_credits_earned = max((a.comb_credit_obtained or 0) for a in paper_assessments_fresh) if paper_assessments_fresh else Decimal(0)
             sem_credits_earned += paper_credits_earned
 
-        # OFFICIAL RULE (ug_passing_rules.txt, lines 104-106):
-        # "A candidate SHALL NOT be awarded or calculated ANY SGPA if he/she 
-        # FAILS to earn the TOTAL prescribed credits in that particular semester."
-        # 
-        # Therefore:
-        # - PASS → Calculate SGPA
-        # - PROMOTED → SGPA = None (didn't earn total credits)
-        # - FAILED → SGPA = None
+        # OFFICIAL RULE: SGPA only for PASS students
         final_sgpa = sgpa if status == 'PASS' else None
         
         UGExamResult.objects.update_or_create(
@@ -585,7 +593,6 @@ class FinalResultProcessingService:
                 'semester_credit_earned': sem_credits_earned,
                 'semester_max_credit': sem_max_credits,
                 'ese_pass': True if status == 'PASS' else False,
-                'next_sem_status': 'ELIGIBLE' if is_eligible else 'NOT_ELIGIBLE'
             }
         )
 
@@ -618,18 +625,28 @@ class FinalResultProcessingService:
         """Create SemesterRegistration for next semester"""
         next_sem = self._get_next_semester(self.semester)
         if next_sem:
-            SemesterRegistration.objects.get_or_create(
+            # Check if exists (avoid MultipleObjectsReturned if duplicates exist)
+            existing_qs = SemesterRegistration.objects.filter(
                 student=student,
                 sem=next_sem,
-                session=self.session,
-                defaults={
-                    'status': 'PENDING',
-                    'is_open': True,
-                    'exam_eligible': False,
-                    'remarks': f'Promoted from {self.semester}'
-                }
+                session=self.session
             )
-            self.stats['registrations_created'] += 1
+            
+            if not existing_qs.exists():
+                SemesterRegistration.objects.create(
+                    student=student,
+                    sem=next_sem,
+                    session=self.session,
+                    batch=student.batch,
+                    status='PENDING',
+                    is_open=True,
+                    exam_eligible=False,
+                    remarks=f'Promoted from {self.semester}'
+                )
+                self.stats['registrations_created'] += 1
+            else:
+                # Already exists
+                pass
 
     ################################################################################
     # UTILITIES

@@ -126,7 +126,14 @@ LOGGING = {
     },
 }
 
-
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 # -------------------------------------------------
 # Debug Toolbar (Optional - uncomment if installed)
 # -------------------------------------------------
@@ -134,3 +141,17 @@ LOGGING = {
 # INSTALLED_APPS += ['debug_toolbar']
 # MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 # INTERNAL_IPS = ['127.0.0.1']
+DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="ap-south-2")
+
+AWS_DEFAULT_ACL = None
+AWS_S3_FILE_OVERWRITE = False
+AWS_S3_ADDRESSING_STYLE = "virtual"
+AWS_S3_PUBLIC_MEDIA = False
+AWS_QUERYSTRING_AUTH = True
+AWS_QUERYSTRING_EXPIRE = 300
+
+AWS_S3_OBJECT_PARAMETERS = {
+    "CacheControl": "max-age=86400",
+}

@@ -40,6 +40,8 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
     degree = UGDegreeSerializer(read_only=True)
     program = UGProgramSerializer(read_only=True)
     college = UGCollegeSerializer(read_only=True)
+    batch = serializers.CharField(source='batch.name', read_only=True)
+    date_of_birth = serializers.DateField(read_only=True, format='%d-%m-%y')
 
     class Meta:
         model = UGStudentProfile
@@ -49,8 +51,9 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
             'mobile_no', 'aadhar_no', 'address',
-            'college',
+            'college', 'profile_image', 'signature',
             'department', 'degree', 'program',
             'status', 'session', 'batch', 'is_active'
         ]
         read_only_fields = ['uid']
+    

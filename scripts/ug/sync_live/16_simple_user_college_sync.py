@@ -1,0 +1,108 @@
+import os
+import sys
+import django
+import time
+from pathlib import Path
+from django.db import connections
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.append(str(BASE_DIR))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings.development')
+django.setup()
+
+from accounts.models import UserAccount
+from ug.models import SemesterRegistration
+from colleges.models import College
+
+def reset_connections():
+    try: connections['live'].close()
+    except: pass
+    try: connections['default'].close()
+    except: pass
+
+def simple_college_sync():
+    print("🚀 Simple User -> College Sync (Source: Local College Code -> Live College ID)")
+    
+    # 1. Get Live College Map (Code -> ID)
+    print("   📊 Building Live College Map...")
+    try:
+        live_college_map = {
+            c.college_code: c.id 
+            for c in College.objects.using('live').exclude(college_code__isnull=True)
+        }
+    except Exception as e:
+        print(f"   ❌ Error fetching live colleges: {e}")
+        return
+
+    print(f"   📊 Live College Map Size: {len(live_college_map)}")
+    
+    # 2. Get Target Users (Local Semester Registration)
+    print("   📥 Fetching Local Users (Sem 3, 2024-28)...")
+    source_regs = SemesterRegistration.objects.using('default').filter(
+        sem=3,
+        batch__name='2024-28',
+        session='2025-26'
+    ).select_related('student__user', 'student__college', 'student__user__college')
+    
+    # 3. Iterate and Update
+    updated_count = 0
+    skipped_count = 0
+    error_count = 0
+    debug_count = 0
+    
+    print("   🔄 Starting Loop...")
+    
+    for i, reg in enumerate(source_regs.iterator(chunk_size=2000)):
+        try:
+            student = reg.student
+            if not student or not student.user:
+                continue
+                
+            local_user = student.user
+            local_college = local_user.college
+            local_college_code = None
+            
+            if local_college and local_college.college_code:
+                local_college_code = local_college.college_code
+            
+            if not local_college_code:
+                if debug_count < 10: print(f"      ⚠️ No Local Code (UserAccount): {local_user.username}")
+                debug_count += 1
+                skipped_count += 1
+                continue
+                
+            target_college_id = live_college_map.get(local_college_code)
+            
+            if not target_college_id:
+                if debug_count < 10: print(f"      ⚠️ Code Not In Live: {local_college_code}")
+                debug_count += 1
+                skipped_count += 1
+                continue
+
+            rows = UserAccount.objects.using('live').filter(
+                username=local_user.username
+            ).update(college_id=target_college_id)
+            
+            if rows > 0:
+                updated_count += 1
+            else:
+                if debug_count < 10: print(f"      ⚠️ User Not Found in Live: {local_user.username}")
+                debug_count += 1
+                skipped_count += 1
+
+        except Exception as e:
+            # print(f"      ❌ Error on {reg.uid}: {e}")
+            error_count += 1
+            reset_connections()
+            time.sleep(0.5)
+
+        if (i + 1) % 100 == 0:
+            print(f"      ⏳ Processed {i+1} | Updated: {updated_count} | Errors: {error_count}", end='\r')
+
+    print(f"\n✅ Done!")
+    print(f"   Updated: {updated_count}")
+    print(f"   Skipped/Missing: {skipped_count}")
+    print(f"   Errors: {error_count}")
+
+if __name__ == "__main__":
+    simple_college_sync()

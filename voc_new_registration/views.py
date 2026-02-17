@@ -12,7 +12,7 @@ from .models import (
     NewRegistrationBatch,
     NewRegistrationSession
 )
-from .utils.registration_logic import generate_registration_number
+from .utils.registration_logic import generate_registration_number, check_course_registration_window
 from .serializers import (
     CourseMinimalSerializer,
     BatchMinimalSerializer,
@@ -29,9 +29,11 @@ from decouple import config
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 import uuid
 from .utils.ccavenue_utils import encrypt, decrypt, parse_response
-from .utils.ccavenue_utils import encrypt, decrypt, parse_response
+from accounts.permissions import IsUniversityAdmin, CanManageVocRegistration
+from pup_umis_backend.utils.pagination import DefaultPagination
 
 
 class NewRegistrationListView(generics.ListAPIView):
@@ -40,6 +42,8 @@ class NewRegistrationListView(generics.ListAPIView):
     Supports search and filtering.
     """
     serializer_class = NewRegistrationListSerializer
+    permission_classes = [CanManageVocRegistration]
+    pagination_class = DefaultPagination
     
     def get_queryset(self):
         # Only list records that are not soft-deleted
@@ -55,29 +59,29 @@ class NewRegistrationListView(generics.ListAPIView):
             )
         
         # Filtering
-        course = self.request.query_params.get('course', None)
-        if course:
-            queryset = queryset.filter(course__uid=course)
+        course_uid = self.request.query_params.get('course_uid', None)
+        if course_uid:
+            queryset = queryset.filter(course__uid=course_uid)
         
-        batch = self.request.query_params.get('batch', None)
-        if batch:
-            queryset = queryset.filter(batch__uid=batch)
-            
-        session = self.request.query_params.get('session', None)
-        if session:
-            queryset = queryset.filter(session__uid=session)
+        batch_uid = self.request.query_params.get('batch_uid', None)
+        if batch_uid:
+            queryset = queryset.filter(batch__uid=batch_uid)
         
-        gender = self.request.query_params.get('gender', None)
-        if gender:
-            queryset = queryset.filter(gender=gender.upper())
+        gender_uid = self.request.query_params.get('gender_uid', None)
+        if gender_uid:
+            queryset = queryset.filter(gender=gender_uid.upper())
         
-        caste = self.request.query_params.get('caste', None)
-        if caste:
-            queryset = queryset.filter(caste=caste.upper())
+        caste_uid = self.request.query_params.get('caste_uid', None)
+        if caste_uid:
+            queryset = queryset.filter(caste=caste_uid.upper())
         
-        college = self.request.query_params.get('college', None)
-        if college:
-            queryset = queryset.filter(college__uid=college)
+        college_uid = self.request.query_params.get('college_uid', None)
+        if college_uid:
+            queryset = queryset.filter(college__uid=college_uid)
+        
+        is_completed = self.request.query_params.get('is_registration_completed', None)
+        if is_completed is not None:
+            queryset = queryset.filter(is_registration_completed=is_completed.lower() == 'true')
             
         return queryset
 
@@ -85,13 +89,13 @@ class NewRegistrationListView(generics.ListAPIView):
         operation_summary="List all new registrations",
         operation_description="Retrieve a list of all new registration entries with pagination support",
         manual_parameters=[
-            openapi.Parameter('search', openapi.IN_QUERY, description="Search by name", type=openapi.TYPE_STRING),
-            openapi.Parameter('course', openapi.IN_QUERY, description="Filter by course UID", type=openapi.TYPE_STRING),
-            openapi.Parameter('batch', openapi.IN_QUERY, description="Filter by batch UID", type=openapi.TYPE_STRING),
-            openapi.Parameter('session', openapi.IN_QUERY, description="Filter by session UID", type=openapi.TYPE_STRING),
-            openapi.Parameter('gender', openapi.IN_QUERY, description="Filter by gender", type=openapi.TYPE_STRING),
-            openapi.Parameter('caste', openapi.IN_QUERY, description="Filter by caste", type=openapi.TYPE_STRING),
-            openapi.Parameter('college', openapi.IN_QUERY, description="Filter by college UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('search', openapi.IN_QUERY, description="Search by name, father name, or mother name", type=openapi.TYPE_STRING),
+            openapi.Parameter('course_uid', openapi.IN_QUERY, description="Filter by course UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('batch_uid', openapi.IN_QUERY, description="Filter by batch UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('gender_uid', openapi.IN_QUERY, description="Filter by gender (MALE/FEMALE/OTHER)", type=openapi.TYPE_STRING),
+            openapi.Parameter('caste_uid', openapi.IN_QUERY, description="Filter by caste (e.g. GENERAL, OBC, SC, ST)", type=openapi.TYPE_STRING),
+            openapi.Parameter('college_uid', openapi.IN_QUERY, description="Filter by college UID", type=openapi.TYPE_STRING),
+            openapi.Parameter('is_registration_completed', openapi.IN_QUERY, description="Filter by completion status (true/false)", type=openapi.TYPE_BOOLEAN),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -136,10 +140,11 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     @swagger_auto_schema(
         operation_summary="Retrieve a specific registration",
-        operation_description="Lookup by Aadhaar number. Requires captcha validation.",
+        operation_description="Lookup by Aadhaar number. Requires course code matching.",
         manual_parameters=[
-            openapi.Parameter('captcha_key', openapi.IN_QUERY, description="Captcha Hash Key", type=openapi.TYPE_STRING, required=True),
-            openapi.Parameter('captcha_value', openapi.IN_QUERY, description="Solved Captcha Text", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('course_code', openapi.IN_QUERY, description="Registered Course Code", type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('captcha_key', openapi.IN_QUERY, description="Captcha Hash Key (Optional for now)", type=openapi.TYPE_STRING, required=False),
+            openapi.Parameter('captcha_value', openapi.IN_QUERY, description="Solved Captcha Text (Optional for now)", type=openapi.TYPE_STRING, required=False),
         ]
     )
     def get(self, request, *args, **kwargs):
@@ -147,15 +152,30 @@ class NewRegistrationDetailView(generics.RetrieveUpdateDestroyAPIView):
         captcha_value = request.query_params.get('captcha_value')
         
         if not captcha_key or not captcha_value:
-            return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
+             return Response({"error": "Captcha required for security"}, status=status.HTTP_400_BAD_REQUEST)
         
         from captcha.models import CaptchaStore
         try:
-            CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
+             CaptchaStore.objects.get(hashkey=captcha_key, response=captcha_value.lower()).delete()
         except CaptchaStore.DoesNotExist:
-            return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+             return Response({"error": "Invalid or expired captcha"}, status=status.HTTP_400_BAD_REQUEST)
+
+        course_code = request.query_params.get('course_type')
+        if not course_code:
+            return Response({"error": "course_type is required"}, status=status.HTTP_400_BAD_REQUEST)
         
-        return super().get(request, *args, **kwargs)
+        aadhaar_no = self.kwargs.get(self.lookup_url_kwarg)
+        try:
+            instance = self.get_queryset().get(aadhaar_no=aadhaar_no, course__code=course_code)
+        except NewRegistration.DoesNotExist:
+            return Response({"error": "Registration not found with provided Aadhaar and Course Code"}, status=status.HTTP_404_NOT_FOUND)
+        
+        is_valid, error_data = check_course_registration_window(instance.course)
+        if not is_valid:
+            return Response(error_data, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     @swagger_auto_schema(
         operation_summary="Update a registration",
@@ -233,30 +253,10 @@ class RegistrationStatusView(views.APIView):
                 "created_at": latest_payment.created_at
             }
 
-        # Fallback: Generate registration number if needed (shouldn't happen with new flow)
+        # Fallback: Generate registration number if needed
         if not registration.registration_number and registration.is_registration_completed:
             try:
-                if not registration.migrated_from_other_university:
-                    # For non-migrated students, use old_registration_no
-                    if registration.old_registration_no:
-                        registration.registration_number = registration.old_registration_no
-                        # Generate global sr_no
-                        last_global_reg = NewRegistration.objects.filter(
-                            sr_no__isnull=False
-                        ).order_by('-sr_no').only('sr_no').first()
-                        if last_global_reg and last_global_reg.sr_no:
-                            registration.sr_no = last_global_reg.sr_no + 1
-                        else:
-                            registration.sr_no = 1
-                        registration.save()
-                else:
-                    # For migrated students, generate new registration number
-                    if registration.college and registration.course:
-                        registration.registration_number = generate_registration_number(registration)
-                        # sr_no is already set by generate_registration_number function
-                        registration.save()
-                    else:
-                        print(f"Cannot generate registration number: Missing college or course for {registration.aadhaar_no}")
+                generate_registration_number(registration)
             except Exception as e:
                 # Log error but don't block the status return
                 print(f"Error generating registration number in StatusView: {str(e)}")
@@ -276,7 +276,7 @@ class NewRegistrationBulkCreateView(views.APIView):
     """
     API View for bulk creation of registrations.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [CanManageVocRegistration]
     @swagger_auto_schema(
         operation_summary="Bulk create registrations",
         request_body=openapi.Schema(
@@ -676,4 +676,70 @@ class CaptchaView(views.APIView):
         return Response({
             "captcha_key": hashkey,
             "captcha_image": image_url
+        }, status=status.HTTP_200_OK)
+
+
+class CheckRegistrationWindowView(views.APIView):
+    """
+    API View to check if the registration window is open for a given course.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Check course registration window",
+        manual_parameters=[
+            openapi.Parameter('course_code', openapi.IN_QUERY, description="Course Code", type=openapi.TYPE_STRING, required=True),
+        ],
+        responses={
+            200: "Registration is open",
+            400: "Registration is closed",
+            404: "Course not found"
+        }
+    )
+    def get(self, request):
+        course_code = request.query_params.get('course_code')
+        if not course_code:
+            return Response({"error": "course_code is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            course = NewRegistrationCourse.objects.get(code=course_code)
+        except NewRegistrationCourse.DoesNotExist:
+            return Response({"error": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        current_time = timezone.now()
+        start = course.registration_start_datetime
+        end = course.registration_end_datetime
+        
+        if not start and not end:
+            return Response({
+                "status": "NOT_CONFIGURED",
+                "is_open": False,
+                "message": "Registration schedule is not configured",
+                "course": course.name,
+                "code": course.code,
+                "current_datetime": timezone.localtime(current_time)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        status_key = "OPEN"
+        message = "Registration is open"
+        is_open = True
+        
+        if start and current_time < start:
+            status_key = "NOT_STARTED"
+            is_open = False
+            message = "Registration has not started yet"
+        elif end and current_time > end:
+            status_key = "ENDED"
+            is_open = False
+            message = "Registration has ended"
+            
+        return Response({
+            "status": status_key,
+            "is_open": is_open,
+            "message": message,
+            "course": course.name,
+            "code": course.code,
+            "start_datetime": timezone.localtime(start) if start else None,
+            "end_datetime": timezone.localtime(end) if end else None,
+            "current_datetime": timezone.localtime(current_time)
         }, status=status.HTTP_200_OK)

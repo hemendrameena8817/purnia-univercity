@@ -146,7 +146,12 @@ def migrate():
                 new_batch = app.batch_code
             pdob = parse_date(app.dob)
             if pdob: new_dob = pdob
-            if app.gender: new_gender = app.gender
+            if app.gender:
+                g = str(app.gender).strip().upper()
+                if g in ['M', 'MALE']: new_gender = 'Male'
+                elif g in ['F', 'FEMALE']: new_gender = 'Female'
+                elif g: new_gender = 'Other'
+            
             if app.category: new_caste = app.category
             if app.full_address: new_addr = app.full_address
             if app.phone: new_mobile = app.phone

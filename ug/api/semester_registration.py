@@ -10,7 +10,11 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.response import Response
 from rest_framework import status
 
-from ug.services.semester_registration_service import SemesterRegistrationService
+import json
+from django.db import transaction
+from ug.services.semester_registration_service import (
+    SemesterRegistrationService, STATUS_REGISTERED
+)
 from ug.utils.api_response import (
     success_response, error_response,
     already_registered_response, not_eligible_response, 
@@ -21,7 +25,8 @@ from ug.serializers import (
     EligibilityResponseSerializer,
     AvailableCoursesResponseSerializer,
     CourseSelectionRequestSerializer,
-    RegistrationResponseSerializer
+    RegistrationResponseSerializer,
+    SubmitRegistrationSerializer
 )
 
 
@@ -96,9 +101,15 @@ class AvailableCoursesView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # First check eligibility
+            # Check eligibility
             eligibility = SemesterRegistrationService.check_registration_eligibility(student)
-            if not eligibility['eligible']:
+            
+            # Determine registration status
+            already_registered = eligibility.get('already_registered', False)
+            registration_status = STATUS_REGISTERED if already_registered else None
+            
+            # If not eligible AND not already registered, block
+            if not eligibility['eligible'] and not already_registered:
                 return Response(
                     {
                         'error': 'Not eligible for registration',
@@ -108,34 +119,50 @@ class AvailableCoursesView(APIView):
                 )
             
             # Verify semester matches next semester
-            semester_map = {
-                1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH',
-                5: '5TH', 6: '6TH', 7: '7TH', 8: '8TH'
-            }
-            expected_semester = semester_map.get(eligibility['next_semester'])
+            expected_semester = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(
+                eligibility['next_semester']
+            )
             
             if semester != expected_semester:
                 return Response(
                     {
-                        'error': f"Can only register for next semester ({expected_semester})",
+                        'error': f"Can only view courses for semester ({expected_semester})",
                         'current_semester': eligibility['current_semester'],
                         'next_semester': eligibility['next_semester']
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get available courses
-            courses_data = SemesterRegistrationService.get_available_courses(student, semester)
+            # Get available courses (with is_registered flags if already registered)
+            courses_data = SemesterRegistrationService.get_available_courses(
+                student, semester, registration_status=registration_status
+            )
             
             # Add student and college information
+            # Build absolute URLs
+            img_url = student.profile_image.url if student.profile_image else None
+            if img_url and not img_url.startswith('http'):
+                img_url = request.build_absolute_uri(img_url)
+                
+            sig_url = student.signature.url if student.signature else None
+            if sig_url and not sig_url.startswith('http'):
+                sig_url = request.build_absolute_uri(sig_url)
+
             student_info = {
                 'applicant_name': student.first_name or '',
-                'college_name': student.college.name if student.college else None,
-                'college_code': student.college.college_code if student.college else None
+                'college_name': student.user.college.name if student.user.college else None,
+                'college_code': student.user.college.college_code if student.user.college else None,
+                'profile_image': img_url,
+                'signature': sig_url
             }
             
-            # Add student info to response
+            # Add student info, registration window, and message to response
             courses_data['student_info'] = student_info
+            courses_data['registration_window'] = eligibility.get('registration_window', {})
+            courses_data['registration_open'] = eligibility.get('registration_open', False)
+            
+            if already_registered:
+                courses_data['message'] = eligibility.get('message', 'You are already registered for this semester')
             
             return Response(courses_data, status=status.HTTP_200_OK)
         
@@ -169,61 +196,134 @@ class SubmitRegistrationView(APIView):
     
     The assessment UIDs come from the available-courses API.
     
-    Optimizations:
-    - Uses bulk_create for performance (handles 30k+ students)
-    - Fetches CourseStructure data using UIDs
-    - Sets exam_type='Regular' for new registrations
-    - Checks for duplicates in single bulk query
-    
-    Updates SemesterRegistration.status to 'REGISTERED'
+    Implementation:
+    - Uses SubmitRegistrationSerializer for robust validation (handling multipart/form-data)
+    - Delegates processing to `SemesterRegistrationService.process_registration_submission`
+    - Atomic transaction ensures profile update and registration happen together
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        """Submit assessment UIDs and create registrations"""
+        """Submit assessment UIDs, profile image, signature and create registrations"""
         try:
             # Get student profile
             student = request.user.ug_student_profile
             
-            # Extract data from request
-            semester = request.data.get('semester')
-            assessment_uids = request.data.get('assessment_uids', [])
+            # Use Serializer for robust parsing & validation
+            serializer = SubmitRegistrationSerializer(data=request.data)
+            if not serializer.is_valid():
+                return validation_error_response(serializer.errors)
+                
+            validated_data = serializer.validated_data
             
-            # Validate required fields
-            if not semester:
-                return missing_field_response('semester')
-            
-            if not assessment_uids or not isinstance(assessment_uids, list):
-                return validation_error_response('assessment_uids must be a non-empty list')
-            
-            # Check eligibility
-            eligibility = SemesterRegistrationService.check_registration_eligibility(student)
-            if not eligibility.get('eligible', False):
-                return not_eligible_response(
-                    reason=eligibility.get('reason'),
-                    message=eligibility.get('message')
-                )
-            
-            # Create registrations (optimized bulk operation)
-            result = SemesterRegistrationService.create_course_registrations(
-                student, semester, assessment_uids
+            # Delegate logic to service
+            # Delegate logic to service
+            result = SemesterRegistrationService.process_registration_submission(
+                student=student,
+                semester=validated_data['semester'],
+                assessment_uids=validated_data.get('assessment_uids'),
+                profile_image=validated_data.get('profile_image'),
+                signature=validated_data.get('signature'),
+                gender=validated_data.get('gender')
             )
             
-            # Add status to success response
-            result['status'] = 'success'
+            # Ensure proper absolute URLs
+            if result.get('profile_image') and not result['profile_image'].startswith('http'):
+                result['profile_image'] = request.build_absolute_uri(result['profile_image'])
+                
+            if result.get('signature') and not result['signature'].startswith('http'):
+                result['signature'] = request.build_absolute_uri(result['signature'])
+            
             return Response(result, status=status.HTTP_200_OK)
         
         except ValueError as e:
             error_message = str(e)
-            
-            # Check if it's an "already registered" error
             if "already registered" in error_message.lower():
-                return already_registered_response(semester)
-            
-            # Other validation errors (400 Bad Request)
+                return already_registered_response(request.data.get('semester'))
             return validation_error_response(error_message)
         except AttributeError:
             return profile_not_found_response()
         except Exception as e:
             return internal_error_response(str(e))
+
+
+class RegistrationCardView(APIView):
+    """
+    Generate and download Registration Card PDF
+    
+    GET /api/ug/semester-registration/card/?semester=3RD
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from django.http import HttpResponse
+        from ug.models import SemesterRegistration, StudentCourseAssessment
+        from ug.utils.registration_card_pdf import generate_registration_card
+        
+        try:
+            student = request.user.ug_student_profile
+            semester = request.GET.get('semester')
+            
+            registration = None
+            
+            if semester:
+                # Map semester text/num
+                semester_num = SemesterRegistrationService.SEMESTER_MAP.get(semester, 3)
+                
+                # Fetch Specific Registration
+                registration = SemesterRegistration.objects.filter(
+                    student=student,
+                    sem=semester_num,
+                    status=STATUS_REGISTERED
+                ).order_by('-created_at').first()
+            else:
+                # Fetch Latest Registration
+                registration = SemesterRegistration.objects.filter(
+                    student=student,
+                    status=STATUS_REGISTERED
+                ).order_by('-created_at').first()
+            
+            if not registration:
+                msg = 'Registration not found or not confirmed for this semester' if semester else 'No active registration found'
+                return Response(
+                    {'error': msg},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Use the semester from the found registration
+            semester_num = registration.sem
+            semester_text = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(semester_num, str(semester_num))
+            
+            # Fetch Assessments
+            # We need to fetch assessments for this semester and session
+            # Using same filtering logic as verification
+            
+            assessments = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester__in=[str(semester_num), semester_text],
+                session=registration.session
+            ).select_related('department')
+            
+            if not assessments.exists():
+                return Response(
+                    {'error': 'No subject details found for this registration'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+            # Generate PDF
+            pdf_buffer = generate_registration_card(student, registration, assessments)
+            
+            # Return Response
+            response = HttpResponse(pdf_buffer, content_type='application/pdf')
+            filename = f"Registration_Card_{student.registration_no}_{semester_text}.pdf"
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+            
+        # except AttributeError:
+        #      return Response({'error': 'Student profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
