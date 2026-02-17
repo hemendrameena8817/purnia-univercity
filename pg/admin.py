@@ -164,6 +164,54 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
         # Default behavior includes all other fields.
         # import_id_fields = ('id',) # Default is 'id', which works for creation (if id missing) or update.
 
+    def before_import_row(self, row, **kwargs):
+        """
+        Hook called before importing each row.
+        Used here to create PGStudentProfile if it doesn't exist but UserAccount does.
+        """
+        registration_no = row.get('student')
+        if not registration_no:
+            return
+
+        # Check if Profile exists
+        if not PGStudentProfile.objects.filter(registration_no=registration_no).exists():
+            from accounts.models import UserAccount
+            from colleges.models import College
+            
+            # Check if UserAccount exists
+            user = UserAccount.objects.filter(username=registration_no).first()
+            if user:
+                print(f"Creating missing profile for User: {registration_no}")
+                
+                # Resolving Foreign Keys from row data
+                batch_name = row.get('batch')
+                dept_name = row.get('department')
+                college_code = row.get('college_code')
+                
+                batch_obj = PGBatch.objects.filter(name=batch_name).first() if batch_name else None
+                dept_obj = PGDepartment.objects.filter(name=dept_name).first() if dept_name else None
+                college_obj = College.objects.filter(college_code=college_code).first() if college_code else None
+                
+                # Create the Profile
+                PGStudentProfile.objects.create(
+                    user=user,
+                    registration_no=registration_no,
+                    first_name=user.get_full_name(), # Use full name
+                    last_name="", # Leave last name empty
+                    batch=batch_name, # Storing string for now as per model (or is it FK? Model says CharField for batch/roll_no actually? Let's check.)
+                    # Wait, PGStudentProfile.batch is CharField in model lines 205.
+                    # BUT PGStudentProfile.department is ForeignKey.
+                    department=dept_obj,
+                    college=college_obj,
+                    # roll_no might be same as RegNo or empty? Leaving empty.
+                    status='Active'
+                )
+            else:
+                 # Logic if User doesn't exist? 
+                 # User said "exist then create profile".
+                 # So if user not exist, we do nothing (it will fail validation later).
+                 pass
+
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     resource_class = PGStudentCourseAssessmentResource

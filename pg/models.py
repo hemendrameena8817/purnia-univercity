@@ -399,7 +399,7 @@ class PGStudentCourseAssessment(models.Model):
     sem_max_credit = models.IntegerField(null=True, blank=True, help_text="Semester MAX CREDIT")
     sem_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester CREDIT OBTAINED")
     sgpa = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRADE POINT")
-    sem_result = models.CharField(max_length=10, null=True, blank=True, help_text="Semester Result eg: pass/fail/promoted")
+    sem_result = models.CharField(max_length=50, null=True, blank=True, help_text="Semester Result eg: pass/fail/promoted")
     next_sem_status = models.CharField(max_length=10, null=True, blank=True, help_text="Next Semester Status eg: eligible/not eligible")
     sem_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRACE MARKS OBTAINED")
     ####semester####
@@ -439,32 +439,32 @@ class PGStudentCourseAssessment(models.Model):
 
 
         
-    def save(self, *args, **kwargs):
-        """
-        Override save to validate and calculate pass/fail status
-        """
-        # Step 1: Validate ind_marks_obtained doesn't exceed ind_max_marks
-        if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
-            if self.ind_marks_obtained > self.ind_max_marks:
-                raise ValueError(
-                    f"Individual marks obtained ({self.ind_marks_obtained}) "
-                    f"cannot exceed maximum marks ({self.ind_max_marks})"
-                )
+    # def save(self, *args, **kwargs):
+    #     """
+    #     Override save to validate and calculate pass/fail status
+    #     """
+    #     # Step 1: Validate ind_marks_obtained doesn't exceed ind_max_marks
+    #     if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
+    #         if self.ind_marks_obtained > self.ind_max_marks:
+    #             raise ValueError(
+    #                 f"Individual marks obtained ({self.ind_marks_obtained}) "
+    #                 f"cannot exceed maximum marks ({self.ind_max_marks})"
+    #             )
         
-        # Step 2: Calculate ind_is_pass based on ind_pass_marks
-        if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
-            # If absent, mark as fail
-            if self.ind_is_absent:
-                self.ind_is_pass = False
-            else:
-                # Pass if marks obtained >= pass marks
-                self.ind_is_pass = self.ind_marks_obtained >= self.ind_pass_marks
-        elif self.ind_is_absent:
-            # If absent but no marks data, still mark as fail
-            self.ind_is_pass = False
+    #     # Step 2: Calculate ind_is_pass based on ind_pass_marks
+    #     if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
+    #         # If absent, mark as fail
+    #         if self.ind_is_absent:
+    #             self.ind_is_pass = False
+    #         else:
+    #             # Pass if marks obtained >= pass marks
+    #             self.ind_is_pass = self.ind_marks_obtained >= self.ind_pass_marks
+    #     elif self.ind_is_absent:
+    #         # If absent but no marks data, still mark as fail
+    #         self.ind_is_pass = False
         
-        # Call parent save
-        super().save(*args, **kwargs)
+    #     # Call parent save
+    #     super().save(*args, **kwargs)
         
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.label}"
@@ -498,6 +498,13 @@ class PGSemesterRegistration(models.Model):
         return f"{self.student}"
 
 
+
+EXAM_TYPE_CHOICES = (
+    ('REGULAR', 'Regular'),
+    ('BACK', 'Back'),
+    ('IMPROVEMENT', 'Improvement'),
+)
+
 class PGExamRegistration(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     student = models.ForeignKey(
@@ -512,6 +519,7 @@ class PGExamRegistration(models.Model):
     sem = models.IntegerField(null=True, blank=True, help_text="Semester")
     status = models.CharField(max_length=10, null=True, blank=True, help_text="Status")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
+    exam_type = models.CharField(max_length=20, choices=EXAM_TYPE_CHOICES, default='REGULAR', help_text="Exam Type",null=True,blank=True)
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
@@ -522,7 +530,7 @@ class PGExamRegistration(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.student}"
+        return f"{self.student} - {self.sem} ({self.session}) [{self.exam_type}]"
 
 
 class PGCommonCourseStructure(models.Model):
@@ -547,7 +555,7 @@ class PGCommonCourseStructure(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'PGCommon Course Structure'
+        verbose_name = 'PGCommon Course Structure' 
         verbose_name_plural = 'Common Course Structures'
         ordering = ['semester', 'course_name']
 
@@ -562,6 +570,7 @@ SEMESTER_RESULT_CHOICES = [
     ('ABSENT', 'Absent'),
     ('DISQUALIFIED', 'Disqualified'),
     ('PARTIALDISQUALIFIED', 'Partial Disqualified'),
+    ('QUALIFIED', 'Qualified'),
     ('PENDING', 'Pending'),
 ]
 
@@ -588,7 +597,7 @@ class PGExamResult(models.Model):
 
     # FINAL SEM RESULT
     semester_result = models.CharField(
-        max_length=20,
+        max_length=50,
         db_index=True,
         choices=SEMESTER_RESULT_CHOICES,
         help_text="Semester result status (PASS / FAIL / PROMOTED / ABSENT / DISQUALIFIED etc.)"
