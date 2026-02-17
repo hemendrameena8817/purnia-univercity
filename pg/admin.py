@@ -137,15 +137,45 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
     )
 
 
+from import_export import resources, fields
+from import_export.widgets import ForeignKeyWidget
+from import_export.admin import ImportExportModelAdmin
+
+class PGStudentCourseAssessmentResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+    batch = fields.Field(
+        column_name='batch',
+        attribute='batch',
+        widget=ForeignKeyWidget(PGBatch, field='name')
+    )
+    department = fields.Field(
+        column_name='department',
+        attribute='department',
+        widget=ForeignKeyWidget(PGDepartment, field='name')
+    )
+
+    class Meta:
+        model = PGStudentCourseAssessment
+        # Default behavior includes all fields. 
+        # listing specific fields or exclude is better if needed.
+        import_id_fields = ('uid',)
+
 @admin.register(PGStudentCourseAssessment)
-class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
+class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
+    resource_class = PGStudentCourseAssessmentResource
+    
     # Optimized for 400K+ records - showing only essential fields
     list_display = (
-        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type',
-        'ind_marks_obtained', 'ind_is_absent', 
-        'comb_final_marks_obtained', 'sgpa', 'sem_result',
+        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type', 'college_code',
+        'ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 'ind_is_pass', 'ind_is_absent',
+        'comb_max_marks', 'comb_marks_obtained', 'comb_final_marks_obtained',
+        'sgpa', 'sem_result',
         'is_cia_fill', 'is_ese_fill',
-        'session', 'created_at'
+        'session', 'batch', 'department', 'created_at'
     )
     
     # Optimize foreign key queries to prevent N+1 problem
@@ -160,7 +190,7 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
     # Keep only indexed and most useful filters
     list_filter = (
         'semester', 'session', 'batch', 'department', 
-        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code",
+        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code", 'college_code',
     )
     
     # Optimize search - use indexed fields only
@@ -170,7 +200,8 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
         'student__last_name',
         'student__roll_no',
         'course_code', 
-        'paper_code'
+        'paper_code',
+        'college_code'
     )
     
     # Smaller page size for faster rendering
@@ -346,6 +377,9 @@ class PGExamResultAdmin(admin.ModelAdmin):
         'created_at'
     )
     
+    # Optimization: Reduce database queries
+    list_select_related = ('student', 'student__department', 'student__program', 'student__college')
+    
     list_filter = (
         'semester',
         'session',
@@ -358,6 +392,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
         'student__batch'
     )
     
+    # Optimized search fields
     search_fields = (
         'student__registration_no',
         'student__first_name',
@@ -606,7 +641,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
             return 'No ESE assessments found (or not yet entered)'
         
         rows = []
-        for assessment in assessments:
+        for assessment in ese_courses:
             # Calculate pass status
             is_pass = False
             if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
