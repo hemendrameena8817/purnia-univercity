@@ -246,3 +246,84 @@ class SubmitRegistrationView(APIView):
             return profile_not_found_response()
         except Exception as e:
             return internal_error_response(str(e))
+
+
+class RegistrationCardView(APIView):
+    """
+    Generate and download Registration Card PDF
+    
+    GET /api/ug/semester-registration/card/?semester=3RD
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        from django.http import HttpResponse
+        from ug.models import SemesterRegistration, StudentCourseAssessment
+        from ug.utils.registration_card_pdf import generate_registration_card
+        
+        try:
+            student = request.user.ug_student_profile
+            semester = request.GET.get('semester')
+            
+            registration = None
+            
+            if semester:
+                # Map semester text/num
+                semester_num = SemesterRegistrationService.SEMESTER_MAP.get(semester, 3)
+                
+                # Fetch Specific Registration
+                registration = SemesterRegistration.objects.filter(
+                    student=student,
+                    sem=semester_num,
+                    status=STATUS_REGISTERED
+                ).order_by('-created_at').first()
+            else:
+                # Fetch Latest Registration
+                registration = SemesterRegistration.objects.filter(
+                    student=student,
+                    status=STATUS_REGISTERED
+                ).order_by('-created_at').first()
+            
+            if not registration:
+                msg = 'Registration not found or not confirmed for this semester' if semester else 'No active registration found'
+                return Response(
+                    {'error': msg},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Use the semester from the found registration
+            semester_num = registration.sem
+            semester_text = SemesterRegistrationService.SEMESTER_NUM_TO_TEXT.get(semester_num, str(semester_num))
+            
+            # Fetch Assessments
+            # We need to fetch assessments for this semester and session
+            # Using same filtering logic as verification
+            
+            assessments = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester__in=[str(semester_num), semester_text],
+                session=registration.session
+            ).select_related('department')
+            
+            if not assessments.exists():
+                return Response(
+                    {'error': 'No subject details found for this registration'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+            # Generate PDF
+            pdf_buffer = generate_registration_card(student, registration, assessments)
+            
+            # Return Response
+            response = HttpResponse(pdf_buffer, content_type='application/pdf')
+            filename = f"Registration_Card_{student.registration_no}_{semester_text}.pdf"
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+            
+        # except AttributeError:
+        #      return Response({'error': 'Student profile not found'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
