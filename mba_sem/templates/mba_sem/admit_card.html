@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>Admit Card - MCA</title>
+
+    <!-- Google Fonts for Hindi (Devanagari) Support -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      @page {
+        size: A4;
+        margin: 20px;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Noto Sans", "Noto Sans Devanagari", Arial, sans-serif;
+        font-size: 10pt;
+        line-height: 1.4;
+        color: #000;
+      }
+
+      /* Ensure Hindi text uses proper font */
+      .hindi-text {
+        font-family: "Noto Sans Devanagari", "Noto Sans", sans-serif;
+      }
+
+      .container {
+        width: 100%;
+        padding: 10px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      /* HEADER SECTION */
+      .header-table {
+        margin-bottom: 15px;
+      }
+
+      .header-table td {
+        vertical-align: middle;
+        padding: 5px;
+      }
+
+      .university-logo-img {
+        width: 60px;
+        height: 60px;
+        display: block;
+      }
+
+      .header-text {
+        text-align: center;
+      }
+
+      .header-text h1 {
+        font-size: 16pt;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+        letter-spacing: 0.5px;
+      }
+
+      .header-text h2 {
+        font-size: 13pt;
+        font-weight: normal;
+        margin-bottom: 8px;
+      }
+
+      .admit-card-title {
+        font-size: 12pt;
+        font-weight: bold;
+        text-decoration: underline;
+        margin-top: 5px;
+      }
+
+      /* STUDENT DETAILS SECTION */
+      .details-wrapper {
+        margin-bottom: 15px;
+      }
+
+      .info-table {
+        width: 100%;
+      }
+
+      .info-table td {
+        padding: 3px 0;
+        font-size: 9.5pt;
+      }
+
+      .info-label {
+        width: 200px;
+        font-weight: normal;
+      }
+
+      .info-colon {
+        width: 15px;
+        text-align: left;
+      }
+
+      .info-value {
+        font-weight: normal;
+      }
+
+      /* PHOTO & SIGNATURE SECTION */
+      .photo-signature-wrapper {
+        width: 120px;
+        text-align: center;
+        vertical-align: top;
+        padding-left: 10px;
+      }
+
+      .photo-box {
+        border: 1px solid #000;
+        width: 110px;
+        height: 130px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 8px;
+        background: #fff;
+      }
+
+      .photo-img {
+        max-width: 105px;
+        max-height: 125px;
+        object-fit: cover;
+      }
+
+      .sig-box {
+        border: 1px solid #000;
+        width: 110px;
+        height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 3px;
+        background: #fff;
+      }
+
+      .sig-img {
+        max-width: 105px;
+        max-height: 40px;
+        object-fit: contain;
+        display: block;
+        margin: 0 auto;
+      }
+
+      .photo-signature-label {
+        font-size: 8pt;
+        font-style: italic;
+        margin-top: 2px;
+      }
+
+      /* EXAM SCHEDULE TABLE */
+      .exam-table {
+        margin: 15px 0;
+        border: 1px solid #000;
+      }
+
+      .exam-table th,
+      .exam-table td {
+        border: 1px solid #000;
+        padding: 6px 4px;
+        text-align: center;
+        font-size: 9.5pt;
+      }
+
+      .exam-table th {
+        background-color: #f5f5f557;
+        font-weight: bold;
+      }
+
+      .exam-table .sl-col {
+        width: 40px;
+      }
+
+      .exam-table .code-col {
+        width: 90px;
+      }
+
+      .exam-table .subject-col {
+        text-align: left;
+        padding-left: 8px;
+      }
+
+      .exam-table .time-col {
+        width: 80px;
+      }
+
+      .exam-table .date-col {
+        width: 100px;
+      }
+
+      /* SIGNATURES SECTION */
+      .signatures-table {
+        margin: 20px 0 10px 0;
+      }
+
+      .signatures-table td {
+        padding: 5px;
+        vertical-align: top;
+      }
+
+      .sig-line {
+        font-size: 9pt;
+        font-weight: normal;
+        padding-top: 40px;
+      }
+
+      .sig-left {
+        text-align: left;
+      }
+
+      .sig-right {
+        text-align: right;
+      }
+
+      /* INSTRUCTIONS SECTION */
+      .instructions {
+        font-size: 8.5pt;
+        margin-top: 15px;
+        padding-top: 10px;
+        border-top: 1px solid #000;
+        position: relative;
+        z-index: 10;
+      }
+
+      /* WATERMARK */
+      .watermark {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px;
+        opacity: 0.15;
+        z-index: -1;
+      }
+
+      .watermark img {
+        width: 100%;
+        height: auto;
+      }
+
+      .instructions-title {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+
+      .instructions p {
+        margin: 3px 0;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- WATERMARK -->
+    {% if watermark_logo %}
+    <div class="watermark">
+      <img src="data:image/png;base64,{{ watermark_logo }}" alt="Watermark" />
+    </div>
+    {% endif %}
+
+    <div class="container">
+      <!-- HEADER -->
+      <table class="header-table">
+        <tr>
+          <td style="width: 70px">
+            {% if university_logo %}
+            <img
+              src="data:image/png;base64,{{ university_logo }}"
+              class="university-logo-img"
+              alt="University Logo"
+            />
+            {% endif %}
+          </td>
+          <td class="header-text">
+            <h1>PURNEA UNIVERSITY, PURNIA</h1>
+            <h2 class="hindi-text">पूर्णियाँ विश्वविद्यालय, पूर्णियाँ</h2>
+            <div class="admit-card-title">ADMIT CARD</div>
+          </td>
+          <td style="width: 70px"></td>
+        </tr>
+      </table>
+
+      <!-- STUDENT DETAILS WITH PHOTO -->
+      <table class="details-wrapper">
+        <tr>
+          <td style="vertical-align: top">
+            <table class="info-table">
+              <tr>
+                <td class="info-label">Name of Exam</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">{{ exam.name|upper }}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Roll No.</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">{{ student.roll_no }}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Enrollment No/ Reg. No.</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">{{ student.registration_no }}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Candidate Name</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">{{ student.get_full_name|upper }}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Father's Name/Husband's Name</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">
+                  {{ student.father_name|default:"-"|upper }}
+                </td>
+              </tr>
+              <tr>
+                <td class="info-label">Mother's Name</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">
+                  {{ student.mother_name|default:"-"|upper }}
+                </td>
+              </tr>
+              <tr>
+                <td class="info-label">Gender</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">{{ student.gender|default:"-" }}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Status</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">{{ student.status|default:"-" }}</td>
+              </tr>
+              <tr>
+                <td class="info-label">Name of the Exam Center</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">
+                  {{ center_code }} - {{ center_name|upper }}
+                </td>
+              </tr>
+              <tr>
+                <td class="info-label">Name of the College/Department</td>
+                <td class="info-colon">:</td>
+                <td class="info-value">
+                  {% if student.college %}{{ student.college.college_code }} -
+                  {{ student.college.name|upper }}{% else %}-{% endif %}
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td class="photo-signature-wrapper">
+            <div class="photo-box">
+              {% if student_photo %}
+              <img
+                src="data:image/png;base64,{{ student_photo }}"
+                class="photo-img"
+                alt="Student Photo"
+              />
+              {% else %}
+              <span style="font-size: 9pt">PHOTO</span>
+              {% endif %}
+            </div>
+            <div class="sig-box">
+              {% if student_sig %}
+              <img
+                src="data:image/png;base64,{{ student_sig }}"
+                class="sig-img"
+                alt="Student Signature"
+              />
+              {% else %}
+              <span style="font-size: 8pt">SIGNATURE</span>
+              {% endif %}
+            </div>
+            <div class="photo-signature-label">Photo & Signature</div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- EXAM SCHEDULE TABLE -->
+      <table class="exam-table">
+        <thead>
+          <tr>
+            <th class="sl-col">Sl. No.</th>
+            <th class="code-col">Subject Code</th>
+            <th class="subject-col">Subject Name</th>
+            <th class="time-col">Time</th>
+            <th class="date-col">Date & Sitting</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in schedules %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ s.common_course_structure.code|default:"-" }}</td>
+            <td class="subject-col">
+              {{ s.common_course_structure.course_name }}
+            </td>
+            <td>
+              {% if s.exam_time %}
+              {{ s.exam_time }} - {{ s.sitting }}
+              {% endif %}
+            </td>
+            <td>{{ s.exam_date|date:"d-m-Y" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5">No Schedule Found</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <!-- SIGNATURES -->
+      <table class="signatures-table">
+        <tr>
+          <td class="sig-left">
+            <div class="sig-line">Sig. & Seal of the Principal</div>
+          </td>
+          <td class="sig-right">
+            {% if controller_signature %}
+            <img
+              src="data:image/png;base64,{{ controller_signature }}"
+              alt="Controller Signature"
+              style="
+                max-width: 150px;
+                max-height: 50px;
+                display: block;
+                margin: 0 30px 5px auto;
+              "
+            />
+            {% endif %}
+            <div class="sig-line" style="padding-top: 5px">
+              Controller of Examinations
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- INSTRUCTIONS IN HINDI -->
+      <div class="instructions">
+        <div class="instructions-title hindi-text">
+          परीक्षार्थियों के लिए आवश्यक निर्देश:
+        </div>
+        <p class="hindi-text">
+          1. परीक्षार्थी निर्धारित समय से अपना प्रवेश पत्र एवं फोटो प्रमाणपत्र
+          से सत्यापित करा लें ।
+        </p>
+        <p class="hindi-text">
+          2. प्रवेश पत्र पर किसी प्रकार की त्रुटि का सुधार समसत परीक्षा विभाग से
+          करा लें ।
+        </p>
+        <p class="hindi-text">
+          3. सत्यापित प्रवेश पत्र प्रति दिन परीक्षार्थी अनिवार्य रूप से लेकर
+          परीक्षा कक्ष में उपस्थित हों ।
+        </p>
+        <p class="hindi-text">
+          4. परीक्षा भवन में प्रतिबंधित वस्तुएँ जैसे मोबाइल , इलेक्ट्रोनिक गैजेट
+          इत्यादि लाना वर्जित है।
+        </p>
+        <p class="hindi-text">
+          5. नेत्रहीन, physically handicapped and dyslexic परीक्षार्थियों को
+          लेखन सुविधा के साथ-साथ परीक्षा अवधि में 30 मिनट का अतिरिक्त समय प्रदान
+          किया जायेगा।
+        </p>
+        <p class="hindi-text">
+          6. उत्तरपुस्तिका में कहीं भी अपना नाम न लिखें , न ऐसे संकेत करें जिससे
+          उत्तरपुस्तिका पहचानी जा सके।
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
