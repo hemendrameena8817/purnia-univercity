@@ -198,7 +198,7 @@ def generate_registration_card(student, registration, assessments):
         'college_name': student.user.college.name if student.user.college else "",
         'course_name': student.program.name.split('-')[0].strip() if student.program else "-",
         'semester_text': sem_text,
-        'session': registration.batch.name,
+        'session': f"({registration.batch.name if registration.batch else '2024-28'})".strip(),
         
         'major_subject_name': major_subject_name,
         'minor_subject_name': minor_subject_name,
