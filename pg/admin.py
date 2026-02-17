@@ -160,9 +160,9 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
 
     class Meta:
         model = PGStudentCourseAssessment
-        # Default behavior includes all fields. 
-        # listing specific fields or exclude is better if needed.
-        import_id_fields = ('uid',)
+        exclude = ('uid',)  # Exclude UID to allow auto-generation
+        # Default behavior includes all other fields.
+        # import_id_fields = ('id',) # Default is 'id', which works for creation (if id missing) or update.
 
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
