@@ -5,7 +5,8 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
-    PGCommonCourseStructure, PGExamResult
+    PGCommonCourseStructure, PGExamResult,
+    PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule
 )
 
 
@@ -252,7 +253,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     list_filter = (
         'semester', 'session', 'batch', 'department', 
         'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code", 'college_code',
-        'is_cia_fill', 'is_ese_fill',
+        'is_cia_fill', 'is_ese_fill', 'created_at',
     )
     
     # Optimize search - use indexed fields only
@@ -756,3 +757,44 @@ class PGExamResultAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         })
     )
+
+@admin.register(PGExam)
+class PGExamAdmin(admin.ModelAdmin):
+    list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
+    list_filter = ('session', 'year', 'batch')
+    search_fields = ('name', 'session', 'batch')
+    ordering = ('-created_at',)
+
+@admin.register(PGExamCenterMapping)
+class PGExamCenterMappingAdmin(admin.ModelAdmin):
+    list_display = ('center', 'get_exams_count', 'get_attached_colleges_count', 'created_at')
+    list_filter = ('center',)
+    search_fields = ('center__name', 'center__code')
+    filter_horizontal = ('exams', 'attached_colleges')
+    
+    def get_exams_count(self, obj):
+        return obj.exams.count()
+    get_exams_count.short_description = 'Exams Count'
+    
+    def get_attached_colleges_count(self, obj):
+        return obj.attached_colleges.count()
+    get_attached_colleges_count.short_description = 'Attached Colleges Count'
+
+@admin.register(PGGroup)
+class PGGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'get_departments', 'created_at')
+    list_filter = ('department',)
+    search_fields = ('name', 'department__name')
+    ordering = ('name',)
+    filter_horizontal = ('department',)
+
+    def get_departments(self, obj):
+        return ", ".join([d.name for d in obj.department.all() if d.name])
+    get_departments.short_description = 'Departments'
+
+@admin.register(PGExamSchedule)
+class PGExamScheduleAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+    list_filter = ('exam', 'group', 'exam_date', 'sitting')
+    search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
+    ordering = ('exam_date', 'exam_time')
