@@ -239,6 +239,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     list_filter = (
         'semester', 'session', 'batch', 'department', 
         'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code", 'college_code',
+        'is_cia_fill', 'is_ese_fill',
     )
     
     # Optimize search - use indexed fields only
