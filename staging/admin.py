@@ -228,8 +228,20 @@ class StagingApplicantQualificationDetailAdmin(admin.ModelAdmin):
     list_editable = ('is_migrated',)
 
 
+from import_export import resources
+from import_export.admin import ImportExportModelAdmin
+
+class UGSemResultCurrentResource(resources.ModelResource):
+    class Meta:
+        model = UGSemResultCurrent
+        import_id_fields = ('id',)
+        skip_unchanged = True
+        report_skipped = True
+        exclude = ('uid',)
+
 @admin.register(UGSemResultCurrent)
-class UGSemResultCurrentAdmin(admin.ModelAdmin):
+class UGSemResultCurrentAdmin(ImportExportModelAdmin):
+    resource_class = UGSemResultCurrentResource
     show_full_result_count = False
     list_display = (
         'source_id', 'college_roll_no', 'student_name', 'semester_code', 
