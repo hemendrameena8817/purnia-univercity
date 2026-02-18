@@ -141,6 +141,19 @@ from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from import_export.admin import ImportExportModelAdmin
 
+class SafeForeignKeyWidget(ForeignKeyWidget):
+    """
+    Custom widget that uses filter().first() instead of get() to avoid 
+    MultipleObjectsReturned error when duplicate related objects exist.
+    """
+    def clean(self, value, row=None, *args, **kwargs):
+        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
+        if val:
+            # Look up object using the specified field
+            # Use filter().first() instead of get()
+            return self.model.objects.filter(**{self.field: val}).first()
+        return None
+
 class PGStudentCourseAssessmentResource(resources.ModelResource):
     student = fields.Field(
         column_name='student',
@@ -150,7 +163,7 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
     batch = fields.Field(
         column_name='batch',
         attribute='batch',
-        widget=ForeignKeyWidget(PGBatch, field='name')
+        widget=SafeForeignKeyWidget(PGBatch, field='name')
     )
     department = fields.Field(
         column_name='department',
