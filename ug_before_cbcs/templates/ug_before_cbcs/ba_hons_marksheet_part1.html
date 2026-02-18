@@ -348,6 +348,7 @@
         </table>
 
         <!-- Marks Table -->
+        <!-- prettier-ignore -->
         <table class="marks-table">
           <thead>
             <tr>
@@ -362,52 +363,29 @@
           <tbody>
             <!-- Honours Subject -->
             <tr>
-              <td
-                rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}"
-              >
-                1
-              </td>
-              <td
-                rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}"
-                class="subject-name"
-              >
+              <td rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}">1</td>
+              <td rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}" class="subject-name">
                 Honours: <span>{{ hons_subject }}</span>
               </td>
               <td>Paper-I</td>
-              <td>100</td>
-              <td
-                rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}"
-                colspan="2"
-              >
-                90
-              </td>
-              <td>
-                {{ subjects.honours.papers.0.obtained|default:"0" }}
-              </td>
-              <td
-                rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}"
-              >
-                <strong
-                  >{{ subjects.honours.total_obtained|default:"0" }}</strong
-                >
+              <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
+              <td rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}" colspan="2">{{ subjects.honours.total_pass|default:"90" }}</td>
+              <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
+              <td rowspan="{% if is_honours_with_practical %}3{% else %}2{% endif %}">
+                <strong>{{ subjects.honours.total_obtained|default:"0" }}</strong>
               </td>
             </tr>
             <tr>
               <td>Paper-II</td>
-              <td>100</td>
-              <td>
-                {{ subjects.honours.papers.1.obtained|default:"0" }}
-              </td>
+              <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
+              <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
             </tr>
             {% if is_honours_with_practical %}
             <tr>
               <td>Practical</td>
-              <td>100</td>
-              
+              <td>{{ subjects.honours.papers.2.max_marks|default:"100" }}</td>
               <td>
-                <strong
-                  >{{ subjects.honours.papers.2.obtained|default:"0" }}</strong
-                >
+                <strong>{{ subjects.honours.papers.2.obtained|default:"0" }}</strong>
               </td>
             </tr>
             {% endif %}
@@ -416,93 +394,84 @@
               <td colspan="3" style="text-align: center; padding-left: 20px">
                 <strong>Total of Honours</strong>
               </td>
-              <td><strong>200</strong></td>
-              <td colspan="2"><strong>90</strong></td>
+              <td><strong>{{ subjects.honours.total_max|default:"200" }}</strong></td>
+              <td colspan="2"><strong>{{ subjects.honours.total_pass|default:"90" }}</strong></td>
               <td colspan="2">
-                <strong
-                  >{{ subjects.honours.total_obtained|default:"0" }}</strong
-                >
+                <strong>{{ subjects.honours.total_obtained|default:"0" }}</strong>
               </td>
             </tr>
 
-            <!-- Subsidiary Subject 1: History -->
+            <!-- Subsidiary Subject 1 -->
+            {% if subjects.subsidiary_1.name %}
+            {% with sub=subjects.subsidiary_1 %}
+            {% for paper in sub.papers %}
             <tr>
-              <td>2</td>
-              <td class="subject-name">
-                Subsidiary Subject-I:
-                <span>{{ subjects.subsidiary_1.name|default:"History" }}</span>
+              {% if forloop.first %}
+              <td rowspan="{{ sub.papers|length }}">2</td>
+              <td rowspan="{{ sub.papers|length }}" class="subject-name">
+                Subsidiary Subject-I: <span>{{ sub.name }}</span>
               </td>
-              <td>Theory</td>
-              <td>100</td>
-              <td colspan="2">33</td>
-              <td>
-                {{ subjects.subsidiary_1.papers.0.obtained }}
-              </td>
-              <td>
-                <strong>{{ subjects.subsidiary_1.total_obtained }}</strong>
-              </td>
+              {% endif %}
+              <td>{% if "LAB" in paper.status or "PRAC" in paper.status %}Practical{% else %}Theory{% endif %}</td>
+              <td>{{ paper.max_marks }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ sub.papers|length }}" colspan="2">{{ sub.total_pass }}</td>
+              {% endif %}
+              <td>{{ paper.obtained }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ sub.papers|length }}"><strong>{{ sub.total_obtained }}</strong></td>
+              {% endif %}
             </tr>
+            {% endfor %}
+            {% endwith %}
+            {% endif %}
 
-            <!-- Subsidiary Subject 2: Geography -->
+            <!-- Subsidiary Subject 2 -->
+            {% if subjects.subsidiary_2.name %}
+            {% with sub=subjects.subsidiary_2 %}
+            {% for paper in sub.papers %}
             <tr>
-              <td rowspan="2">3</td>
-              <td rowspan="2" class="subject-name">
-                Subsidiary Subject-II:
-                <span
-                  >{{ subjects.subsidiary_2.name|default:"Geography" }}</span
-                >
+              {% if forloop.first %}
+              <td rowspan="{{ sub.papers|length }}">3</td>
+              <td rowspan="{{ sub.papers|length }}" class="subject-name">
+                Subsidiary Subject-II: <span>{{ sub.name }}</span>
               </td>
-              <td>Theory</td>
-              <td>75</td>
-              <td>23</td>
-              <td rowspan="2">33</td>
-              <td>
-                {{ subjects.subsidiary_2.papers.1.obtained }}
-              </td>
-              <td rowspan="2">
-                <strong>{{ subjects.subsidiary_2.total_obtained }}</strong>
-              </td>
+              {% endif %}
+              <td>{% if "LAB" in paper.status or "PRAC" in paper.status %}Practical{% else %}Theory{% endif %}</td>
+              <td>{{ paper.max_marks }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ sub.papers|length }}" colspan="2">{{ sub.total_pass }}</td>
+              {% endif %}
+              <td>{{ paper.obtained }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ sub.papers|length }}"><strong>{{ sub.total_obtained }}</strong></td>
+              {% endif %}
             </tr>
-            <tr>
-              <td>Practical</td>
-              <td>25</td>
-              <td>10</td>
-              <td>
-                {{ subjects.subsidiary_2.papers.0.obtained }}
-              </td>
-            </tr>
+            {% endfor %}
+            {% endwith %}
+            {% endif %}
 
             <!-- Composition -->
+            {% if subjects.composition.papers %}
+            {% with comp=subjects.composition %}
+            {% for paper in comp.papers %}
             <tr>
-              <td rowspan="3">4</td>
-              <td rowspan="3" class="subject-name">
-                Composition: <span>Composition</span>
+              {% if forloop.first %}
+              <td rowspan="{{ comp.papers|length }}">4</td>
+              <td rowspan="{{ comp.papers|length }}" class="subject-name">
+                Composition: <span>{{ comp.name }}</span>
               </td>
-              <td>Rastrabhasha hindi</td>
-              <td>100</td>
-              <td colspan="2">33</td>
-              <td colspan="2">
-                <strong>{{ subjects.composition.papers.0.obtained}}</strong>
-              </td>
+              {% endif %}
+              <td>{{ paper.name }}</td>
+              <td>{{ paper.max_marks }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ comp.papers|length }}" colspan="2">{{ comp.total_pass }}</td>
+              {% endif %}
+              <td colspan="2"><strong>{{ paper.obtained }}</strong></td>
             </tr>
-            <tr>
-              <td>Non-Hindi</td>
-              <td>50</td>
-              <td>15</td>
-              <td rowspan="2">33</td>
-              <td colspan="1">
-                <strong>{{ subjects.composition.papers.1.obtained}}</strong>
-              </td>
-              <td rowspan="2"></td>
-            </tr>
-            <tr>
-              <td>MB:</td>
-              <td>50</td>
-              <td>15</td>
-              <td colspan="1">
-                <strong>{{ subjects.composition.papers.2.obtained}}</strong>
-              </td>
-            </tr>
+            {% endfor %}
+            {% endwith %}
+            {% endif %}
 
             <!-- Grand Total -->
             <tr class="grand-total-row">
@@ -581,7 +550,7 @@
           </table>
         </div>
 
-        <!-- Signature Section (Grey Background at Bottom) -->
+        <!-- Signature Section -->
         <div class="signature-section">
           <table class="signature-grid">
             <tr>

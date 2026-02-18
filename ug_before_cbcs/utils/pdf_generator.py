@@ -197,7 +197,7 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     practical = None
 
     for p in honours_papers:
-        if p['paper_code'] == '101':
+        if '101' in p['paper_code']:
             if p['status'] == 'END_TERM':
                 paper1 = p
                 paper1['name'] = 'Paper-I'
@@ -243,12 +243,18 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     gs_total_obt = sum_marks(general_studies_papers)
     gs_total_max = sum_max(general_studies_papers)
 
-    # Get full honours subject name from the first honours paper
-    honours_subject_name = "Honours"
-    if honours_papers and len(honours_papers) > 0:
-        honours_subject_name = honours_papers[0]['name']
-    elif student.discipline_code:
-        honours_subject_name = student.discipline_code
+    # Get full honours subject name from the map
+    honours_subject_name = None
+    for sub in subjects_map.values():
+        if sub['type'] == 'honours':
+            honours_subject_name = sub['name']
+            break
+            
+    if not honours_subject_name:
+        if student.discipline_code:
+            honours_subject_name = student.discipline_code
+        else:
+            honours_subject_name = "Honours"
 
     # Calculate Grand Total
     calculated_grand_total = hons_total_obt + comp_total_obt + gs_total_obt
