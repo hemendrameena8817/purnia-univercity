@@ -5,7 +5,7 @@ This script imports student marks (assessments) from the BTech Student Details E
 It maps END_TERM to 'ESE' and LAB/MID_TERM to 'CIA'.
 
 Usage:
-1. Run: poetry run python scripts/betch/import_betch_student_assessments.py --file "path/to/excel.xlsx"
+1. Run: poetry run python scripts/betch/import_betch_student_assessments.py --file "path/to/excel.xlsx" NOT BEING USED
 """
 
 import os

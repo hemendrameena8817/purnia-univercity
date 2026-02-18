@@ -4,8 +4,11 @@ from django.views.generic import View
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from accounts.permissions import IsUniversityAdmin
 from django.conf import settings
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 import os
 
 from .models import (
@@ -89,6 +92,7 @@ class StudentResultLV(BaseUGLV):
 
 
 # Marksheet PDF View 
+@method_decorator(csrf_exempt, name='dispatch')
 class UGOldMarksheetPDFView(View):
     """
     Generates and returns the Marksheet PDF for Part I, II, or III.
@@ -116,6 +120,7 @@ class UGOldMarksheetPDFView(View):
         return response
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class UGOldMarksheetJSONView(APIView):
     """
     Returns the Marksheet data in JSON format for Part I, II, or III.
@@ -175,3 +180,127 @@ class UGOldMarksheetJSONView(APIView):
         else:
             # If serializer validation fails, return raw data (fallback)
             return Response(context_data, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldMarksheetUpdateView(APIView):
+    """
+    Updates Marksheet data (Exam details and Student marks).
+    Restricted to University Admins.
+    """
+    permission_classes = [IsUniversityAdmin]
+
+    def post(self, request):
+        registration_no = request.data.get("registration_no")
+        part = request.data.get("part")
+        
+        if not registration_no or not part:
+            return Response(
+                {"error": "registration_no and part are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        part_code = f"PART{part}"
+        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        
+        # Get the results to identify the exam
+        results = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=part_code
+        )
+        
+        exam_type = request.data.get("exam_type")
+        if exam_type:
+            results = results.filter(exam_type__iexact=exam_type)
+            
+        first_result = results.select_related('exam').first()
+        if not first_result:
+            return Response({"error": "No marksheet data found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        exam = first_result.exam
+        
+        # Update Exam details (if provided)
+        exam_name = request.data.get("exam_name")
+        exam_month_year = request.data.get("exam_month_year")
+        publication_date = request.data.get("publication_date")
+        centre_name = request.data.get("center_name") or request.data.get("centre_name")
+        
+        if exam_name:
+            exam.name = exam_name
+        if exam_month_year:
+            exam.exam_month_year = exam_month_year
+        if publication_date:
+            exam.publication_date = publication_date
+        if centre_name:
+            exam.centre_name = centre_name
+            
+        if exam_name or exam_month_year or publication_date or centre_name:
+            exam.save()
+            
+        # Update Student details (if provided)
+        student_name = request.data.get("student_name")
+        father_name = request.data.get("fathers_name")
+        mother_name = request.data.get("mothers_name")
+        
+        if student_name: student.student_name = student_name
+        if father_name: student.fathers_name = father_name
+        if mother_name: student.mothers_name = mother_name
+        
+        if student_name or father_name or mother_name:
+            student.save()
+            
+        # Update Marks
+        marks_data = request.data.get("marks", [])
+        for mark_item in marks_data:
+            res_uid = mark_item.get("uid")
+            paper_code = mark_item.get("paper_code")
+            obtained = mark_item.get("obtained")
+            
+            res_obj = None
+            if res_uid:
+                res_obj = results.filter(uid=res_uid).first()
+            elif paper_code:
+                res_obj = results.filter(paper_code=paper_code).first()
+
+            if res_obj:
+                if obtained is not None:
+                    # Validation: obtained <= maximum_mark
+                    try:
+                        # Convert to float for comparison, handle digits or decimal strings
+                        max_mark_str = str(res_obj.maximum_mark)
+                        obt_str = str(obtained)
+                        
+                        # Only validate numerically if both can be converted
+                        if obt_str.replace('.', '', 1).isdigit() and max_mark_str.replace('.', '', 1).isdigit():
+                            obt_val = float(obt_str)
+                            max_mark_val = float(max_mark_str)
+                            
+                            if obt_val > max_mark_val:
+                                return Response(
+                                    {"error": f"Mark {obt_val} for {res_obj.paper_code} exceeds maximum mark {max_mark_val}"},
+                                    status=status.HTTP_400_BAD_REQUEST
+                                )
+                    except (ValueError, TypeError):
+                        # If conversion fails (e.g. 'ABS'), skip numerical validation
+                        pass
+                    
+                    res_obj.mark_secured = obtained
+                    
+                if "status" in mark_item: res_obj.status = mark_item["status"]
+                res_obj.save()
+                
+        # Update Summary fields (final_result, total_secured_mark)
+        # These fields are denormalized on ALL StudentResult records for that student/exam
+        final_result = request.data.get("final_result")
+        total_secured_mark = request.data.get("total_secured_mark")
+        agreegate = request.data.get("agreegate")
+        
+        if final_result or total_secured_mark or agreegate:
+            update_fields = {}
+            if final_result: update_fields["final_result"] = final_result
+            if total_secured_mark: update_fields["total_secured_mark"] = total_secured_mark
+            if agreegate: update_fields["agreegate"] = agreegate
+            
+            UGBeforeCBCSStudentResult.objects.filter(student=student, exam=exam).update(**update_fields)
+
+        return Response({"message": "Marksheet updated successfully"}, status=status.HTTP_200_OK)

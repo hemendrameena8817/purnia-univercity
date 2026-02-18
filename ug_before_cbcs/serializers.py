@@ -64,6 +64,7 @@ class MarksheetStudentSerializer(serializers.Serializer):
 
 class MarksheetPaperSerializer(serializers.Serializer):
     """Serializer for individual paper/subject in marksheet"""
+    uid = serializers.UUIDField()
     name = serializers.CharField()
     paper_code = serializers.CharField()
     status = serializers.CharField()

@@ -129,6 +129,7 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
         paper_obt = clean_mark(result.mark_secured) or total_obtained_calc
 
         paper_data = {
+            'uid': result.uid,
             'name': result.subject_name or result.paper_code,
             'paper_code': result.paper_code,
             'status': result.status.upper() if result.status else '',

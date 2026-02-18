@@ -9,4 +9,5 @@ urlpatterns = [
     path('results/', views.StudentResultLV.as_view(), name='result-list'),
     path('marksheet/pdf/', views.UGOldMarksheetPDFView.as_view(), name='ug-old-marksheet-pdf'),
     path('marksheet/json/', views.UGOldMarksheetJSONView.as_view(), name='ug-old-marksheet-json'),
+    path('marksheet/update/', views.UGOldMarksheetUpdateView.as_view(), name='ug-old-marksheet-update'),
 ]
