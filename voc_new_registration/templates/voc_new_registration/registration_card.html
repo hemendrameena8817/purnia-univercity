@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Registration Card - {{ display_data.name }}</title>
+    <style>
+      @page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+
+      body {
+        font-family: "Times New Roman", Times, serif;
+        margin: 0;
+        padding: 0;
+        background-color: white;
+        color: black;
+      }
+
+      .card-container {
+        width: 175mm; /* Approx 700px converted to mm */
+        margin: 0 auto;
+        position: relative;
+        /* Border design from React */
+        border: 10px solid #c41e3a;
+        padding: 1px;
+      }
+
+      .inner-border {
+        border: 1px solid rgba(196, 30, 58, 0.3);
+        padding: 15mm 10mm;
+        min-height: 250mm;
+      }
+
+      .serial-number {
+        text-align: right;
+        font-size: 10pt;
+        font-weight: bold;
+        margin-bottom: 5mm;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 8mm;
+      }
+
+      .uni-name-hindi {
+        color: #8b0000;
+        font-size: 24pt;
+        font-weight: bold;
+        display: block;
+        margin-bottom: 2mm;
+      }
+
+      .uni-name-eng {
+        color: #8b0000;
+        font-size: 18pt;
+        font-weight: bold;
+        display: block;
+        margin-bottom: 5mm;
+      }
+
+      .card-title {
+        text-align: center;
+        margin-bottom: 8mm;
+      }
+
+      .card-title h3 {
+        font-size: 14pt;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 0;
+      }
+
+      .batch-line {
+        font-size: 11pt;
+        font-weight: bold;
+        margin-top: 2mm;
+      }
+
+      .main-details-flex {
+        display: flex;
+        width: 100%;
+        margin-bottom: 15mm;
+        border: 1px solid black;
+      }
+
+      .details-table-container {
+        flex: 1;
+      }
+
+      .details-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .details-table td {
+        border-bottom: 1px solid black;
+        border-right: 1px solid black;
+        padding: 3mm 4mm;
+        font-size: 10pt;
+        vertical-align: middle;
+      }
+
+      .details-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      .label-col {
+        font-weight: bold;
+        text-transform: uppercase;
+        background-color: #f9f9f9;
+        width: 45%;
+      }
+
+      .value-col {
+        font-weight: 600;
+        text-transform: uppercase;
+      }
+
+      .photo-sign-container {
+        width: 40mm;
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid black;
+      }
+
+      .photo-box {
+        height: 40mm;
+        border-bottom: 1px solid black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #f9f9f9;
+        padding: 2mm;
+        text-align: center;
+      }
+
+      .photo-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+
+      .sign-box {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 3mm;
+        min-height: 15mm;
+        text-align: center;
+      }
+
+      .sign-img-student {
+        max-width: 100%;
+        max-height: 12mm;
+        object-fit: contain;
+      }
+
+      .sign-placeholder {
+        font-size: 8pt;
+        color: #666;
+        font-style: italic;
+        border-top: 1px solid black;
+        padding-top: 1mm;
+        width: 80%;
+      }
+
+      .qr-section {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20mm;
+      }
+
+      .qr-code {
+        width: 35mm;
+        height: 35mm;
+      }
+
+      .footer-signatures {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: 10mm;
+      }
+
+      .official-sign-block {
+        text-align: center;
+        width: 30%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .official-sign-img {
+        height: 15mm;
+        margin-bottom: 2mm;
+        object-fit: contain;
+      }
+
+      .official-label {
+        font-size: 10pt;
+        font-weight: bold;
+        text-transform: capitalize;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card-container">
+      <div class="inner-border">
+        <div class="serial-number">
+          Sl. No.: {{ display_data.serialNumber }}
+        </div>
+
+        <div class="header">
+          <span class="uni-name-hindi">पूर्णियाँ विश्वविद्यालय, पूर्णियाँ</span>
+          <span class="uni-name-eng">PURNEA UNIVERSITY, PURNIA</span>
+        </div>
+
+        <div class="card-title">
+          <h3>REGISTRATION CARD</h3>
+          <div class="batch-line">Batch : {{ display_data.session }}</div>
+        </div>
+
+        <div class="main-details-flex">
+          <div class="details-table-container">
+            <table class="details-table">
+              <tr>
+                <td class="label-col">REGISTRATION NUMBER</td>
+                <td class="value-col">{{ display_data.registrationNo }}</td>
+              </tr>
+              <tr>
+                <td class="label-col">NAME OF THE STUDENT</td>
+                <td class="value-col">{{ display_data.name }}</td>
+              </tr>
+              <tr>
+                <td class="label-col">MOTHER&apos;S NAME</td>
+                <td class="value-col">{{ display_data.motherName }}</td>
+              </tr>
+              <tr>
+                <td class="label-col">FATHER&apos;S NAME</td>
+                <td class="value-col">{{ display_data.fatherName }}</td>
+              </tr>
+              <tr>
+                <td class="label-col">COURSE</td>
+                <td class="value-col">{{ display_data.course }}</td>
+              </tr>
+              <tr>
+                <td class="label-col" style="border-bottom: none">
+                  NAME OF THE COLLEGE
+                </td>
+                <td class="value-col" style="border-bottom: none">
+                  {{ display_data.collegeName }}
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div class="photo-sign-container">
+            <div class="photo-box">
+              {% if display_data.studentPhoto %}
+              <img
+                src="{{ display_data.studentPhoto }}"
+                class="photo-img"
+                alt="Student"
+              />
+              {% else %}
+              <div style="font-size: 10pt; color: #999">Photo</div>
+              {% endif %}
+            </div>
+            <div class="sign-box">
+              {% if display_data.signature %}
+              <img
+                src="{{ display_data.signature }}"
+                class="sign-img-student"
+                alt="Signature"
+              />
+              {% else %}
+              <span class="sign-placeholder">Signature</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <div class="qr-section">
+          <img src="{{ qr_code_src }}" class="qr-code" alt="QR Code" />
+        </div>
+
+        <div class="footer-signatures">
+          <div class="official-sign-block">
+            {% if signatures.assistant %}
+            <img
+              src="{{ signatures.assistant }}"
+              class="official-sign-img"
+              alt="Assistant"
+            />
+            {% endif %}
+            <span class="official-label">Assistant</span>
+          </div>
+          <div class="official-sign-block">
+            {% if signatures.deputy %}
+            <img
+              src="{{ signatures.deputy }}"
+              class="official-sign-img"
+              alt="Dy. Registrar"
+            />
+            {% endif %}
+            <span class="official-label">Dy. Registrar</span>
+          </div>
+          <div class="official-sign-block">
+            {% if signatures.registrar %}
+            <img
+              src="{{ signatures.registrar }}"
+              class="official-sign-img"
+              alt="Registrar"
+            />
+            {% endif %}
+            <span class="official-label">Registrar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
