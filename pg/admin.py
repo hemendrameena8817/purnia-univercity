@@ -137,15 +137,106 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
     )
 
 
+from import_export import resources, fields
+from import_export.widgets import ForeignKeyWidget
+from import_export.admin import ImportExportModelAdmin
+
+class SafeForeignKeyWidget(ForeignKeyWidget):
+    """
+    Custom widget that uses filter().first() instead of get() to avoid 
+    MultipleObjectsReturned error when duplicate related objects exist.
+    """
+    def clean(self, value, row=None, *args, **kwargs):
+        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
+        if val:
+            # Look up object using the specified field
+            # Use filter().first() instead of get()
+            return self.model.objects.filter(**{self.field: val}).first()
+        return None
+
+class PGStudentCourseAssessmentResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+    batch = fields.Field(
+        column_name='batch',
+        attribute='batch',
+        widget=SafeForeignKeyWidget(PGBatch, field='name')
+    )
+    department = fields.Field(
+        column_name='department',
+        attribute='department',
+        widget=ForeignKeyWidget(PGDepartment, field='name')
+    )
+
+    class Meta:
+        model = PGStudentCourseAssessment
+        exclude = ('uid',)  # Exclude UID to allow auto-generation
+        # Default behavior includes all other fields.
+        # import_id_fields = ('id',) # Default is 'id', which works for creation (if id missing) or update.
+
+    def before_import_row(self, row, **kwargs):
+        """
+        Hook called before importing each row.
+        Used here to create PGStudentProfile if it doesn't exist but UserAccount does.
+        """
+        registration_no = row.get('student')
+        if not registration_no:
+            return
+
+        # Check if Profile exists
+        if not PGStudentProfile.objects.filter(registration_no=registration_no).exists():
+            from accounts.models import UserAccount
+            from colleges.models import College
+            
+            # Check if UserAccount exists
+            user = UserAccount.objects.filter(username=registration_no).first()
+            if user:
+                print(f"Creating missing profile for User: {registration_no}")
+                
+                # Resolving Foreign Keys from row data
+                batch_name = row.get('batch')
+                dept_name = row.get('department')
+                college_code = row.get('college_code')
+                
+                batch_obj = PGBatch.objects.filter(name=batch_name).first() if batch_name else None
+                dept_obj = PGDepartment.objects.filter(name=dept_name).first() if dept_name else None
+                college_obj = College.objects.filter(college_code=college_code).first() if college_code else None
+                
+                # Create the Profile
+                PGStudentProfile.objects.create(
+                    user=user,
+                    registration_no=registration_no,
+                    first_name=user.get_full_name(), # Use full name
+                    last_name="", # Leave last name empty
+                    batch=batch_name, # Storing string for now as per model (or is it FK? Model says CharField for batch/roll_no actually? Let's check.)
+                    # Wait, PGStudentProfile.batch is CharField in model lines 205.
+                    # BUT PGStudentProfile.department is ForeignKey.
+                    department=dept_obj,
+                    college=college_obj,
+                    # roll_no might be same as RegNo or empty? Leaving empty.
+                    status='Active'
+                )
+            else:
+                 # Logic if User doesn't exist? 
+                 # User said "exist then create profile".
+                 # So if user not exist, we do nothing (it will fail validation later).
+                 pass
+
 @admin.register(PGStudentCourseAssessment)
-class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
+class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
+    resource_class = PGStudentCourseAssessmentResource
+    
     # Optimized for 400K+ records - showing only essential fields
     list_display = (
-        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type',
-        'ind_marks_obtained', 'ind_is_absent', 
-        'comb_final_marks_obtained', 'sgpa', 'sem_result',
+        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type', 'college_code',
+        'ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 'ind_is_pass', 'ind_is_absent',
+        'comb_max_marks', 'comb_marks_obtained', 'comb_final_marks_obtained',
+        'sgpa', 'sem_result',
         'is_cia_fill', 'is_ese_fill',
-        'session', 'created_at'
+        'session', 'batch', 'department', 'created_at'
     )
     
     # Optimize foreign key queries to prevent N+1 problem
@@ -160,7 +251,8 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
     # Keep only indexed and most useful filters
     list_filter = (
         'semester', 'session', 'batch', 'department', 
-        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code",
+        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code", 'college_code',
+        'is_cia_fill', 'is_ese_fill',
     )
     
     # Optimize search - use indexed fields only
@@ -170,7 +262,8 @@ class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
         'student__last_name',
         'student__roll_no',
         'course_code', 
-        'paper_code'
+        'paper_code',
+        'college_code'
     )
     
     # Smaller page size for faster rendering
@@ -346,6 +439,9 @@ class PGExamResultAdmin(admin.ModelAdmin):
         'created_at'
     )
     
+    # Optimization: Reduce database queries
+    list_select_related = ('student', 'student__department', 'student__program', 'student__college')
+    
     list_filter = (
         'semester',
         'session',
@@ -358,6 +454,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
         'student__batch'
     )
     
+    # Optimized search fields
     search_fields = (
         'student__registration_no',
         'student__first_name',
@@ -606,7 +703,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
             return 'No ESE assessments found (or not yet entered)'
         
         rows = []
-        for assessment in assessments:
+        for assessment in ese_courses:
             # Calculate pass status
             is_pass = False
             if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
