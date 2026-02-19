@@ -377,6 +377,37 @@ class PGExamRegistrationResource(resources.ModelResource):
         exclude = ('uid', 'id')
         import_id_fields = ('student', 'sem', 'session', 'exam_type')
 
+    def before_import_row(self, row, **kwargs):
+        """
+        Hook called before importing each row.
+        Used here to create PGStudentProfile if it doesn't exist but UserAccount does.
+        """
+        registration_no = row.get('student')
+        if not registration_no:
+            return
+
+        # Check if Profile exists
+        if not PGStudentProfile.objects.filter(registration_no=registration_no).exists():
+            from accounts.models import UserAccount
+            from colleges.models import College
+            
+            # Check if UserAccount exists
+            user = UserAccount.objects.filter(username=registration_no).first()
+            if user:
+                # print(f"Creating missing profile for User: {registration_no}")
+                
+                # Resolving Foreign Keys from row data if available (though these are on registration, not profile usually)
+                # For Profile creation, we try to use defaults or data from account
+                
+                # Create the Profile
+                PGStudentProfile.objects.create(
+                    user=user,
+                    registration_no=registration_no,
+                    first_name=user.get_full_name(), 
+                    last_name="", 
+                    status='Active'
+                )
+
 @admin.register(PGExamRegistration)
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
