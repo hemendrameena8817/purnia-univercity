@@ -10,8 +10,8 @@ poetry run python manage.py shell
 
 Then:
 >>> from scripts.voc_new_registration.import_voc_registrations import run_import
->>> run_import('scripts/voc_new_registration/data/All B.Ed Data 2025-27.xlsx')
->>> run_import('path/to/file.xlsx', dry_run=True)  # Test first
+>>> run_import('courses_data/voc/BBA_TEST_25_28.xlsx')
+>>> run_import('courses_data/voc/BBA_TEST_25_28.xlsx', dry_run=True)  # Test first
 >>> run_import('path/to/file.xlsx', sheet='Sheet2', skip_errors=True)
 
 OR run directly:
@@ -24,10 +24,7 @@ Optional columns: FATHER'S NAME, MOTHER'S NAME, GENDER, CASTE, DOB, MOBILE NO, E
 SESSION, STUDENT NAME IN HINDI, MIGRATION SUBMITTED, LAST ATTENDED UNIVERSITY
 
 Accepted CASTE values: GEN, General, GEN., UR, Unreserved, OBC, BC, BC-I, BC-II, 
-BC (Annexure-II), SC, ST, EWS, EBC, EBC-I, EBC (Annexure-I)
-
-NOTE: College codes like "04" may be converted to "4" by Excel. The script automatically
-pads single-digit numeric codes with leading zeros (4 → 04) to match database values.
+BC (Annexure-II), SC, ST, EWS, EBC, EBC-I, EBC (Annexure-I). If not matched, it will be set to empty.
 """
 
 import pandas as pd
@@ -45,6 +42,7 @@ if __name__ == '__main__':
     django.setup()
 
 from colleges.models import College
+from voc_new_registration.options import CASTE_CHOICES
 from voc_new_registration.models import (
     NewRegistration,
     NewRegistrationCourse,
@@ -97,16 +95,20 @@ class Command(BaseCommand):
         # Gender validation - invalid values will be set to NULL during import
         # No validation error for gender - just accept any value
         
-        # Validate caste - Standardize variations to 'General'
+        # Validate caste - Standardize variations to 'General' and match against database options
         if data.get('caste'):
             caste_val = str(data['caste']).strip()
             caste_upper = caste_val.upper()
+            
+            # Map common variations to database values
             if caste_upper in ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED']:
                 data['caste'] = 'General'
-                self.stdout.write(self.style.NOTICE(f"Row {row_num}: Caste '{caste_val}' mapped to 'General'"))
-            else:
-                self.stdout.write(self.style.NOTICE(f"Row {row_num}: Caste '{caste_val}' kept as '{caste_val}'"))
-            # Keep other caste values as-is
+            
+            # Check if finalized caste value is in valid choices
+            valid_castes = [choice[0] for choice in CASTE_CHOICES]
+            if data['caste'] not in valid_castes:
+                self.stdout.write(self.style.WARNING(f"Row {row_num}: Caste '{caste_val}' not recognized - will be set to empty"))
+                # Note: We don't add to errors because the user wants it to be considered empty if not matched
         
         # Validate mobile number
         if data.get('mobile_no'):
@@ -117,10 +119,12 @@ class Command(BaseCommand):
             if len(mobile) != 10 or not mobile.isdigit():
                 errors.append(f"Row {row_num}: Invalid mobile number '{mobile}' (must be 10 digits)")
         
-        # Validate email format
+        # Validate email format and check for gaps/spaces
         if data.get('email'):
             email = str(data['email']).strip().lower()
-            if '@' not in email or '.' not in email.split('@')[1]:
+            if ' ' in email:
+                errors.append(f"Row {row_num}: Email contains spaces/gaps '{email}'")
+            elif '@' not in email or '.' not in email.split('@')[1]:
                 errors.append(f"Row {row_num}: Invalid email format '{email}'")
         
         # Validate DOB
@@ -190,7 +194,7 @@ class Command(BaseCommand):
             
             self.stdout.write(self.style.SUCCESS(f'Found {len(df)} rows in Excel file'))
             
-            # Column mapping
+            # Column mapping - simple and direct
             column_mapping = {
                 'STUDENT NAME': 'student_name',
                 'STUDENT NAME IN HINDI': 'student_name_hindi',
@@ -207,7 +211,6 @@ class Command(BaseCommand):
                 'MIGRATION SUBMITTED': 'migration_submitted',
                 'LAST ATTENDED UNIVERSITY': 'last_attended_university',
                 'COLLEGE CODE': 'college_code',
-                'BATCH': 'batch',
                 'SESSION': 'session',
             }
             
@@ -221,8 +224,14 @@ class Command(BaseCommand):
             all_validation_errors = []
             aadhaar_duplicates_in_sheet = {}
             
+            # Log headers to help debug column mapping
+            excel_headers = [str(k).strip() for k in df.columns]
+            self.stdout.write(self.style.NOTICE(f"Detected Excel headers: {excel_headers}"))
+            
             for index, row in df.iterrows():
-                row_data = {str(k).upper().strip(): v for k, v in row.items()}
+                # Normalize headers to UPPERCASE for internal matching
+                # This fixes issues where Excel has "College Code" but code expects "COLLEGE CODE"
+                row_data = {str(k).strip().upper(): v for k, v in row.items()}
                 
                 # Validate row
                 row_errors = self.validate_row(row_data, index, column_mapping)
@@ -279,7 +288,7 @@ class Command(BaseCommand):
             success_count = 0
             
             for index, row in df.iterrows():
-                row_data = {str(k).upper().strip(): v for k, v in row.items()}
+                row_data = {str(k).strip().upper(): v for k, v in row.items()}
 
                 data = {}
                 for excel_col, model_field in column_mapping.items():
@@ -365,17 +374,21 @@ class Command(BaseCommand):
                 else:
                     data['gender'] = None
                 
-                # Handle Caste Mapping - Standardize variations to 'General'
+                # Handle Caste Mapping - Standardize and match against database options
                 if 'caste' in data and data['caste']:
                     caste_val = str(data['caste']).strip()
+                    caste_upper = caste_val.upper()
                     
                     # Map common variations to database values
-                    caste_upper = caste_val.upper()
                     if caste_upper in ['GEN', 'GEN.', 'GENERAL', 'UR', 'UNRESERVED']:
                         data['caste'] = 'General'
                     else:
-                        # Keep original value (BC, BC-I, BC-II, BC (Annexure-II), EBC, EBC-I, EBC (Annexure-I), SC, ST, EWS, OBC)
                         data['caste'] = caste_val
+                    
+                    # Only keep if valid choice, else set to None
+                    valid_castes = [choice[0] for choice in CASTE_CHOICES]
+                    if data['caste'] not in valid_castes:
+                        data['caste'] = None
                 else:
                     data['caste'] = None
                 
@@ -409,6 +422,8 @@ class Command(BaseCommand):
                 # Clean email
                 if 'email' in data and data['email']:
                     data['email'] = str(data['email']).strip().lower()
+                else:
+                    data['email'] = None
 
                 # Handle DOB
                 # user requested: if only number like 959385 or 34784 just make it empty
