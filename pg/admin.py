@@ -6,7 +6,8 @@ from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
     PGCommonCourseStructure, PGExamResult,
-    # PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule
+    PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule,
+    PGExamRegistrationPayment,
 )
 
 
@@ -229,93 +230,110 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     resource_class = PGStudentCourseAssessmentResource
-    
-    # Optimized for 400K+ records - showing only essential fields
+
+    # ── List view: only essential columns ─────────────────────────────────
     list_display = (
-        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type', 'college_code',
-        'ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 'ind_is_pass', 'ind_is_absent',
-        'comb_max_marks', 'comb_marks_obtained', 'comb_final_marks_obtained',
-        'sgpa', 'sem_result',
-        'is_cia_fill', 'is_ese_fill',
-        'session', 'batch', 'department', 'created_at'
+        'get_regno', 'get_student_name', 'paper_code', 'semester',
+        'label', 'exam_type', 'session',
+        'ind_marks_obtained', 'ind_max_marks', 'ind_is_absent', 'ind_is_pass',
+        'sem_result', 'is_ese_fill',
     )
-    
-    # Optimize foreign key queries to prevent N+1 problem
+
+    # Prevent N+1: join student in the same query
     list_select_related = ('student', 'department', 'batch')
-    
-    # Use raw ID fields instead of dropdowns for better performance
+
+    # Raw-id widgets → avoids loading full dropdown lists
     raw_id_fields = ('student', 'department', 'batch')
-    
-    # Disable expensive COUNT(*) query on 400K records
+
+    # No COUNT(*) on 400K rows
     show_full_result_count = False
-    
-    # Keep only indexed and most useful filters
+
+    # Only FK / indexed / low-cardinality fields as filters
     list_filter = (
-        'semester', 'session', 'batch', 'department', 
-        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code", 'college_code',
-        'is_cia_fill', 'is_ese_fill', 'created_at',
+        'semester', 'session', 'exam_type', 'label',
+        'ind_is_absent', 'sem_result',
+        'is_cia_fill', 'is_ese_fill',
+        'department',
     )
-    
-    # Optimize search - use indexed fields only
+
+    # Search on indexed fields only
     search_fields = (
-        'student__registration_no', 
-        'student__first_name', 
-        'student__last_name',
+        'student__registration_no',
         'student__roll_no',
-        'course_code', 
         'paper_code',
-        'college_code'
+        'college_code',
     )
-    
-    # Smaller page size for faster rendering
+
     list_per_page = 50
-    
-    ordering = ('-created_at',)
-    
-    # Make calculated/imported fields readonly
+
+    # No default ordering → avoids full-table sort on 400K rows
+    # Use search / filters to narrow first, then sort
+    ordering = []
+
     readonly_fields = (
         'uid', 'created_at', 'updated_at',
         'comb_max_marks', 'comb_final_marks_obtained', 'comb_grade_point',
         'course_max_marks', 'course_final_marks_obtained', 'course_grade_point',
-        'sem_max_credit', 'sgpa', 'sem_result'
+        'sem_max_credit', 'sgpa', 'sem_result',
     )
-    
+
     fieldsets = (
         ('Student & Course Info', {
-            'fields': ('uid', 'student', 'course_name', 'course_short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label')
+            'fields': ('uid', 'student', 'course_name', 'course_short_name',
+                       'course_type', 'course_code', 'paper_code', 'semester', 'label')
         }),
         ('Exam Details', {
-            'fields': ('exam_type', 'session', 'batch', 'department', 'degree', 'college_code', 'attendance', 'is_cia_fill', 'is_ese_fill')
+            'fields': ('exam_type', 'session', 'batch', 'department',
+                       'degree', 'college_code', 'attendance', 'is_cia_fill', 'is_ese_fill')
         }),
         ('Individual Assessment', {
-            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 
-                      'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 'ind_is_absent')
+            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained',
+                       'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 'ind_is_absent')
         }),
         ('Combined Assessment', {
-            'fields': ('comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained', 
-                      'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained', 
-                      'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point')
+            'fields': ('comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained',
+                       'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained',
+                       'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point'),
+            'classes': ('collapse',)
         }),
         ('Course Assessment', {
             'fields': ('course_max_marks', 'course_max_credits', 'course_pass_marks', 'course_marks_obtained',
-                      'course_grace_obtained', 'course_final_marks_obtained', 'course_credit_obtained', 'course_grade_point')
-        }),
-        ('Semester Assessment', {
-            'fields': ('sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained')
-        }),
-        ('Temp Fields', {
-            'fields': ('temp_total_gp',),
+                       'course_grace_obtained', 'course_final_marks_obtained',
+                       'course_credit_obtained', 'course_grade_point'),
             'classes': ('collapse',)
         }),
-        ('Additional Data', {
-            'fields': ('json_data',),
+        ('Semester Assessment', {
+            'fields': ('sem_max_credit', 'sem_credit_obtained', 'sgpa',
+                       'sem_result', 'next_sem_status', 'sem_grace_obtained')
+        }),
+        ('Temp / JSON', {
+            'fields': ('temp_total_gp', 'json_data'),
             'classes': ('collapse',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
-        })
+        }),
     )
+
+    # ── Queryset: select_related to prevent N+1 on list page ──────────────
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'student', 'department', 'batch'
+        )
+
+    # ── Compact display helpers ────────────────────────────────────────────
+    def get_regno(self, obj):
+        return obj.student.registration_no if obj.student else '-'
+    get_regno.short_description = 'Reg No'
+    get_regno.admin_order_field = 'student__registration_no'
+
+    def get_student_name(self, obj):
+        if obj.student:
+            return f"{obj.student.first_name or ''} {obj.student.last_name or ''}".strip()
+        return '-'
+    get_student_name.short_description = 'Name'
+    get_student_name.admin_order_field = 'student__first_name'
 
 
 @admin.register(PGSemesterRegistration)
@@ -758,43 +776,82 @@ class PGExamResultAdmin(admin.ModelAdmin):
         })
     )
 
-# @admin.register(PGExam)
-# class PGExamAdmin(admin.ModelAdmin):
-#     list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
-#     list_filter = ('session', 'year', 'batch')
-#     search_fields = ('name', 'session', 'batch')
-#     ordering = ('-created_at',)
+@admin.register(PGExam)
+class PGExamAdmin(admin.ModelAdmin):
+    list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
+    list_filter = ('session', 'year', 'batch')
+    search_fields = ('name', 'session', 'batch')
+    ordering = ('-created_at',)
 
-# @admin.register(PGExamCenterMapping)
-# class PGExamCenterMappingAdmin(admin.ModelAdmin):
-#     list_display = ('center', 'get_exams_count', 'get_attached_colleges_count', 'created_at')
-#     list_filter = ('center',)
-#     search_fields = ('center__name', 'center__code')
-#     filter_horizontal = ('exams', 'attached_colleges')
+@admin.register(PGExamCenterMapping)
+class PGExamCenterMappingAdmin(admin.ModelAdmin):
+    list_display = ('center', 'get_exams_count', 'get_attached_colleges_count', 'created_at')
+    list_filter = ('center',)
+    search_fields = ('center__name', 'center__code')
+    filter_horizontal = ('exams', 'attached_colleges')
     
-#     def get_exams_count(self, obj):
-#         return obj.exams.count()
-#     get_exams_count.short_description = 'Exams Count'
+    def get_exams_count(self, obj):
+        return obj.exams.count()
+    get_exams_count.short_description = 'Exams Count'
     
-#     def get_attached_colleges_count(self, obj):
-#         return obj.attached_colleges.count()
-#     get_attached_colleges_count.short_description = 'Attached Colleges Count'
+    def get_attached_colleges_count(self, obj):
+        return obj.attached_colleges.count()
+    get_attached_colleges_count.short_description = 'Attached Colleges Count'
 
-# @admin.register(PGGroup)
-# class PGGroupAdmin(admin.ModelAdmin):
-#     list_display = ('name', 'get_departments', 'created_at')
-#     list_filter = ('department',)
-#     search_fields = ('name', 'department__name')
-#     ordering = ('name',)
-#     filter_horizontal = ('department',)
+@admin.register(PGGroup)
+class PGGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'get_departments', 'created_at')
+    list_filter = ('department',)
+    search_fields = ('name', 'department__name')
+    ordering = ('name',)
+    filter_horizontal = ('department',)
 
-#     def get_departments(self, obj):
-#         return ", ".join([d.name for d in obj.department.all() if d.name])
-#     get_departments.short_description = 'Departments'
+    def get_departments(self, obj):
+        return ", ".join([d.name for d in obj.department.all() if d.name])
+    get_departments.short_description = 'Departments'
 
-# @admin.register(PGExamSchedule)
-# class PGExamScheduleAdmin(admin.ModelAdmin):
-#     list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
-#     list_filter = ('exam', 'group', 'exam_date', 'sitting')
-#     search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
-#     ordering = ('exam_date', 'exam_time')
+@admin.register(PGExamSchedule)
+class PGExamScheduleAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+    list_filter = ('exam', 'group', 'exam_date', 'sitting')
+    search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
+    ordering = ('exam_date', 'exam_time')
+
+
+@admin.register(PGExamRegistrationPayment)
+class PGExamRegistrationPaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        'order_id', 
+        'get_student_info', 
+        'amount', 
+        'payment_status', 
+        'tracking_id', 
+        'payment_mode', 
+        'created_at'
+    )
+    list_filter = ('payment_status', 'payment_mode', 'created_at')
+    search_fields = (
+        'order_id', 
+        'tracking_id', 
+        'bank_ref_no',
+        'registration__student__registration_no',
+        'registration__student__first_name',
+        'registration__student__mobile_no'
+    )
+    readonly_fields = (
+        'uid', 
+        'registration', 
+        'order_id', 
+        'tracking_id', 
+        'bank_ref_no', 
+        'raw_response', 
+        'created_at', 
+        'updated_at'
+    )
+    ordering = ('-created_at',)
+    
+    def get_student_info(self, obj):
+        student = obj.registration.student
+        return f"{student.first_name} ({student.registration_no})"
+    get_student_info.short_description = 'Student'
+

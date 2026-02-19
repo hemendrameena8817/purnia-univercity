@@ -25,7 +25,15 @@ Usage:
         dry_run=True
     )
 """
-
+# Regular 3RD semester entries create karne ke liye ye command run hui thi:
+# python manage.py shell -c "
+# from pg.services.create_next_semester_assessments import NextSemesterAssessmentService
+# NextSemesterAssessmentService.create_assessments_for_eligible_students(
+#     semester='2ND', 
+#     session='2022-24', 
+#     batch='2024-25', 
+#     dry_run=False
+# )"
 from decimal import Decimal
 from typing import Dict, List, Optional
 from django.db import transaction
