@@ -365,8 +365,20 @@ class PGSemesterRegistrationAdmin(admin.ModelAdmin):
     )
 
 
+class PGExamRegistrationResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+
+    class Meta:
+        model = PGExamRegistration
+        exclude = ('uid', 'id')
+
 @admin.register(PGExamRegistration)
-class PGExamRegistrationAdmin(admin.ModelAdmin):
+class PGExamRegistrationAdmin(ImportExportModelAdmin):
+    resource_class = PGExamRegistrationResource
     list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'start_date', 'end_date',)
     list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type')
     search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session')
