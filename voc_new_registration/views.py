@@ -570,11 +570,14 @@ class PaymentResponseView(views.APIView):
             
             if hasattr(payment, 'registration') and hasattr(payment.registration, 'uid'):
                 uid = str(payment.registration.uid)
+                course_code = payment.registration.course.code if payment.registration.course else ""
+                
                 redirect_url = (
                     f"{frontend_url}/new-registration/registration-status"
                     f"?uid={uid}"
                     f"&payment_status={payment.payment_status.lower()}"
                     f"&order_id={order_id}"
+                    f"&course_code={course_code}"
                 )
                 if payment.payment_status == 'SUCCESS' and payment.registration.registration_number:
                     redirect_url += f"&registration_number={payment.registration.registration_number}"
