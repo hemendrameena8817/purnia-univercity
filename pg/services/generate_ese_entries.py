@@ -133,6 +133,19 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                     # print(f"  WARNING: PGCourseStructure not found for {paper_code} in {student.department}. Using defaults.")
                     pass
 
+                # Explicitly fetch exam type from 2025-26 3RD sem CIA entry
+                # This ensures we get the correct status (Regular/Back) even if running for a different context or if multiple exist
+                target_cia_for_type = PGStudentCourseAssessment.objects.filter(
+                    student=student,
+                    paper_code=paper_code,
+                    semester='3RD',
+                    session='2025-26',
+                    label__icontains='CIA'
+                ).first()
+                
+                final_exam_type = cia_entry.exam_type
+                if target_cia_for_type:
+                    final_exam_type = target_cia_for_type.exam_type
                 
                 if not dry_run:
                     try:
@@ -150,7 +163,7 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                             
                             session=session,
                             college_code=cia_entry.college_code,
-                            exam_type=cia_entry.exam_type, # Carry forward Regular/Back status
+                            exam_type=final_exam_type, # Carry forward Regular/Back status from 2025-26 3RD sem lookup
                             
                             # ESE Specifics
                             ind_max_marks=ese_max_marks,
