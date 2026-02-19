@@ -79,22 +79,6 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                     unique_papers[assess.paper_code] = assess
             
             for paper_code, cia_entry in unique_papers.items():
-                # [Refinement] Ensure this specific paper was passed in CIA?
-                # Usually if cia_pass=True for the semester, they passed all.
-                # But to be safe and explicit as per request "create only his all cia entry", 
-                # let's skip if the specific paper wasn't passed (though cia_pass implies all passed).
-                
-                # Check if this specific CIA entry is a pass
-                if not cia_entry.ind_is_pass:
-                    # Double check marks just in case status isn't updated
-                    is_actually_pass = False
-                    if cia_entry.ind_marks_obtained is not None and cia_entry.ind_pass_marks is not None:
-                        is_actually_pass = cia_entry.ind_marks_obtained >= cia_entry.ind_pass_marks
-                    
-                    if not is_actually_pass:
-                        # print(f"  Skipping {paper_code}: CIA not passed.")
-                        continue
-
                 # Check if ESE entry already exists
                 ese_exists = PGStudentCourseAssessment.objects.filter(
                     student=student,
@@ -110,17 +94,45 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                     continue
                 
                 # Determine Max/Pass Marks for ESE
-                # Standard Logic:
-                # If CIA Max was 30 -> ESE Max 70 (Total 100)
-                # If CIA Max was 15/10 -> ESE might be different.
-                # Ideally should come from CourseStructure, but user asked to base it on CIA entry.
+                # Fetch from PGCourseStructure as per user request
+                from pg.models import PGCourseStructure
                 
-                # Default for PG
-                ese_max_marks = 70
-                ese_pass_marks = 31.5
+                # Default values
+                # ese_max_marks = 70
+                # ese_pass_marks = 31.5
                 
-                # Adjust based on Course Type or Credits if needed, but standard is 70/30 split.
-                # If user wants specific logic, we can adjust. For now, assuming standard 70.
+                # Try to find structure
+                # We match by course_code/paper_code and department/batch
+                # PGCourseStructure is specific to Department and Batch usually.
+                
+                structure = PGCourseStructure.objects.filter(
+                    code=cia_entry.course_code, # 'code' field in PGCourseStructure usually holds the course code like CC-1
+                    # Also try to match department or batch if possible to be precise
+                    department=student.department
+                ).first()
+                
+                if not structure:
+                    # Try by paper_code
+                     structure = PGCourseStructure.objects.filter(
+                        paper_code=cia_entry.paper_code,
+                        department=student.department
+                    ).first()
+
+                if structure:
+                    if structure.max_marks:
+                        ese_max_marks = structure.max_marks
+                    
+                    if structure.min_marks:
+                        ese_pass_marks = structure.min_marks
+                    else:
+                        # Fallback calculation if min_marks not set
+                         ese_pass_marks = float(ese_max_marks) * 0.45
+                        
+                    # print(f"  Found PGCourseStructure for {paper_code}: Max {ese_max_marks}, Pass {ese_pass_marks}")
+                else:
+                    # print(f"  WARNING: PGCourseStructure not found for {paper_code} in {student.department}. Using defaults.")
+                    pass
+
                 
                 if not dry_run:
                     try:
@@ -147,18 +159,8 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                             ind_is_absent=False,
                             ind_is_pass=None,
                             
-                            # Course totals (usually same as ESE max for the component, or total course max?)
-                            # In this model, course_max_marks seems to be the TOTAL (CIA+ESE) or Component?
-                            # Looking at CIA entries, they had course_max_marks=30. 
-                            # So ESE entry should probably have course_max_marks=70 or 100?
-                            # Often in such systems, valid breakdown is separate rows.
-                            
-                            # Let's check the corrected Economics script:
-                            # It used course_max_marks=30 for CIA.
-                            # So for ESE, we use 70.
-                            
-                            course_max_marks=ese_max_marks,
-                            course_pass_marks=ese_pass_marks,
+                            course_max_marks=None, # Using ESE max as course max for this entry
+                            course_pass_marks=None,
                             
                             comb_max_credits=cia_entry.comb_max_credits,
                             course_type=cia_entry.course_type,
