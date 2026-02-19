@@ -73,23 +73,31 @@ class DashboardService:
     @classmethod
     def _get_pg_data(cls, user) -> Dict:
         """Get PG student dashboard data"""
+        from pg.services.pg_registration_eligiblity import check_pg_registration_eligibility
+
         student = PGStudentProfile.objects.select_related(
-            'program', 'college'
+            'program', 'college', 'department'
         ).get(user=user)
-        
+
+        eligibility_data = check_pg_registration_eligibility(student)
+
+        # Drop the raw model object — dashboard doesn't need it and it's not JSON serializable
+        eligibility_data.pop('_registration', None)
+
         return {
             'student_info': {
-                'registration_no': getattr(student, 'registration_no', None),
-                'name': f"{getattr(student, 'first_name', '') or ''} {getattr(student, 'last_name', '') or ''}".strip(),
+                'registration_no': student.registration_no,
+                'roll_no': student.roll_no,
+                'name': f"{student.first_name or ''} {student.last_name or ''}".strip(),
                 'program': student.program.name if student.program else None,
+                'department': student.department.name if student.department else None,
                 'college': student.college.name if student.college else None,
-                'current_semester': getattr(student, 'current_semester', None),
+                'current_semester': student.current_semester,
+                'session': student.session,
+                'profile_image': student.profile_image.url if student.profile_image else None,
             },
-            'registration': {
-                'eligible': False,
-                'reason': 'PG registration service not yet implemented',
-                'registration_open': False,
-            }
+            'batch': student.batch,
+            'registration': eligibility_data
         }
     
     @classmethod
