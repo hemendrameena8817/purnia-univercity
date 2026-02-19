@@ -50,6 +50,7 @@ class NewRegistrationAdmin(ImportExportModelAdmin):
     
     list_display = (
         'uid', 
+        'aadhaar_no',
         'student_name', 
         'registration_number', 
         'course', 
