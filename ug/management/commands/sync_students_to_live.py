@@ -72,8 +72,14 @@ class Command(BaseCommand):
 
         # ── Import models here to avoid circular import issues ────────────────
         from accounts.models import UserAccount
-        from ug.models import UGStudentProfile, UGDepartment, UGProgram, UGDegree, UGBatch
+        from ug.models import UGStudentProfile, UGDepartment, UGProgram, UGDegree, UGBatch, SemesterRegistration
         from colleges.models import College  # adjust if your app name differs
+        from django.utils import timezone
+        import datetime
+
+        # Fixed values for SemesterRegistration
+        SEM_REG_START = datetime.datetime(2026, 2, 15, 0, 0, 0, tzinfo=datetime.timezone.utc)
+        SEM_REG_END   = datetime.datetime(2026, 2, 20, 23, 59, 59, tzinfo=datetime.timezone.utc)
 
         stats = {'synced': 0, 'skipped': 0, 'errors': 0}
 
@@ -251,6 +257,36 @@ class Command(BaseCommand):
                             f"  ✓ Created UGStudentProfile: {reg_no}"
                         ))
                         stats['synced'] += 1
+
+                    # ── 5. SemesterRegistration on live DB (skip if already exists) ──
+                    # Get the live profile reference (whether just created or pre-existing)
+                    live_ug_profile = UGStudentProfile.objects.using('live').filter(
+                        registration_no=reg_no
+                    ).first()
+
+                    if live_ug_profile:
+                        sem_reg_exists = SemesterRegistration.objects.using('live').filter(
+                            student=live_ug_profile,
+                            sem=3,
+                            session='2025-26'
+                        ).exists()
+
+                        if sem_reg_exists:
+                            self.stdout.write(f"  ⏭  SemesterRegistration already exists for {reg_no} sem=3 — skipping")
+                        else:
+                            SemesterRegistration.objects.using('live').create(
+                                student=live_ug_profile,
+                                batch=live_batch,
+                                sem=3,
+                                session='2025-26',
+                                status='PENDING',
+                                is_open=True,
+                                start_date=SEM_REG_START,
+                                end_date=SEM_REG_END,
+                            )
+                            self.stdout.write(self.style.SUCCESS(
+                                f"  ✓ Created SemesterRegistration: {reg_no} sem=3 session=2025-26"
+                            ))
 
             except Exception as e:
                 self.stderr.write(self.style.ERROR(f"  ✗ Failed for {reg_no}: {e}"))
