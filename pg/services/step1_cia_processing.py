@@ -1,18 +1,29 @@
 """
-Step 1: PG CIA Result Processing Service
+Step 1: CIA Processing for PG Students
 
-Processes MID_TERM (CIA equivalent) assessment results for a batch and semester:
-1. Checks if students passed ALL MID_TERM assessments
-2. Creates PGExamResult entries with cia_pass flag (MID_TERM status)
-3. Creates PGExamRegistration entries for END_TERM (ESE) if MID_TERM passed
-4. Sets initial values for END_TERM processing
+Processes CIA (Internal Assessment) results for a batch and semester:
+1. Checks if students passed ALL CIA assessments
+2. Creates PGExamResult entries with cia_pass flag (CIA status)
+3. Creates PGExamRegistration entries for ESE if CIA passed
+4. Sets initial values for ESE processing
 
-Note: PG uses MID_TERM/END_TERM instead of CIA/ESE terminology.
+Note: PG uses CIA/ESE terminology.
 
-This is the FIRST step in the PG result processing pipeline.
-Run this after MID_TERM marks have been entered for all students.
+Usage Examples:
+    # Regular batch processing (dry run)
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --dry-run
+    
+    # Back paper processing - includes all batches in session (dry run)
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches --dry-run
+    
+    # Production run (saves to database)
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25
+    
+    # Back paper production run
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches
+
+Note: Run this after CIA marks have been entered for all students.
 """
-# python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1ST --session 2024-25
 
 from decimal import Decimal
 from typing import Dict, List
@@ -38,18 +49,24 @@ class PGCIAResultProcessingService:
     # 1. INITIALIZATION & SETUP
     ################################################################################
     
-    def __init__(self, batch: str, semester: str, session: str):
+    def __init__(self, batch: str = None, semester: str = None, session: str = None, include_all_batches: bool = False):
         """
         Initialize service
         
         Args:
-            batch: Batch code (e.g., '23-25')
+            batch: Batch code (e.g., '23-25') (Optional)
             semester: Semester code (e.g., '1ST', '2ND')
             session: Academic session (e.g., '2024-25')
+            include_all_batches: If True, includes students from all batches who have
+                               assessments in this session (for back paper processing)
         """
         self.batch = batch
         self.semester = semester
         self.session = session
+        self.include_all_batches = include_all_batches
+        
+        if not self.batch:
+            self.include_all_batches = True
         self.stats = {
             'total_students': 0,
             'students_with_cia': 0,
@@ -73,25 +90,36 @@ class PGCIAResultProcessingService:
         """
         self._print_header()
         
-        # Get batch object first
+        # Get batch object first (if needed)
         from pg.models import PGBatch
-        try:
-            batch_objs = list(PGBatch.objects.filter(name=self.batch))
-            if not batch_objs:
-                raise PGBatch.DoesNotExist
-        except PGBatch.DoesNotExist:
-            print(f"\n❌ ERROR: Batch '{self.batch}' not found in database")
-            return self.stats
         
-        # Get all students in batch who have assessments in this semester
-        # PGBatch.name is usually what PGStudentProfile.batch (CharField) stores.
-        students = PGStudentProfile.objects.filter(
-            batch=self.batch,
-            course_assessments__semester=self.semester
-        ).distinct()
+        if self.batch and not self.include_all_batches:
+            try:
+                batch_objs = list(PGBatch.objects.filter(name=self.batch))
+                if not batch_objs:
+                    raise PGBatch.DoesNotExist
+            except PGBatch.DoesNotExist:
+                print(f"\n❌ ERROR: Batch '{self.batch}' not found in database")
+                return self.stats
+        
+        # Get students based on filtering mode
+        if self.include_all_batches:
+            # Include ALL students with assessments in this session (for back papers)
+            students = PGStudentProfile.objects.filter(
+                course_assessments__semester=self.semester,
+                course_assessments__session=self.session
+            ).distinct()
+            print(f"\n📊 Processing ALL batches with assessments in session {self.session}")
+        else:
+            # Original logic: only students from specified batch
+            students = PGStudentProfile.objects.filter(
+                batch=self.batch,
+                course_assessments__semester=self.semester
+            ).distinct()
+            print(f"\n📊 Found students in batch {self.batch} for semester {self.semester}")
+        
         self.stats['total_students'] = students.count()
-        
-        print(f"\n📊 Found {self.stats['total_students']:,} students in batch {self.batch} for semester {self.semester}")
+        print(f"   Total students to process: {self.stats['total_students']:,}")
         print(f"{'='*100}\n")
         
         # Process each student
@@ -136,11 +164,12 @@ class PGCIAResultProcessingService:
             dry_run: If True, don't save to database
             show_detail: If True, print detailed assessment information
         """
-        # Get all MID_TERM (CIA equivalent) assessments for this student in semester
+        # Get all CIA (Internal Assessment) assessments for this student in semester
         cia_assessments = PGStudentCourseAssessment.objects.filter(
             student=student,
             semester=self.semester,
-            label__icontains='MID_TERM'  # PG uses MID_TERM instead of CIA
+            session=self.session,
+            label__icontains='CIA'  # PG uses CIA for internal assessment
         )
 
         # CHECK PROMOTION STATUS (For Semesters > 1)
@@ -171,7 +200,7 @@ class PGCIAResultProcessingService:
                         return
                     
                     # Also check for valid promotion status
-                    if prev_result.semester_result not in ['PASS', 'PROMOTED']:
+                    if prev_result.semester_result not in ['PASS', 'PROMOTED', 'QUALIFIED']:
                        if show_detail:
                            print(f"⚠️ SKIPPING: Student not promoted from {prev_sem_str} (Status: {prev_result.semester_result})")
                        return
@@ -195,7 +224,7 @@ class PGCIAResultProcessingService:
             print(f"Reg No:  {student.registration_no}")
             print(f"Batch:   {student.batch if student.batch else 'N/A'}")
             print(f"Dept:    {student.department.name if student.department else 'N/A'}")
-            print(f"\nMID_TERM Assessments ({cia_assessments.count()} courses):")
+            print(f"\nCIA Assessments ({cia_assessments.count()} courses):")
             print(f"{'-'*100}")
             
             for idx, assessment in enumerate(cia_assessments, 1):
@@ -212,7 +241,7 @@ class PGCIAResultProcessingService:
                       f"Status: {'PASS' if is_pass else 'FAIL'}")
             
         # Check if student passed ALL CIA assessments
-        cia_passed = self._check_cia_passed(cia_assessments, dry_run=dry_run)
+        cia_passed = self._check_cia_passed(cia_assessments, student, dry_run=dry_run)
         
         if show_detail:
             overall_status = "✅ PASS" if cia_passed else "❌ FAIL"
@@ -241,92 +270,161 @@ class PGCIAResultProcessingService:
     # 3. HELPER UPDATERS & CHECKS
     ################################################################################
     
-    def _check_cia_passed(self, cia_assessments, dry_run: bool = False) -> bool:
+    
+    def _check_cia_passed(self, cia_assessments, student, dry_run: bool = False) -> bool:
         """
-        Check if student passed ALL CIA assessments
+        Check if student passed ALL CIA assessments (Grouped by Paper Code)
         
         Passing Criteria:
-        - Student must pass EVERY CIA assessment (Theory, Practical, etc.)
-        - Calculates pass/fail based on marks obtained vs pass marks
-        - ALSO UPDATES ind_is_pass field in database if incorrect
+        - For each unique paper_code, the student must have at least ONE passed attempt (Best of).
+        - If any paper has NO passed attempts, then the student fails CIA.
         
         Args:
-            cia_assessments: QuerySet of CIA assessments
+            cia_assessments: QuerySet of CIA assessments (includes usage from multiple sessions)
+            student: The student object
             dry_run: If True, don't update database
             
         Returns:
             True if passed all CIA, False otherwise
         """
-        all_passed = True
-        
-        # Check each assessment
+        if not cia_assessments:
+            return True # Should not happen based on caller logic, or implies no requirement? Caller handles empty check.
+            
+        # Group assessments by paper_code
+        paper_assessments = {}
         for assessment in cia_assessments:
-            is_pass = False
+            code = assessment.paper_code
+            if code not in paper_assessments:
+                paper_assessments[code] = []
+            paper_assessments[code].append(assessment)
             
-            # Calculate pass/fail based on actual marks
-            if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
-                # If absent, mark as fail
-                if assessment.ind_is_absent:
-                    is_pass = False
-                else:
-                    # Pass if marks obtained >= pass marks
-                    is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
-            elif assessment.ind_is_absent:
-                # If absent but no marks data, still mark as fail
-                is_pass = False
-            
-            # Update ind_is_pass in database if incorrect and not dry run
-            if not dry_run and assessment.ind_is_pass != is_pass:
-                assessment.ind_is_pass = is_pass
-                assessment.save(update_fields=['ind_is_pass', 'updated_at'])
-            
-            # Track overall pass status
-            if not is_pass:
-                all_passed = False
+        all_papers_cleared = True
         
-        # Passed all CIA assessments
-        return all_passed
+        for code, assessments in paper_assessments.items():
+            # Check if ANY attempt for this paper is passed
+            paper_cleared = False
+            
+            for assessment in assessments:
+                is_pass = False
+                
+                # Calculate pass/fail based on actual marks
+                if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
+                    if assessment.ind_is_absent:
+                        is_pass = False
+                    else:
+                        is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
+                elif assessment.ind_is_absent:
+                    is_pass = False
+                
+                # Update ind_is_pass in database if incorrect and not dry run
+                if not dry_run and assessment.ind_is_pass != is_pass:
+                    assessment.ind_is_pass = is_pass
+                    assessment.save(update_fields=['ind_is_pass', 'updated_at'])
+                
+                if is_pass:
+                    paper_cleared = True
+            
+            if not paper_cleared:
+                # [NEW] Check History: If not cleared in current session, check previous sessions
+                # This handles cases where student passed earlier but re-appeared and failed,
+                # or if we are processing a mix of current/back papers.
+                historical_pass = PGStudentCourseAssessment.objects.filter(
+                    student=student,
+                    paper_code=code,
+                    label__icontains='CIA',
+                    ind_is_pass=True
+                ).exclude(session=self.session).exists()
+                
+                if historical_pass:
+                    paper_cleared = True
+
+            if not paper_cleared:
+                all_papers_cleared = False
+        
+        # Passed all CIA assessments?
+        if all_papers_cleared:
+            return True
+            
+        # If NOT passed based on current assessments (or no current assessments), 
+        # check if they passed CIA in a PREVIOUS attempt for this SAME semester.
+        # ... (rest of logic)
+            
+        # If NOT passed based on current assessments (or no current assessments), 
+        # check if they passed CIA in a PREVIOUS attempt for this SAME semester.
+        # This handles cases where a student is retaking the semester (back paper)
+        # but already cleared internal assessments in the past.
+        
+        # We need to find valid previous results for this student + semester
+        # But we must exclude the result we are about to create/update for THIS session
+        # (Though usually that record wouldn't exist or be updated yet in this flow, safe to check excluding current session potentially?)
+        # Actually simplest is to just check ANY record for this semester where cia_pass is True.
+        
+        # Normalized semester for lookup
+        normalized_sem = self.semester
+        if normalized_sem.upper() in ['1ST', '2ND', '3RD', '4TH']:
+             sem_map = {'1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4'}
+             normalized_sem = sem_map.get(self.semester.upper(), self.semester)
+
+        # Check for any existing exam result where CIA is passed for this semester
+        # Note: cia_assessments[0].student is safe because _process_student returns early if no assessments
+        student = cia_assessments[0].student if cia_assessments else None
+        
+        if not student:
+            return False
+
+        previous_pass = PGExamResult.objects.filter(
+            Q(semester=self.semester) | Q(semester=normalized_sem),
+            student=student,
+            cia_pass=True
+        ).exists()
+        
+        if previous_pass:
+            if not dry_run:
+                 # Logic: If they passed previously, we trust that.
+                 pass
+            return True
+            
+        return False
     
     def _create_or_update_exam_result(self, student: PGStudentProfile, cia_passed: bool):
         """
-        Create or update PGExamResult entry - IDEMPOTENT VERSION
+        Create or update PGExamResult entry - IDEMPOTENT VERSION (Per Session)
         
         Args:
             student: PGStudentProfile instance
             cia_passed: Whether student passed CIA
         """
-        # 1. Try to find EXISTING record for this student & semester (ignoring session initially)
-        # This handles cases where 'session' string might differ slightly (2024-25 vs 2024-2025)
-        # or if we just want to update the existing record for this semester.
+        # 1. Try to find EXISTING record for this student & semester & SESSION
+        # We MUST filter by session to avoid overwriting history (e.g., 2023-24 result).
         
         existing_result = PGExamResult.objects.filter(
             student=student,
-            semester=self.semester
+            semester=self.semester,
+            session=self.session
         ).first()
         
-        # 2. If not found, try normalized semester (e.g. '1' vs '1ST')
+        # 2. If not found, try normalized semester (e.g. '1' vs '1ST') but SAME SESSION
         if not existing_result:
             sem_map = {'1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4'}
             normalized_sem = sem_map.get(self.semester.upper())
             if normalized_sem:
                  existing_result = PGExamResult.objects.filter(
                     student=student,
-                    semester=normalized_sem
+                    semester=normalized_sem,
+                    session=self.session
                 ).first()
         
         if existing_result:
-            # UPDATE existing
+            # UPDATE existing (for this session)
             existing_result.cia_pass = cia_passed
-            existing_result.session = self.session # Update to current session string
-            existing_result.semester = self.semester # Update to current semester string
+            # session and semester are already correct
             
-            # Reset status if it was pending or handle logic solely for CIA update?
-            # We only update CIA status here. 
-            existing_result.save(update_fields=['cia_pass', 'session', 'semester', 'updated_at'])
+            existing_result.save(update_fields=['cia_pass', 'updated_at'])
             self.stats['exam_results_updated'] += 1
             
         else:
-            # CREATE new
+            # CREATE new (for this session)
+            # This preserves previous sessions' results!
             PGExamResult.objects.create(
                 student=student,
                 semester=self.semester,
@@ -355,10 +453,10 @@ class PGCIAResultProcessingService:
         registration, created = PGExamRegistration.objects.get_or_create(
             student=student,
             sem=sem_int,
+            session=self.session,
             defaults={
                 'status': 'PENDING',
                 'is_open': True,
-                'session': self.session,
             }
         )
         
@@ -407,18 +505,19 @@ class PGCIAResultProcessingService:
         return f"{(count / self.stats['students_with_cia']) * 100:.2f}"
 
 
-def run_cia_processing(batch: str, semester: str, session: str, dry_run: bool = False) -> Dict:
+def run_cia_processing(batch: str = None, semester: str = None, session: str = None, dry_run: bool = False, include_all_batches: bool = False) -> Dict:
     """
     Convenience function to run Step 1: PG CIA Result Processing
     
     Args:
-        batch: Batch code (e.g., '23-25')
+        batch: Batch code (e.g., '23-25') - Optional
         semester: Semester code (e.g., '1ST')
         session: Academic session (e.g., '2024-25')
         dry_run: If True, don't save to database
+        include_all_batches: If True, includes students from all batches (for back papers)
         
     Returns:
         Dictionary with processing statistics
     """
-    service = PGCIAResultProcessingService(batch, semester, session)
+    service = PGCIAResultProcessingService(batch, semester, session, include_all_batches)
     return service.process(dry_run=dry_run)

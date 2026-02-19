@@ -1,3 +1,33 @@
+"""
+PG Result Calculation Service
+
+Calculate final semester results for PG students.
+
+Usage Examples:
+    # Specific student by registration number (dry run)
+    python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='2411M050141', semester='1ST', session='2024-25', dry_run=True)"
+    
+    # All students in a batch (dry run)
+    python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(batch_name='2024-26', semester='1ST', session='2024-25', dry_run=True)"
+    
+    # All students in a session (includes back papers from all batches) - dry run
+    python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(semester='1ST', session='2024-25', dry_run=True)"
+    
+    # Production run (saves to database)
+    python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(batch_name='2024-26', semester='1ST', session='2024-25', dry_run=False)"
+    
+    # Back paper students - session-based (production)
+    python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(semester='1ST', session='2024-25', dry_run=False)"
+
+Note: 
+- Use session+semester (without batch_name) to include back paper students from all batches
+- Use batch_name+session+semester to filter specific batch only
+- Use registration_no for individual student processing
+"""
+# python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(semester='1st', session='2023-24', dry_run=False)"
+# python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(semester='2nd', session='2023-24', dry_run=False)"
+# python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(semester='3rd', session='2024-25', dry_run=False)"
+# python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(semester='4th', session='2024-25', dry_run=False)"
 from django.core.management.base import BaseCommand
 from pg.models import PGStudentProfile, PGBatch, PGStudentCourseAssessment, PGExamResult
 from pg.services.result_service import PGResultService
@@ -15,9 +45,6 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
         registration_no (str): Student Registration Number (e.g., '190150300006')
         dry_run (bool): If True, DOES NOT SAVE changes to DB. Default is True.
     """
-    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='2411M050141', semester='1ST', session='2024-25', dry_run=True)"
-    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(registration_no='190152300011', semester='1ST', session='2024-25', dry_run=True)"
-    # python manage.py shell -c "from pg.services.calculate_batch_results import calculate_results; calculate_results(batch_name='2024-26', semester='1ST', session='2024-25', dry_run=False)"
     print("=" * 100)
     print(f"STARTING RESULT CALCULATION")
     print(f"Filter Criteria -> Batch: {batch_name} | Semester: {semester} | Session: {session} | RegNo: {registration_no}")
@@ -34,16 +61,34 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
         students = students.filter(registration_no=registration_no)
         print(f"✅ Filtered by Registration No '{registration_no}': {students.count()} students found")
     
-    # Priority 2: Filter by Batch name (if no registration_no)
-    if batch_name:
+    # Priority 2: Filter by Session + Semester (includes back papers from all batches)
+    elif session and semester:
+        # Get all students who have assessments in this session and semester
+        students = students.filter(
+            course_assessments__session=session,
+            course_assessments__semester=semester
+        ).distinct()
+        print(f"✅ Filtered by Session '{session}' and Semester '{semester}': {students.count()} students found")
+        print(f"   (Includes back paper students from all batches)")
+        
+        # Optional: Further filter by batch if specified
+        if batch_name:
+            batch = PGBatch.objects.filter(name=batch_name).first()
+            if batch:
+                students = students.filter(batch=batch)
+                print(f"   Further filtered by Batch '{batch_name}': {students.count()} students")
+    
+    # Priority 3: Filter by Batch only (original logic for backward compatibility)
+    elif batch_name:
         batch = PGBatch.objects.filter(name=batch_name).first()
         if not batch:
             print(f"❌ Batch '{batch_name}' not found!")
             return
         students = students.filter(batch=batch)
         print(f"✅ Filtered by Batch '{batch_name}': {students.count()} students found")
-    elif not registration_no:
-        print(f"⚠️ No Batch or Registration No specified. Searching all {students.count()} students.")
+    else:
+        print(f"⚠️ No filters specified. Searching all {students.count()} students.")
+
 
     # Halt if no students found
     if students.count() == 0:
@@ -91,11 +136,12 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
                 
             # Validating CIA Pass status before calling the heavy service
             # This avoids "Errors" in the output for students who simply haven't passed CIA yet.
+            # [FIX]: Lookup by student and semester only (One Entry Rule)
             exam_result = PGExamResult.objects.filter(
                 student=student,
                 semester=sem,
                 session=sess
-            ).first()
+            ).order_by('-updated_at').first()
             
             if not exam_result:
                 print(f"    ⚠️ Skipping {sem}: CIA Result (Step 1) not found. Please run Step 1 CIA Processing first.")
@@ -131,9 +177,16 @@ def calculate_results(batch_name=None, semester=None, session=None, registration
                 earned_credits = summary.get('total_credits_earned')
                 
                 print(f"    ✅ Sem {sem} Result Calculated:")
-                print(f"       Status: {res_status} | SGPA: {sgpa} | Max Credits: {max_credits} | Earned: {earned_credits}")
-                
-                # COURSE BREAKDOWN HEADERS
+                # Print Result in a Table-like format
+                print(f"       {'-'*55}")
+                print(f"       | {'METRIC':<15} | {'VALUE':<33} |")
+                print(f"       {'-'*55}")
+                print(f"       | {'STATUS':<15} | {res_status:<33} |")
+                print(f"       | {'SGPA':<15} | {sgpa:<33} |")
+                print(f"       | {'MAX CREDITS':<15} | {max_credits:<33} |")
+                print(f"       | {'EARNED CREDITS':<15} | {earned_credits:<33} |")
+                print(f"       {'-'*55}")
+
                 print(f"       {'Course':<10} {'Marks':<10} {'Grade':<8} {'GP':<5} {'Cr.Earn':<10} {'Points':<8}")
                 print(f"       {'-'*10} {'-'*10} {'-'*8} {'-'*5} {'-'*10} {'-'*8}")
                 

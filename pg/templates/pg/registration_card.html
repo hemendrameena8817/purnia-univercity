@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>PG Registration Card</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin: 8mm;
+
+            @bottom-center {
+                content: "";
+            }
+        }
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        .main-container {
+            border: 0.6mm solid black;
+            width: 100%;
+            height: 280mm;
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        /* WATERMARK */
+        .watermark {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90mm;
+            height: 90mm;
+            opacity: 0.12;
+            z-index: -1;
+        }
+
+        /* HEADER */
+        .header {
+            position: relative;
+            height: 33mm;
+            text-align: center;
+            padding-top: 5mm;
+            border-bottom: 0.4mm solid black;
+        }
+
+        .logo {
+            position: absolute;
+            left: 4mm;
+            top: 4mm;
+            width: 22mm;
+            height: 22mm;
+        }
+
+        .uni-name-hindi {
+            font-family: 'Noto Sans Devanagari', 'Mangal', sans-serif;
+            font-size: 16pt;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2mm;
+        }
+
+        .uni-name-eng {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 14pt;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 2mm;
+        }
+
+        .card-type {
+            font-size: 12pt;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 1mm;
+        }
+
+        .session-line {
+            font-size: 10pt;
+            font-weight: normal;
+        }
+
+        /* STUDENT DETAILS */
+        .details-wrapper {
+            margin-left: 1mm;
+            margin-right: 1mm;
+            margin-top: 2mm;
+            display: flex;
+            border-bottom: 0.3mm solid black;
+        }
+
+        .details-table {
+            width: 158mm;
+            border-collapse: collapse;
+            border-top: 0.3mm solid black;
+            border-left: 0.3mm solid black;
+        }
+
+        .details-table td {
+            height: 8mm;
+            border-bottom: 0.3mm solid black;
+            border-right: 0.3mm solid black;
+            padding-left: 1.5mm;
+            vertical-align: middle;
+            font-size: 8pt;
+        }
+
+        .label-col {
+            width: 48mm;
+            font-weight: bold;
+        }
+
+        .value-col {
+            font-weight: normal;
+        }
+
+        /* PHOTO BOX */
+        .photo-box {
+            width: 35mm;
+            height: 64mm;
+            /* 8 rows × 8mm */
+            border: 0.3mm solid black;
+            margin-left: -0.3mm;
+            position: relative;
+            text-align: center;
+        }
+
+        .photo-img {
+            margin-top: 2mm;
+            width: 31mm;
+            height: 40mm;
+            object-fit: contain;
+            border: 1px solid #ddd;
+        }
+
+        .sign-img-student {
+            position: absolute;
+            bottom: 2mm;
+            left: 1.5mm;
+            width: 32mm;
+            height: 10mm;
+            object-fit: contain;
+        }
+
+        /* PAPERS TABLE */
+        .papers-table {
+            margin-left: 1mm;
+            margin-right: 1mm;
+            width: 99%;
+            margin-top: 4mm;
+            border-collapse: collapse;
+            border: 0.3mm solid black;
+        }
+
+        .papers-table th {
+            background-color: #e8e8e8;
+            border: 0.3mm solid black;
+            padding: 1.5mm;
+            font-size: 8pt;
+            text-align: left;
+        }
+
+        .papers-table td {
+            height: 8mm;
+            border: 0.3mm solid black;
+            vertical-align: middle;
+            padding-left: 2mm;
+            font-size: 8pt;
+        }
+
+        .sno-col {
+            width: 8mm;
+            text-align: center;
+        }
+
+        .code-col {
+            width: 28mm;
+        }
+
+        .name-col {
+            width: auto;
+        }
+
+        /* SIGNATURES */
+        .signatures-container {
+            margin-top: 12mm;
+            display: flex;
+            justify-content: space-between;
+            padding-left: 10mm;
+            padding-right: 10mm;
+        }
+
+        .sig-block {
+            text-align: center;
+            width: 30mm;
+        }
+
+        .sig-img-official {
+            width: 28mm;
+            height: 14mm;
+            display: block;
+            margin: 0 auto 1mm auto;
+        }
+
+        .sig-text {
+            font-size: 7pt;
+            font-weight: bold;
+            color: black;
+        }
+
+        /* FOOTER NOTE */
+        .footer-note {
+            position: absolute;
+            bottom: 3mm;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 6.5pt;
+            color: #333;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-container">
+
+        <!-- Watermark -->
+        {% if logo_url %}
+        <img src="{{ logo_url }}" class="watermark" alt="Watermark">
+        {% endif %}
+
+        <!-- Header -->
+        <div class="header">
+            {% if logo_url %}
+            <img src="{{ logo_url }}" class="logo" alt="Logo">
+            {% endif %}
+            <span class="uni-name-hindi">पूर्णियाँ विश्वविद्यालय, पूर्णियाँ</span>
+            <span class="uni-name-eng">Purnea University, Purnia</span>
+            <span class="card-type">PG EXAM REGISTRATION CARD</span>
+            <span class="session-line">
+                {{ semester_text }} SEMESTER &nbsp;|&nbsp; BATCH: {{ batch }} &nbsp;|&nbsp; GENDER: {{ student.gender }}
+            </span>
+        </div>
+
+        <!-- Student Details + Photo -->
+        <div class="details-wrapper">
+
+            <!-- Left Table -->
+            <table class="details-table">
+                <!-- R1: Reg No -->
+                <tr>
+                    <td class="label-col">REGISTRATION NUMBER</td>
+                    <td class="value-col" colspan="3">{{ student.registration_no }}</td>
+                </tr>
+                <!-- R2: Name -->
+                <tr>
+                    <td class="label-col">NAME OF THE STUDENT</td>
+                    <td class="value-col" colspan="3">{{ student.full_name }}</td>
+                </tr>
+                <!-- R3: Father -->
+                <tr>
+                    <td class="label-col">FATHER'S NAME</td>
+                    <td class="value-col" colspan="3">{{ student.father_name }}</td>
+                </tr>
+                <!-- R4: Mother -->
+                <tr>
+                    <td class="label-col">MOTHER'S NAME</td>
+                    <td class="value-col" colspan="3">{{ student.mother_name }}</td>
+                </tr>
+                <!-- R5: Gender -->
+                <tr>
+                    <td class="label-col">GENDER</td>
+                    <td class="value-col" colspan="3">{{ student.gender }}</td>
+                </tr>
+                <!-- R6: College -->
+                <tr>
+                    <td class="label-col">NAME OF THE COLLEGE</td>
+                    <td class="value-col" colspan="3">{{ college_name }}</td>
+                </tr>
+                <!-- R7: Department -->
+                <tr>
+                    <td class="label-col">DEPARTMENT</td>
+                    <td class="value-col" colspan="3">{{ department_name }}</td>
+                </tr>
+                <!-- R8: Semester + Session -->
+                <tr>
+                    <td class="label-col">SEMESTER / SESSION</td>
+                    <td class="value-col" colspan="3">{{ semester_text }} / {{ session }}</td>
+                </tr>
+            </table>
+
+            <!-- Right Photo Box -->
+            <div class="photo-box">
+                {% if student.profile_image_url %}
+                <img src="{{ student.profile_image_url }}" class="photo-img" alt="Photo">
+                {% else %}
+                <div style="height:40mm;display:flex;align-items:center;justify-content:center;font-size:8pt;">No Photo
+                </div>
+                {% endif %}
+
+                {% if student.signature_url %}
+                <img src="{{ student.signature_url }}" class="sign-img-student" alt="Signature">
+                {% else %}
+                <div style="position:absolute;bottom:5mm;width:100%;text-align:center;font-size:6pt;">Signature</div>
+                {% endif %}
+            </div>
+
+        </div>
+
+        <!-- Papers Table -->
+        {% if papers %}
+        <table class="papers-table">
+            <tr>
+                <th class="sno-col">S.No</th>
+                <th class="code-col">Course</th>
+                <th class="code-col">Paper Code</th>
+                <th class="name-col">Course Name</th>
+            </tr>
+            {% for p in papers %}
+            <tr>
+                <td class="sno-col">{{ forloop.counter }}</td>
+                <td class="code-col">{{ p.course }}</td>
+                <td class="code-col">{{ p.code }}</td>
+                <td class="name-col">{{ p.name }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        {% endif %}
+
+
+
+        <div class="footer-note">
+            This is a computer-generated registration card. No signature required.
+        </div>
+
+    </div>
+</body>
+
+</html>
