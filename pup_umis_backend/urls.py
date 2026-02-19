@@ -63,6 +63,7 @@ urlpatterns = [
     path('api/pg/', include('pg.urls')),
     path('api/ug/', include('ug.urls')),
     path('api/staging/', include('staging.urls')),
+    path('api/ug_before_cbcs/', include('ug_before_cbcs.urls')),
     path('api/captcha/', CaptchaView.as_view(), name='common-captcha'),
 ]
 if settings.DEBUG:

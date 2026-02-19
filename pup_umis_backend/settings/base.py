@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'plw',
     'mca_sem',
     'btech',
+    'ug_before_cbcs',
 ]
 
 
@@ -136,10 +137,12 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'static'
 
-
 # -------------------------------------------------
 # Media files (User uploaded files)
 # -------------------------------------------------
+if config('DJANGO_ENV', default='development') == 'development':
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'
 
 
 # -------------------------------------------------

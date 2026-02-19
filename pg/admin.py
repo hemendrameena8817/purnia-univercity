@@ -5,7 +5,8 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
-    PGCommonCourseStructure, PGExamResult
+    PGCommonCourseStructure, PGExamResult,
+    # PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule
 )
 
 
@@ -141,6 +142,19 @@ from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from import_export.admin import ImportExportModelAdmin
 
+class SafeForeignKeyWidget(ForeignKeyWidget):
+    """
+    Custom widget that uses filter().first() instead of get() to avoid 
+    MultipleObjectsReturned error when duplicate related objects exist.
+    """
+    def clean(self, value, row=None, *args, **kwargs):
+        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
+        if val:
+            # Look up object using the specified field
+            # Use filter().first() instead of get()
+            return self.model.objects.filter(**{self.field: val}).first()
+        return None
+
 class PGStudentCourseAssessmentResource(resources.ModelResource):
     student = fields.Field(
         column_name='student',
@@ -150,7 +164,7 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
     batch = fields.Field(
         column_name='batch',
         attribute='batch',
-        widget=ForeignKeyWidget(PGBatch, field='name')
+        widget=SafeForeignKeyWidget(PGBatch, field='name')
     )
     department = fields.Field(
         column_name='department',
@@ -239,6 +253,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     list_filter = (
         'semester', 'session', 'batch', 'department', 
         'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code", 'college_code',
+        'is_cia_fill', 'is_ese_fill', 'created_at',
     )
     
     # Optimize search - use indexed fields only
@@ -334,15 +349,15 @@ class PGSemesterRegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(PGExamRegistration)
 class PGExamRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'fees', 'start_date', 'end_date')
-    list_filter = ('sem', 'is_open', 'status', 'session')
+    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'start_date', 'end_date',)
+    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type')
     search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session')
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'student', 'sem', 'session')
+            'fields': ('uid', 'student', 'sem', 'session', 'exam_type')
         }),
         ('Registration Period', {
             'fields': ('start_date', 'end_date', 'is_open', 'status')
@@ -742,3 +757,44 @@ class PGExamResultAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         })
     )
+
+# @admin.register(PGExam)
+# class PGExamAdmin(admin.ModelAdmin):
+#     list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
+#     list_filter = ('session', 'year', 'batch')
+#     search_fields = ('name', 'session', 'batch')
+#     ordering = ('-created_at',)
+
+# @admin.register(PGExamCenterMapping)
+# class PGExamCenterMappingAdmin(admin.ModelAdmin):
+#     list_display = ('center', 'get_exams_count', 'get_attached_colleges_count', 'created_at')
+#     list_filter = ('center',)
+#     search_fields = ('center__name', 'center__code')
+#     filter_horizontal = ('exams', 'attached_colleges')
+    
+#     def get_exams_count(self, obj):
+#         return obj.exams.count()
+#     get_exams_count.short_description = 'Exams Count'
+    
+#     def get_attached_colleges_count(self, obj):
+#         return obj.attached_colleges.count()
+#     get_attached_colleges_count.short_description = 'Attached Colleges Count'
+
+# @admin.register(PGGroup)
+# class PGGroupAdmin(admin.ModelAdmin):
+#     list_display = ('name', 'get_departments', 'created_at')
+#     list_filter = ('department',)
+#     search_fields = ('name', 'department__name')
+#     ordering = ('name',)
+#     filter_horizontal = ('department',)
+
+#     def get_departments(self, obj):
+#         return ", ".join([d.name for d in obj.department.all() if d.name])
+#     get_departments.short_description = 'Departments'
+
+# @admin.register(PGExamSchedule)
+# class PGExamScheduleAdmin(admin.ModelAdmin):
+#     list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+#     list_filter = ('exam', 'group', 'exam_date', 'sitting')
+#     search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
+#     ordering = ('exam_date', 'exam_time')
