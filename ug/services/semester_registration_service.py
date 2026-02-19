@@ -69,7 +69,6 @@ class SemesterRegistrationService:
         # 1. Get the latest registration record for this student's batch
         registration = SemesterRegistration.objects.filter(
             student=student,
-            batch=student.batch
         ).order_by('-sem').first()
         
         if not registration:
@@ -174,7 +173,7 @@ class SemesterRegistrationService:
         major_courses = CourseStructure.objects.filter(
             semester=semester,
             course_type__icontains='MJC',  # Major Core Courses
-            batch=student.batch
+            # batch=student.batch
         )
         
         # Filter by department if available
@@ -252,7 +251,7 @@ class SemesterRegistrationService:
         next_sem_courses = CourseStructure.objects.filter(
             semester=semester,
             course_type__icontains=first_sem_course_type,
-            batch=student.batch
+            # batch=student.batch
         )
         
         # If minor course, try to match department
@@ -296,7 +295,7 @@ class SemesterRegistrationService:
         elective_courses = CourseStructure.objects.filter(
             q_filter,
             semester=semester,
-            batch=student.batch
+            # batch=student.batch
         )
         
         courses = []
