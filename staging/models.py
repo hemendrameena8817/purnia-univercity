@@ -1,6 +1,6 @@
 import uuid
 from django.db import models
-
+from django.contrib.auth.models import User
 
 class StagingInstituteMaster(models.Model):
     """
@@ -480,6 +480,10 @@ class UGSemResultCurrent(models.Model):
     is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
     migration_notes = models.TextField(null=True, blank=True)
     imported_at = models.DateTimeField(auto_now_add=True)
+    is_changed = models.BooleanField(default=False, help_text="Has this record been updated?")
+    changed_at = models.DateTimeField(null=True, blank=True)
+    changed_by = models.ForeignKey('accounts.UserAccount',on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_ug_sem_result_current')
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
     
     class Meta:
         verbose_name = 'UG Sem Result Current'
