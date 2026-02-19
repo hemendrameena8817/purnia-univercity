@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'mca_sem',
     'btech',
     'ug_before_cbcs',
+    'pgoldresult'
 ]
 
 

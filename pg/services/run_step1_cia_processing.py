@@ -3,10 +3,27 @@ Step 1: PG CIA Result Processing Script
 
 Run this script after CIA marks entry is complete.
 
-Usage:
-    # Dry run (no database changes)
-    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1ST --dry-run    # Production run
-    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2025-26 --dry-run
+Usage Examples:
+    # Regular students (single batch) - Dry run
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --dry-run
+    
+    # Regular students - Production run
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25
+    
+    # Back paper students (all batches in session) - Dry run
+    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches --dry-run
+    
+    # Back paper students - Production run
+    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1st --session 2023-24 --include-all-batches
+    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 2nd --session 2023-24 --include-all-batches
+    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 3rd --session 2024-25 --include-all-batches
+    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 4th --session 2024-25 --include-all-batches
+    
+    # Old batch format example
+    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1ST --session 2024-25 --dry-run
+    
+    # Session-wise processing (no batch specified)
+    python pg/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --dry-run
 """
 
 import os
@@ -49,8 +66,8 @@ Examples:
     parser.add_argument(
         '--batch',
         type=str,
-        required=True,
-        help='Batch code (e.g., 2023-25, 2024-26)'
+        required=False,
+        help='Batch code (e.g., 2023-25, 2024-26) - Optional for session-wise processing'
     )
     
     parser.add_argument(
@@ -73,6 +90,12 @@ Examples:
         help='Run in test mode without making database changes'
     )
     
+    parser.add_argument(
+        '--include-all-batches',
+        action='store_true',
+        help='Include students from all batches who have assessments in this session (for back paper processing)'
+    )
+    
     args = parser.parse_args()
     
     ################################################################################
@@ -82,7 +105,7 @@ Examples:
     if not args.dry_run:
         print(f"\n⚠️  PRODUCTION MODE")
         print(f"This will create/update PGExamResult entries for:")
-        print(f"  Batch:    {args.batch}")
+        print(f"  Batch:    {args.batch if args.batch else 'ALL BATCHES (Session Wise)'}")
         print(f"  Semester: {args.semester}")
         print(f"  Session:  {args.session}")
         response = input("\nContinue? (yes/no): ")
@@ -98,7 +121,8 @@ Examples:
         batch=args.batch,
         semester=args.semester,
         session=args.session,
-        dry_run=args.dry_run
+        dry_run=args.dry_run,
+        include_all_batches=args.include_all_batches
     )
     
     print("\n✅ Step 1 Complete!")

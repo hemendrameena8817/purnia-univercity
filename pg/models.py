@@ -203,6 +203,10 @@ class PGStudentProfile(models.Model):
 
     roll_no = models.CharField(max_length=50, null=True, blank=True)
     batch = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Personal Information
+    religion = models.CharField(max_length=50, null=True, blank=True)
+    nationality = models.CharField(max_length=50, null=True, blank=True)
 
     # Family Information
     father_name = models.CharField(max_length=255, null=True, blank=True)
@@ -498,13 +502,120 @@ class PGSemesterRegistration(models.Model):
         return f"{self.student}"
 
 
+##for center mapping 
+class PGExam(models.Model):
+    """
+    Represents the overall Examination Event (e.g. BTech 4th Sem June 2024).
+    Contains the global schedule shared by all centers.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255, null=True, blank=True)            # PG 3rd Semester Examination
+    year = models.PositiveIntegerField(null=True, blank=True)         # 3
+    session = models.CharField(max_length=20, null=True, blank=True)        # 2022-24
+    batch = models.CharField(max_length=20, null=True, blank=True)  
+    exam_month_year = models.CharField(max_length=20, null=True, blank=True) # June 2024
+    publication_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name or 'Unnamed Exam'} ({self.session or 'No Session'})"
+
+class PGExamCenterMapping(models.Model):
+    """
+    Center Fixation: Maps an Exam + Center to one or more Colleges.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    exams = models.ManyToManyField(
+        PGExam,
+        related_name='pg_center_mappings'
+    )
+    center = models.ForeignKey(
+        'colleges.College',
+        on_delete=models.CASCADE,
+        related_name='pg_as_center_mappings'
+    )
+    # The colleges whose students will go to this center for this specific exam
+    attached_colleges = models.ManyToManyField(
+        'colleges.College',
+        related_name='pg_exam_centers'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'PG Exam Center Mapping'
+        verbose_name_plural = 'PG Exam Center Mappings'
+
+    def __str__(self):
+        exam_count = self.exams.count()
+        return f"{self.center.name} ({exam_count} Exams)"
+
+class PGGroup(models.Model):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255, null=True, blank=True)
+    department = models.ManyToManyField('PGDepartment',related_name='pg_groups')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+
+
+class PGExamSchedule(models.Model):
+    """
+    Exam Routine/Datesheet for BTech.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    exam = models.ForeignKey(
+        PGExam, 
+        on_delete=models.CASCADE, 
+        related_name='schedules'
+    )
+    # Changed from BTechSubject to BTechCourseStructure
+    common_course_structure = models.ForeignKey(
+        'PGCommonCourseStructure', 
+        on_delete=models.CASCADE, 
+        related_name='pg_exam_schedules',
+        null=True,
+        blank=True
+    )
+    group = models.ForeignKey(
+        PGGroup,
+        on_delete=models.CASCADE,
+        related_name='pg_exam_schedules',
+        null=True,
+        blank=True
+    )
+    exam_date = models.DateField(null=True, blank=True)
+    exam_time = models.CharField(max_length=100, null=True, blank=True)
+    sitting = models.CharField(max_length=50, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'PG Exam Schedule'
+        verbose_name_plural = 'PG Exam Schedules'
+        # unique_together = ('exam', 'course_structure')
+        ordering = ['exam_date', 'exam_time']
+
+    def __str__(self):
+        return f"{self.exam.name} - {self.common_course_structure.course_code if self.common_course_structure else 'N/A'} ({self.exam_date})"
+
+
 
 EXAM_TYPE_CHOICES = (
     ('REGULAR', 'Regular'),
     ('BACK', 'Back'),
     ('IMPROVEMENT', 'Improvement'),
 )
-
+REGISTRATION_STATUS_CHOICES = (
+    ('PENDING', 'Pending'),
+    ('OPEN', 'Open'),
+    ('REGISTERED', 'Registered'),
+    ('CLOSED', 'Closed'),
+)
 class PGExamRegistration(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     student = models.ForeignKey(
@@ -512,12 +623,13 @@ class PGExamRegistration(models.Model):
         on_delete=models.CASCADE,
         related_name='exam_registrations'
     )
+    admission_receipt = models.FileField(upload_to='pg/admission_receipts/', null=True, blank=True, help_text="Admission Receipt")
     start_date = models.DateTimeField(null=True, blank=True, help_text="Start Date")
     end_date = models.DateTimeField(null=True, blank=True, help_text="End Date")
     is_open = models.BooleanField(default=False, help_text="Is Open")
     fees = models.IntegerField(null=True, blank=True, help_text="Fees")
     sem = models.IntegerField(null=True, blank=True, help_text="Semester")
-    status = models.CharField(max_length=10, null=True, blank=True, help_text="Status")
+    status = models.CharField(max_length=15, choices=REGISTRATION_STATUS_CHOICES, default='PENDING', help_text="Registration Status")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
     exam_type = models.CharField(max_length=20, choices=EXAM_TYPE_CHOICES, default='REGULAR', help_text="Exam Type",null=True,blank=True)
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
@@ -556,7 +668,7 @@ class PGCommonCourseStructure(models.Model):
 
     class Meta:
         verbose_name = 'PGCommon Course Structure' 
-        verbose_name_plural = 'Common Course Structures'
+        verbose_name_plural = 'PGCommon Course Structures'
         ordering = ['semester', 'course_name']
 
     def __str__(self):
@@ -642,3 +754,41 @@ class PGExamResult(models.Model):
 
     def __str__(self):
         return f"{self.student} - Sem {self.semester} ({self.session})"
+
+
+class PGExamRegistrationPayment(models.Model):
+    """
+    Tracks CC Avenue payments for PG exam registrations.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('ABORTED', 'Aborted'),
+    ]
+
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    registration = models.ForeignKey(
+        PGExamRegistration,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+    order_id = models.CharField(max_length=100, unique=True, help_text="Unique order ID sent to CC Avenue")
+    tracking_id = models.CharField(max_length=100, null=True, blank=True, help_text="CC Avenue tracking ID")
+    bank_ref_no = models.CharField(max_length=100, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    payment_mode = models.CharField(max_length=50, null=True, blank=True)
+    card_name = models.CharField(max_length=50, null=True, blank=True)
+    raw_response = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'PG Exam Registration Payment'
+        verbose_name_plural = 'PG Exam Registration Payments'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.order_id} - {self.registration.student} - {self.payment_status}"
+
