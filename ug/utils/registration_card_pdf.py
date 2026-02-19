@@ -125,6 +125,13 @@ def generate_registration_card(student, registration, assessments):
         elif ctype.startswith("SEC") or ccode.startswith("SEC"):
             sec_courses.append(item)
     
+    # Sort courses by their code to ensure consistent order (e.g. MJC-3 before MJC-4)
+    mjc_courses.sort(key=lambda x: x['code'] or '')
+    mic_courses.sort(key=lambda x: x['code'] or '')
+    mdc_courses.sort(key=lambda x: x['code'] or '')
+    aec_courses.sort(key=lambda x: x['code'] or '')
+    sec_courses.sort(key=lambda x: x['code'] or '')
+
     # Subject Names
     major_subject_name = student.major_course.name if student.major_course else (mjc_courses[0]['dept'] if mjc_courses else "")
     minor_subject_name = student.minor_course.name if student.minor_course else (mic_courses[0]['dept'] if mic_courses else "")
