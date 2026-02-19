@@ -272,10 +272,10 @@ class UGStudentProfile(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.first_name} {self.last_name} ({self.registration_no})"
+        return f"{self.first_name} ({self.registration_no})"
 
-    def get_full_name(self):
-        return f"{self.first_name or ''} {self.last_name or ''}".strip()
+    # def get_full_name(self):
+    #     return f"{self.first_name or ''} {self.last_name or ''}".strip()
 
 class CourseStructure(models.Model):
     """
