@@ -140,21 +140,10 @@ STATIC_ROOT = BASE_DIR / 'static'
 # -------------------------------------------------
 # Media files (User uploaded files)
 # -------------------------------------------------
-if config('DEBUG', default=False, cast=bool):
+if config('DJANGO_ENV', default='development') == 'development':
     MEDIA_URL = '/media/'
     MEDIA_ROOT = BASE_DIR / 'media'
 
-
-# -------------------------------------------------
-# Media files (User uploaded files)
-# -------------------------------------------------
-
-# -------------------------------------------------
-# Media files (User uploaded files)
-# -------------------------------------------------
-# if config('DJANGO_ENV', default='development') == 'development':
-#     MEDIA_URL = '/media/'
-#     MEDIA_ROOT = BASE_DIR / 'media'
 
 # -------------------------------------------------
 # Default primary key field type
