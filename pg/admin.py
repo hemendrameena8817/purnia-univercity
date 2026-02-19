@@ -375,6 +375,7 @@ class PGExamRegistrationResource(resources.ModelResource):
     class Meta:
         model = PGExamRegistration
         exclude = ('uid', 'id')
+        import_id_fields = ('student', 'sem', 'session', 'exam_type')
 
 @admin.register(PGExamRegistration)
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
