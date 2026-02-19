@@ -10,7 +10,8 @@ from .views import (
     RegistrationStatusView,
     CaptchaView,
     PaymentInfoView,
-    CheckRegistrationWindowView
+    CheckRegistrationWindowView,
+    RegistrationCardPDFView
 )
 
 urlpatterns = [
@@ -43,6 +44,9 @@ urlpatterns = [
 
     # Payment initiation
     path('<str:aadhaar_no>/initiate-payment/', InitiatePaymentView.as_view(), name='registration-payment-initiate'),
+
+    # Registration Card PDF
+    path('download-card/', RegistrationCardPDFView.as_view(), name='registration-card-pdf'),
 
     # Retrieve, Update, Delete (by Aadhaar) - MUST BE LAST
     path('<str:aadhaar_no>/', NewRegistrationDetailView.as_view(), name='registration-detail'),
