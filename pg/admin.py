@@ -412,8 +412,8 @@ class PGExamRegistrationResource(resources.ModelResource):
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
     list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
-    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type')
-    search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session')
+    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'student__department')
+    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'student__roll_no', 'session')
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
