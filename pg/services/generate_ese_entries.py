@@ -143,13 +143,13 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                     # print(f"  WARNING: PGCourseStructure not found for {paper_code} in {student.department}. Using defaults.")
                     pass
 
-                # Explicitly fetch exam type from 2025-26 3RD sem CIA entry
-                # This ensures we get the correct status (Regular/Back) even if running for a different context or if multiple exist
+                # Fetch exam type from the CIA entry for the current semester/session
+                # This ensures we get the correct status (Regular/Back) for the given context
                 target_cia_for_type = PGStudentCourseAssessment.objects.filter(
                     student=student,
                     paper_code=paper_code,
-                    semester='3RD',
-                    session='2025-26',
+                    semester=semester,
+                    session=session,
                     label__icontains='CIA'
                 ).first()
                 
