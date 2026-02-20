@@ -207,12 +207,16 @@ def generate_pg_registration_card_pdf(student, registration):
     context = {
         'student': {
             'registration_no':  student.registration_no,
-            'full_name':        f"{student.first_name} {student.last_name or ''}".strip(),
+            'full_name':        (student.first_name if student.first_name else f"{student.first_name or ''} {student.last_name or ''}".strip()) or "Unknown",
             'father_name':      student.father_name or '-',
             'mother_name':      student.mother_name or '-',
             'gender':           (student.gender or '-').capitalize(),
             'profile_image_url': profile_image_src,
             'signature_url':     signature_src,
+            'roll_no': student.roll_no,
+            'roll_no': student.roll_no,
+            'batch': student.batch,
+            'caste': student.caste,
         },
         'logo_url':        logo_src,
         'college_name':    college_name,
