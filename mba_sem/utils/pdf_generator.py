@@ -1,3 +1,7 @@
+from openpyxl.drawing.image import Image as XLImage
+import math
+
+
 def generate_mba_admit_card_pdf(student, exam):
     from weasyprint import HTML, CSS
     import io, base64, os
@@ -618,7 +622,12 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         return (code or "").replace("-", "").replace(" ", "").upper().strip()
 
     # ===== TEMPLATE LOAD =====
-    template_path = os.path.join(settings.BASE_DIR, "MBA 1st Semester Result.xlsx")
+    template_path = os.path.join(
+                        settings.BASE_DIR,
+                        "courses_data",
+                        "mba",
+                        "MBA_Result.xlsx"
+                    )
     if not os.path.exists(template_path):
         return None
 
@@ -685,7 +694,7 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
             img.height = 120
 
             # Anchor position — adjust if needed
-            img.anchor = "Z1"
+            img.anchor = "V1"
 
             ws.add_image(img)
 
