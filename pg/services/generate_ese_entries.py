@@ -11,8 +11,8 @@ from pg.models import (
     PGExamResult,
     PGDepartment
 )
-
-def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False, include_all_batches=False):
+# python pg/services/run_generate_ese_entries.py --batch 2024-26 --semester 3RD --session 2024-25 --dry-run/
+def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False, include_all_batches=False, registration_no=None, registration_nos=None):
     """
     Generates ESE assessment entries for students who have passed CIA.
     
@@ -22,6 +22,8 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
         session (str): Session code (e.g. '2024-25'). Required.
         dry_run (bool): If True, does not commit changes.
         include_all_batches (bool): If True, includes all batches for the session.
+        registration_no (str): If set, process only this single student by registration number.
+        registration_nos (list): If set, process only these students (list of registration numbers).
     """
     
     stats = {
@@ -45,8 +47,16 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
         session=session,
         cia_pass=True
     )
-    
-    if batch and not include_all_batches:
+
+    # Single student filter
+    if registration_no:
+        exam_results = exam_results.filter(student__registration_no=registration_no)
+        print(f"Single student mode: {registration_no}")
+    # Multiple students filter
+    elif registration_nos:
+        exam_results = exam_results.filter(student__registration_no__in=registration_nos)
+        print(f"Multiple students mode: {len(registration_nos)} students")
+    elif batch and not include_all_batches:
         exam_results = exam_results.filter(student__batch=batch)
         
     target_students_count = exam_results.count()
