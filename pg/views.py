@@ -135,7 +135,8 @@ class PGCollegeStudentsView(APIView):
         
         # Build filter for assessments
         filters = {
-            'student__college': user_college
+            'student__college': user_college,
+            'label__icontains': 'CIA'
         }
         
         if department_uid:
@@ -190,6 +191,7 @@ class PGCollegeStudentsView(APIView):
                 'ind_marks_obtained': assessment.ind_marks_obtained,
                 'ind_is_absent': assessment.ind_is_absent,
                 'is_cia_fill': assessment.is_cia_fill,
+                'cia_ok': assessment.ind_is_pass,
                 'updated_at': timezone.localtime(assessment.updated_at).strftime('%d-%m-%Y %I:%M %p') if assessment.updated_at else None
             })
         
