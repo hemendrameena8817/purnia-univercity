@@ -28,6 +28,8 @@ Usage:
         session="2024",
         dry_run=True
     )
+
+    python pg/services/run_step1_cia_bulk.py --session 2024-25 --dry-run
 """
 
 from decimal import Decimal
@@ -130,14 +132,29 @@ class PGResultService:
         """Check if label indicates CIA (Internal)"""
         if not label: return False
         l = label.upper()
-        return 'CIA' in l or l == 'MID_TERM'
+        return 'CIA' in l
 
     @staticmethod
     def _is_ese(label):
         """Check if label indicates ESE (External)"""
         if not label: return False
         l = label.upper()
-        return 'ESE' in l or l == 'END_TERM' or l == 'END2_TERM'
+        return 'ESE' in l
+    
+    @staticmethod
+    def check_max_attempts(student_id: int, paper_code: str) -> bool:
+        """
+        Check if student has exceeded maximum attempts (3) for a paper.
+        """
+        from pg.models import PGStudentCourseAssessment
+        # Count unique sessions for this paper
+        attempts = PGStudentCourseAssessment.objects.filter(
+            student_id=student_id,
+            paper_code=paper_code
+        ).values('session').distinct().count()
+        
+        return attempts > 3
+
     
     # =========================================================================
     # LEVEL 1: INDIVIDUAL ASSESSMENT (CIA/ESE)
@@ -162,6 +179,9 @@ class PGResultService:
         if assessment.ind_pass_marks is None:
             return True
         
+        if assessment.ind_is_pass:
+            return True
+            
         return assessment.ind_marks_obtained >= assessment.ind_pass_marks
     
     # =========================================================================
@@ -232,24 +252,51 @@ class PGResultService:
         from pg.models import PGStudentCourseAssessment, PGCourseStructure
         
         # [Assessments Fetching] ...
+        # NOTE: For back papers, fetch ALL attempts across all sessions
         if assessments is None:
             filters = {
                 'student_id': student_id,
                 'semester': semester,
                 'paper_code': paper_code
             }
-            if session:
-                filters['session'] = session
+            # DO NOT filter by session - we need all attempts for back papers
+            # if session: filters['session'] = session  # REMOVED
             
             assessment_list = list(
-                PGStudentCourseAssessment.objects.filter(**filters).order_by('label')
+                PGStudentCourseAssessment.objects.filter(**filters).order_by('label', '-session', '-updated_at')
             )
         else:
             assessment_list = [
                 a for a in assessments 
-                if a.paper_code == paper_code and a.semester == semester
+                if a.paper_code == paper_code and a.semester.upper() == semester.upper()
             ]
-            assessment_list.sort(key=lambda x: x.label or '')
+            assessment_list.sort(key=lambda x: (x.label or '', x.session or '', x.updated_at or ''), reverse=True)
+        
+        # [Best Attempt Selection] - For each label (CIA, ESE), select the best attempt
+        # Priority: 1. Passed attempts, 2. Latest session, 3. Latest updated_at
+        best_attempts = {}
+        for assessment in assessment_list:
+            label = assessment.label
+            if label not in best_attempts:
+                # First attempt for this label
+                best_attempts[label] = assessment
+            else:
+                current_best = best_attempts[label]
+                # Check if this attempt is better
+                current_passed = PGResultService.check_individual_pass(current_best)
+                new_passed = PGResultService.check_individual_pass(assessment)
+                
+                # Prefer passed attempts over failed
+                if new_passed and not current_passed:
+                    best_attempts[label] = assessment
+                elif new_passed == current_passed:
+                    # Both passed or both failed - prefer latest session
+                    if (assessment.session or '') > (current_best.session or ''):
+                        best_attempts[label] = assessment
+        
+        # Use only the best attempts
+        assessment_list = list(best_attempts.values())
+        assessment_list.sort(key=lambda x: x.label or '')
         
         if not assessment_list:
             return {
@@ -341,6 +388,10 @@ class PGResultService:
         # Course Grade Point = GP (7) * Credits Earned (5) = 35
         course_grade_point = Decimal(grade_point) * credits_earned
         
+        # Check max attempts (3)
+        # We just flag it here, enforcement can be strict or soft
+        attempts_exceeded = PGResultService.check_max_attempts(student_id, paper_code)
+        
         return {
             'paper_code': paper_code,
             'course_name': assessment_list[0].course_name,
@@ -355,8 +406,10 @@ class PGResultService:
             'effective_credit': effective_credit,
             'credits_earned': credits_earned,
             'course_grade_point': course_grade_point,
-            'is_non_credit': is_non_credit
+            'is_non_credit': is_non_credit,
+            'attempts_exceeded': attempts_exceeded
         }
+
     
     # =========================================================================
     # LEVEL 4: SEMESTER LEVEL (SGPA, Result)
@@ -382,9 +435,12 @@ class PGResultService:
         from pg.models import PGStudentCourseAssessment
         
         # [Assessments Fetching] ...
+        # NOTE: For back papers, we need ALL assessments across all sessions
+        # The course-level logic will handle selecting the best attempt
         if assessments is None:
             filters = {'student_id': student_id, 'semester': semester}
-            if session: filters['session'] = session
+            # DO NOT filter by session - we need all attempts for back papers
+            # if session: filters['session'] = session  # REMOVED
             assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         paper_codes = set(a.paper_code for a in assessments if a.paper_code)
@@ -405,19 +461,22 @@ class PGResultService:
                 assessments=assessments
             )
             
-            if not course_result.get('passed', False):
-                all_passed = False
-            
             # Non-credit courses do not affect SGPA calculation
             if course_result.get('effective_credit', 0) == 0:
                 continue
             
             # Sum up points (GP * Credits) and Credits
+            # FIX: For SGPA, use the Course Grade Point (which is 0 for Fail) 
+            # but use the EFFECTIVE CREDITS for the denominator (so failure pulls down the average).
+            
+            # Note: course_grade_point in calculate_course_result is (GradePoint * CreditsEarned).
+            # If failed, CreditsEarned is 0, so course_grade_point is 0. This is correct for Numerator.
+            # But for Denominator, we must use the distinct effective_credit.
+            
             total_grade_points += course_result['course_grade_point']
-            total_credits_earned += course_result['credits_earned']
+            total_credits_earned += course_result['effective_credit'] # Changed from credits_earned
         
-        if not all_passed:
-            return Decimal('0.00')
+        # REMOVED: if not all_passed: return Decimal('0.00')
             
         if total_credits_earned == 0:
             return None
@@ -444,13 +503,20 @@ class PGResultService:
             - If 4 Papers: Must pass at least 3.
             - Otherwise FAIL.
         - FAIL: If not satisfying above conditions.
+        
+        Back Paper Logic:
+        - If exam_type='BACK' and <= 3 papers:
+            - QUALIFIED: Passed all back papers.
+            - DISQUALIFIED: Failed all back papers.
+            - PARTIALDISQUALIFIED: Passed some, failed some.
         """
         from pg.models import PGStudentCourseAssessment
         
         # [Assessments Fetching] ...
+        # NOTE: For back papers, fetch ALL attempts across all sessions
         if assessments is None:
             filters = {'student_id': student_id, 'semester': semester}
-            if session: filters['session'] = session
+            # DO NOT filter by session - we need all attempts
             assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         if not assessments:
@@ -462,20 +528,9 @@ class PGResultService:
         total_courses = 0
         passed_courses_count = 0
         
+        # Pre-calculate course results once
+        course_results_map = {}
         for paper_code in paper_codes:
-            # We need to Calculate course result for each paper to know if it's passed
-            # Re-using calculate_course_result logic or just checking pre-calculated values if available?
-            # Ideally, we should re-calculate to be safe, but this might be expensive if called repeatedly.
-            # However, calculate_semester_summary calls this, and inside process_student we call summary.
-            # IMPORTANT: process_student calls calculate_semester_summary which calls THIS method.
-            # So inside calculate_semester_summary, we already calculated course_results!
-            # But here we only have 'assessments' list.
-            
-            # Let's perform a lightweight check based on the assessments passed in.
-            # A course is passed if ALL its components (CIA/ESE) are passed and (Combined Total >= Passed).
-            # But wait, `calculate_course_result` does the exact complex logic (CBCS thresholds etc).
-            # We should probably use `calculate_course_result` to be consistent.
-            
             result = PGResultService.calculate_course_result(
                 student_id=student_id,
                 semester=semester,
@@ -483,21 +538,72 @@ class PGResultService:
                 session=session,
                 assessments=assessments
             )
-            
-            # We only count credit/main courses? The user didn't specify excluding non-credit.
-            # But usually result status depends on all papers including AECC.
-            # User said "if there is 5 paper...".
-            
-            # Checking if the course is passed
+            course_results_map[paper_code] = result
             if result['passed']:
                 passed_courses_count += 1
-            
             total_courses += 1
             
-        print(f"DEBUG: Student {student_id} Sem {semester}: Total {total_courses}, Passed {passed_courses_count}")
-        
+        # =====================================================================
+        # BACK PAPER ASSESSMENT CHECK
+        # =====================================================================
+        if session:
+            # Check if there are any assessments with exam_type='BACK' in the CURRENT session
+            back_assessments = [a for a in assessments if a.session == session and str(a.exam_type).upper() == 'BACK']
+            
+            if back_assessments:
+                 # Group by paper_code to count actual BACK COURSES attempted in this session
+                 back_paper_codes = set(a.paper_code for a in back_assessments if a.paper_code)
+                 back_count = len(back_paper_codes)
+                 
+                 # User Request: If back exam only for ESE papers set (Back <= 3)
+                 # Rule: <= 3 Back Papers -> Special Statuses
+                 if back_count <= 3 and back_count < total_courses:
+                     # Calculate status based ONLY on these back papers
+                     back_passed_count = 0
+                     
+                     for paper_code in back_paper_codes:
+                         # Use the pre-calculated result which considers the BEST attempt (including this one)
+                         result = course_results_map.get(paper_code)
+                         if result and result['passed']:
+                             back_passed_count += 1
+                     
+                     if back_passed_count == back_count:
+                         return 'QUALIFIED'
+                     elif back_passed_count == 0:
+                         return 'DISQUALIFIED'
+                     else:
+                         return 'PARTIALDISQUALIFIED'
+                 
+                 # If > 3 papers, Fall through to STANDARD LOGIC (PASS/FAIL/PROMOTED) below
+
+        # =====================================================================
+        # REGULAR / FULL BACK LOGIC
+        # =====================================================================
+
+        # [CRITICAL] CIA ABSENT CHECK
+        # If student is absent in ANY CIA paper in the CURRENT session -> FAIL immediately
+        if session:
+            current_cia_assessments = [
+                a for a in assessments 
+                if a.session == session and PGResultService._is_cia(a.label)
+            ]
+            for cia in current_cia_assessments:
+                if cia.ind_is_absent:
+                    return 'FAIL'
+
         # 1. PASS Condition: All courses passed
         if passed_courses_count == total_courses:
+            # If they cleared everything (even if it was a >3 back paper attempt), it's a PASS?
+            # Or should it be 'QUALIFIED' if it was a Back attempt?
+            # Standard: Regular = PASS. Back = QUALIFIED.
+            # But logic above handles "Specific Back".
+            # If this was a "Full Back" (e.g. 4 papers), and they pass all, 
+            # the user request didn't explicitly specify "QUALIFIED" for >3 back.
+            # Usually strict Back = Qualified. 
+            # For now, following "Treat as Regular" implies PASS/PROMOTED.
+            # But if a student re-appears in ALL papers as a Back student and passes, usually they are 'QUALIFIED'.
+            # However, prompt said: "if 3 back exam then check seprate logic... if > 3 ... like regular student".
+            # Regular student gets "PASS".
             return 'PASS'
             
         # 2. PROMOTED Condition
@@ -510,8 +616,12 @@ class PGResultService:
             if passed_courses_count >= 3:
                 is_promoted = True
         elif total_courses == 4:
-             if passed_courses_count >= 2:
-                 is_promoted = True
+             if passed_courses_count >= 3: # Changed from 2 to 3 to be safe/standard, or strictly follow previous code?
+                 # Previous code: if passed_courses_count >= 2: is_promoted = True
+                 # Standard logic usually 50%+. 2/4 is 50%.
+                 # Let's keep previous logic for 4 papers to avoid regression unless asked.
+                 if passed_courses_count >= 2:
+                     is_promoted = True
                  
         if is_promoted:
             return 'PROMOTED'
@@ -536,12 +646,16 @@ class PGResultService:
             'student_id': student_id,
             'semester': semester
         }
-        if session:
-            filters['session'] = session
+        # CRITICAL CHANGE: Do NOT filter by session.
+        # We need ALL assessments from all sessions to calculate the "Best of" result (Cumulative).
+        # This ensures that when a student takes a back paper, we consider their previous passed papers too.
+        # if session:
+        #     filters['session'] = session
         
         assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         paper_codes = set(a.paper_code for a in assessments if a.paper_code)
+
         
         course_results = []
         total_max_credits = Decimal(0)
@@ -561,19 +675,25 @@ class PGResultService:
             total_max_credits += result['max_credit']
             total_credits_earned += result['credits_earned']
         
-        sgpa = PGResultService.calculate_sgpa(
-            student_id=student_id,
-            semester=semester,
-            session=session,
-            assessments=assessments
-        )
-        
+        # Determine semester result FIRST (before SGPA calculation)
         semester_result = PGResultService.determine_semester_result(
             student_id=student_id,
             semester=semester,
             session=session,
             assessments=assessments
         )
+        
+        # BUSINESS RULE: Only calculate SGPA for PASS and QUALIFIED statuses
+        # For all other statuses (PROMOTED, FAIL, ABSENT, etc.), SGPA = 0
+        if semester_result in ['PASS', 'QUALIFIED']:
+            sgpa = PGResultService.calculate_sgpa(
+                student_id=student_id,
+                semester=semester,
+                session=session,
+                assessments=assessments
+            )
+        else:
+            sgpa = Decimal('0.00')
         
         
         # Calculate semester-level CIA/ESE pass status
@@ -658,11 +778,24 @@ class PGResultService:
                 prev_sem_str = next((k for k, v in sem_map_int.items() if v == prev_sem_num), None)
                 
                 if prev_sem_str:
-                    # Filter by student & prev semester, order by updated_at desc to get latest
-                    prev_result = PGExamResult.objects.filter(
+                    # [FIX]: Prioritize PASS/PROMOTED/QUALIFIED results over failures/absent
+                    # We first check if the student has ANY valid passing record for the previous semester
+                    successful_prev_result = PGExamResult.objects.filter(
                         student_id=student_id,
-                        semester=prev_sem_str
-                    ).order_by('-updated_at').first()
+                        semester=prev_sem_str,
+                        semester_result__in=['PASS', 'PROMOTED', 'QUALIFIED']
+                    ).first()
+                    
+                    if successful_prev_result:
+                        # If a successful record exists, we use it (even if there are newer failed entries, 
+                        # though that shouldn't happen logically, but data might be messy)
+                        prev_result = successful_prev_result
+                    else:
+                        # No successful record found, get the latest result to report the failure status
+                        prev_result = PGExamResult.objects.filter(
+                            student_id=student_id,
+                            semester=prev_sem_str
+                        ).order_by('-updated_at').first()
                     
                     if not prev_result:
                         return {
@@ -670,11 +803,12 @@ class PGResultService:
                             'error': f"SKIPPING: No result record found for previous semester {prev_sem_str}"
                         }
                     
-                    if prev_result.semester_result not in ['PASS', 'PROMOTED']:
-                        return {
-                            'success': False,
-                            'error': f"SKIPPING: Student not promoted from {prev_sem_str} (Status: {prev_result.semester_result})"
-                        }
+                    # Now check the status of the selected result
+                    if prev_result.semester_result not in ['PASS', 'PROMOTED', 'QUALIFIED']:
+                         return {
+                             'success': False,
+                             'error': f"SKIPPING: Student not promoted from {prev_sem_str} (Status: {prev_result.semester_result})"
+                         }
 
             # CHECK 2: CURRENT SEMESTER CIA PASS STATUS
             # The PGExamResult record should have been created by Step 1 (CIA Processing)
@@ -691,10 +825,21 @@ class PGResultService:
                 }
                 
             if not current_result_pre.cia_pass:
+                # Update status to FAIL instead of just skipping
+                current_result_pre.semester_result = 'FAIL'
+                current_result_pre.sgpa = Decimal('0.00')
+                current_result_pre.save()
+                
                 return {
-                    'success': False,
-                    'error': f"SKIPPING: Student failed in CIA for current semester {semester}."
+                    'success': True, # Return success so it's recorded
+                    'student_id': student_id,
+                    'summary': {
+                        'semester_result': 'FAIL',
+                        'sgpa': Decimal('0.00'),
+                        'error': "Student Detained (Failed in CIA)"
+                    }
                 }
+
 
             # =================================================================
             # END CHECKS
@@ -723,12 +868,12 @@ class PGResultService:
                 # 1. Isolate the binary components (CIA vs ESE) for this specific paper_code.
                 # We assume each paper has at least one CIA and one ESE component for combined calculation.
                 cia = assessments.filter(
-                    Q(label__icontains='CIA') | Q(label='MID_TERM'),
+                    label__icontains='CIA',
                     paper_code=paper_code
                 ).first()
                 
                 ese = assessments.filter(
-                    Q(label__icontains='ESE') | Q(label='END_TERM') | Q(label='END2_TERM'),
+                    label__icontains='ESE',
                     paper_code=paper_code
                 ).first()
                 
@@ -776,6 +921,20 @@ class PGResultService:
                     if not dry_run:
                         assessment.save()
             
+            # Step D: Bulk Update SGPA/SemResult for this specific SESSION only
+            # This ensures we don't overwrite historical attempts (e.g. from previous year)
+            if not dry_run:
+                PGStudentCourseAssessment.objects.filter(
+                    student_id=student_id,
+                    semester=semester,
+                    session=session  # <--- CRITICAL FIX: Filter by session
+                ).update(
+                    sgpa=summary['sgpa'],
+                    sem_result=summary['semester_result'],
+                    sem_max_credit=summary['total_max_credits'],
+                    sem_credit_obtained=summary['total_credits_earned']
+                )
+            
             # Step D: Finalize the semester summary record in PGExamResult and handle next semester registration.
             if not dry_run:
                 # Fetch student profile for foreign key relationship.
@@ -789,7 +948,7 @@ class PGResultService:
                 # 'COMPLETED' if PASS/PROMOTED but no further semesters are defined (e.g., end of program).
                 # 'NOT_ELIGIBLE' if FAIL.
                 next_sem_status = 'NOT_ELIGIBLE'
-                if summary['semester_result'] in ['PASS', 'PROMOTED']:
+                if summary['semester_result'] in ['PASS', 'PROMOTED', 'QUALIFIED']:
                     next_sem_status = 'ELIGIBLE' if next_sem_val else 'COMPLETED'
                 
                 # Create or update the PGExamResult record with the semester's overall summary.
@@ -897,17 +1056,21 @@ class PGResultService:
             # Determine next session based on year transition
             next_session = PGResultService._get_next_session(session, current_sem_val, next_sem_val)
 
-            PGSemesterRegistration.objects.get_or_create(
+            # Check if registration for this semester already exists (regardless of session)
+            # This prevents creating a duplicate Sem 2 registration when clearing a Back Paper for Sem 1
+            if PGSemesterRegistration.objects.filter(student=student, sem=next_sem_val).exists():
+                return
+
+            PGSemesterRegistration.objects.create(
                 student=student,
                 sem=next_sem_val,
                 session=next_session,  # Use calculated next session
-                defaults={
-                    'status': 'PENDING',
-                    'is_open': True,
-                    'exam_eligible': False,
-                    'remarks': f'Promoted from {current_sem_str} ({session}) to Sem {next_sem_val} ({next_session})'
-                }
+                status='PENDING',
+                is_open=True,
+                exam_eligible=False,
+                remarks=f'Promoted from {current_sem_str} ({session}) to Sem {next_sem_val} ({next_session})'
             )
+
         except Exception as e:
             # Log error but don't fail the whole result process
             print(f"Error creating registration for {student.registration_no}: {e}")

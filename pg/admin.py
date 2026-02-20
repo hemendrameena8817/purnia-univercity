@@ -5,7 +5,9 @@ from openpyxl.styles import Font, Alignment, PatternFill
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
-    PGCommonCourseStructure, PGExamResult
+    PGCommonCourseStructure, PGExamResult,
+    PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule,
+    PGExamRegistrationPayment,
 )
 
 
@@ -52,7 +54,7 @@ class PGBatchAdmin(admin.ModelAdmin):
 class PGStudentProfileAdmin(admin.ModelAdmin):
     list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
-    list_filter = ('status', 'gender', 'college', 'department', 'program', 'degree', 
+    list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
     search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 
                     'mobile_no', 'aadhar_no')
@@ -78,7 +80,7 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Personal Information', {
             'fields': ('uid', 'user', 'first_name', 'last_name', 'hindi_name',
-                      'date_of_birth', 'gender', 'caste', 'mobile_no', 'aadhar_no', 'address')
+                      'date_of_birth', 'gender', 'caste', 'religion', 'nationality', 'medium_of_student', 'mobile_no', 'aadhar_no', 'address')
         }),
         ('Academic Information', {
             'fields': ('registration_no', 'roll_no', 'college', 'department', 
@@ -137,91 +139,201 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
     )
 
 
+from import_export import resources, fields
+from import_export.widgets import ForeignKeyWidget
+from import_export.admin import ImportExportModelAdmin
+
+class SafeForeignKeyWidget(ForeignKeyWidget):
+    """
+    Custom widget that uses filter().first() instead of get() to avoid 
+    MultipleObjectsReturned error when duplicate related objects exist.
+    """
+    def clean(self, value, row=None, *args, **kwargs):
+        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
+        if val:
+            # Look up object using the specified field
+            # Use filter().first() instead of get()
+            return self.model.objects.filter(**{self.field: val}).first()
+        return None
+
+class PGStudentCourseAssessmentResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+    batch = fields.Field(
+        column_name='batch',
+        attribute='batch',
+        widget=SafeForeignKeyWidget(PGBatch, field='name')
+    )
+    department = fields.Field(
+        column_name='department',
+        attribute='department',
+        widget=ForeignKeyWidget(PGDepartment, field='name')
+    )
+
+    class Meta:
+        model = PGStudentCourseAssessment
+        exclude = ('uid',)  # Exclude UID to allow auto-generation
+        # Default behavior includes all other fields.
+        # import_id_fields = ('id',) # Default is 'id', which works for creation (if id missing) or update.
+
+    def before_import_row(self, row, **kwargs):
+        """
+        Hook called before importing each row.
+        Used here to create PGStudentProfile if it doesn't exist but UserAccount does.
+        """
+        registration_no = row.get('student')
+        if not registration_no:
+            return
+
+        # Check if Profile exists
+        if not PGStudentProfile.objects.filter(registration_no=registration_no).exists():
+            from accounts.models import UserAccount
+            from colleges.models import College
+            
+            # Check if UserAccount exists
+            user = UserAccount.objects.filter(username=registration_no).first()
+            if user:
+                print(f"Creating missing profile for User: {registration_no}")
+                
+                # Resolving Foreign Keys from row data
+                batch_name = row.get('batch')
+                dept_name = row.get('department')
+                college_code = row.get('college_code')
+                
+                batch_obj = PGBatch.objects.filter(name=batch_name).first() if batch_name else None
+                dept_obj = PGDepartment.objects.filter(name=dept_name).first() if dept_name else None
+                college_obj = College.objects.filter(college_code=college_code).first() if college_code else None
+                
+                # Create the Profile
+                PGStudentProfile.objects.create(
+                    user=user,
+                    registration_no=registration_no,
+                    first_name=user.get_full_name(), # Use full name
+                    last_name="", # Leave last name empty
+                    batch=batch_name, # Storing string for now as per model (or is it FK? Model says CharField for batch/roll_no actually? Let's check.)
+                    # Wait, PGStudentProfile.batch is CharField in model lines 205.
+                    # BUT PGStudentProfile.department is ForeignKey.
+                    department=dept_obj,
+                    college=college_obj,
+                    # roll_no might be same as RegNo or empty? Leaving empty.
+                    status='Active'
+                )
+            else:
+                 # Logic if User doesn't exist? 
+                 # User said "exist then create profile".
+                 # So if user not exist, we do nothing (it will fail validation later).
+                 pass
+
 @admin.register(PGStudentCourseAssessment)
-class PGStudentCourseAssessmentAdmin(admin.ModelAdmin):
-    # Optimized for 400K+ records - showing only essential fields
+class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
+    resource_class = PGStudentCourseAssessmentResource
+
+    # ── List view: only essential columns ─────────────────────────────────
     list_display = (
-        'student', 'course_name', 'paper_code', 'semester', 'label', 'exam_type',
-        'ind_marks_obtained', 'ind_is_absent', 
-        'comb_final_marks_obtained', 'sgpa', 'sem_result',
-        'is_cia_fill', 'is_ese_fill',
-        'session', 'created_at'
+        'get_regno', 'get_student_name', 'paper_code', 'semester',
+        'label', 'exam_type', 'session',
+        'ind_marks_obtained', 'ind_max_marks', 'ind_is_absent', 'ind_is_pass',
+        'sem_result', 'is_ese_fill',
     )
-    
-    # Optimize foreign key queries to prevent N+1 problem
+
+    # Prevent N+1: join student in the same query
     list_select_related = ('student', 'department', 'batch')
-    
-    # Use raw ID fields instead of dropdowns for better performance
+
+    # Raw-id widgets → avoids loading full dropdown lists
     raw_id_fields = ('student', 'department', 'batch')
-    
-    # Disable expensive COUNT(*) query on 400K records
+
+    # No COUNT(*) on 400K rows
     show_full_result_count = False
-    
-    # Keep only indexed and most useful filters
+
+    # Only FK / indexed / low-cardinality fields as filters
     list_filter = (
-        'semester', 'session', 'batch', 'department', 
-        'exam_type', 'label', 'ind_is_absent', 'sem_result','paper_code',"course_code",
+        'semester', 'session', 'exam_type', 'label',
+        'ind_is_absent', 'sem_result',
+        'is_cia_fill', 'is_ese_fill',
+        'department',
     )
-    
-    # Optimize search - use indexed fields only
+
+    # Search on indexed fields only
     search_fields = (
-        'student__registration_no', 
-        'student__first_name', 
-        'student__last_name',
+        'student__registration_no',
         'student__roll_no',
-        'course_code', 
-        'paper_code'
+        'paper_code',
+        'college_code',
     )
-    
-    # Smaller page size for faster rendering
+
     list_per_page = 50
-    
-    ordering = ('-created_at',)
-    
-    # Make calculated/imported fields readonly
+
+    # No default ordering → avoids full-table sort on 400K rows
+    # Use search / filters to narrow first, then sort
+    ordering = []
+
     readonly_fields = (
         'uid', 'created_at', 'updated_at',
         'comb_max_marks', 'comb_final_marks_obtained', 'comb_grade_point',
         'course_max_marks', 'course_final_marks_obtained', 'course_grade_point',
-        'sem_max_credit', 'sgpa', 'sem_result'
+        'sem_max_credit', 'sgpa', 'sem_result',
     )
-    
+
     fieldsets = (
         ('Student & Course Info', {
-            'fields': ('uid', 'student', 'course_name', 'course_short_name', 'course_type', 'course_code', 'paper_code', 'semester', 'label')
+            'fields': ('uid', 'student', 'course_name', 'course_short_name',
+                       'course_type', 'course_code', 'paper_code', 'semester', 'label')
         }),
         ('Exam Details', {
-            'fields': ('exam_type', 'session', 'batch', 'department', 'degree', 'college_code', 'attendance', 'is_cia_fill', 'is_ese_fill')
+            'fields': ('exam_type', 'session', 'batch', 'department',
+                       'degree', 'college_code', 'attendance', 'is_cia_fill', 'is_ese_fill')
         }),
         ('Individual Assessment', {
-            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained', 
-                      'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 'ind_is_absent')
+            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained',
+                       'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass', 'ind_is_absent')
         }),
         ('Combined Assessment', {
-            'fields': ('comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained', 
-                      'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained', 
-                      'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point')
+            'fields': ('comb_max_marks', 'comb_max_credits', 'comb_pass_marks', 'comb_marks_obtained',
+                       'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_credit_obtained',
+                       'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point'),
+            'classes': ('collapse',)
         }),
         ('Course Assessment', {
             'fields': ('course_max_marks', 'course_max_credits', 'course_pass_marks', 'course_marks_obtained',
-                      'course_grace_obtained', 'course_final_marks_obtained', 'course_credit_obtained', 'course_grade_point')
-        }),
-        ('Semester Assessment', {
-            'fields': ('sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained')
-        }),
-        ('Temp Fields', {
-            'fields': ('temp_total_gp',),
+                       'course_grace_obtained', 'course_final_marks_obtained',
+                       'course_credit_obtained', 'course_grade_point'),
             'classes': ('collapse',)
         }),
-        ('Additional Data', {
-            'fields': ('json_data',),
+        ('Semester Assessment', {
+            'fields': ('sem_max_credit', 'sem_credit_obtained', 'sgpa',
+                       'sem_result', 'next_sem_status', 'sem_grace_obtained')
+        }),
+        ('Temp / JSON', {
+            'fields': ('temp_total_gp', 'json_data'),
             'classes': ('collapse',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
-        })
+        }),
     )
+
+    # ── Queryset: select_related to prevent N+1 on list page ──────────────
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'student', 'department', 'batch'
+        )
+
+    # ── Compact display helpers ────────────────────────────────────────────
+    def get_regno(self, obj):
+        return obj.student.registration_no if obj.student else '-'
+    get_regno.short_description = 'Reg No'
+    get_regno.admin_order_field = 'student__registration_no'
+
+    def get_student_name(self, obj):
+        if obj.student:
+            return f"{obj.student.first_name or ''} {obj.student.last_name or ''}".strip()
+        return '-'
+    get_student_name.short_description = 'Name'
+    get_student_name.admin_order_field = 'student__first_name'
 
 
 @admin.register(PGSemesterRegistration)
@@ -253,23 +365,71 @@ class PGSemesterRegistrationAdmin(admin.ModelAdmin):
     )
 
 
+class PGExamRegistrationResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+
+    class Meta:
+        model = PGExamRegistration
+        exclude = ('uid', 'id')
+        import_id_fields = ('student', 'sem', 'session', 'exam_type')
+
+    def before_import_row(self, row, **kwargs):
+        """
+        Hook called before importing each row.
+        Used here to create PGStudentProfile if it doesn't exist but UserAccount does.
+        """
+        registration_no = row.get('student')
+        if not registration_no:
+            return
+
+        # Check if Profile exists
+        if not PGStudentProfile.objects.filter(registration_no=registration_no).exists():
+            from accounts.models import UserAccount
+            from colleges.models import College
+            
+            # Check if UserAccount exists
+            user = UserAccount.objects.filter(username=registration_no).first()
+            if user:
+                # print(f"Creating missing profile for User: {registration_no}")
+                
+                # Resolving Foreign Keys from row data if available (though these are on registration, not profile usually)
+                # For Profile creation, we try to use defaults or data from account
+                
+                # Create the Profile
+                PGStudentProfile.objects.create(
+                    user=user,
+                    registration_no=registration_no,
+                    first_name=user.get_full_name(), 
+                    last_name="", 
+                    status='Active'
+                )
+
 @admin.register(PGExamRegistration)
-class PGExamRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'fees', 'start_date', 'end_date')
-    list_filter = ('sem', 'is_open', 'status', 'session')
+class PGExamRegistrationAdmin(ImportExportModelAdmin):
+    resource_class = PGExamRegistrationResource
+    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
+    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type')
     search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session')
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'student', 'sem', 'session')
+            'fields': ('uid', 'student', 'sem', 'session', 'exam_type')
         }),
         ('Registration Period', {
             'fields': ('start_date', 'end_date', 'is_open', 'status')
         }),
         ('Fees', {
             'fields': ('fees',)
+        }),
+        ('Documents', {
+            'fields': ('admission_receipt',),
+            'classes': ('collapse',)
         }),
         ('Additional Data', {
             'fields': ('json_data',),
@@ -346,6 +506,9 @@ class PGExamResultAdmin(admin.ModelAdmin):
         'created_at'
     )
     
+    # Optimization: Reduce database queries
+    list_select_related = ('student', 'student__department', 'student__program', 'student__college')
+    
     list_filter = (
         'semester',
         'session',
@@ -358,6 +521,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
         'student__batch'
     )
     
+    # Optimized search fields
     search_fields = (
         'student__registration_no',
         'student__first_name',
@@ -606,7 +770,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
             return 'No ESE assessments found (or not yet entered)'
         
         rows = []
-        for assessment in assessments:
+        for assessment in ese_courses:
             # Calculate pass status
             is_pass = False
             if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
@@ -659,3 +823,83 @@ class PGExamResultAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         })
     )
+
+@admin.register(PGExam)
+class PGExamAdmin(admin.ModelAdmin):
+    list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
+    list_filter = ('session', 'year', 'batch')
+    search_fields = ('name', 'session', 'batch')
+    ordering = ('-created_at',)
+
+@admin.register(PGExamCenterMapping)
+class PGExamCenterMappingAdmin(admin.ModelAdmin):
+    list_display = ('center', 'get_exams_count', 'get_attached_colleges_count', 'created_at')
+    list_filter = ('center',)
+    search_fields = ('center__name', 'center__code')
+    filter_horizontal = ('exams', 'attached_colleges')
+    
+    def get_exams_count(self, obj):
+        return obj.exams.count()
+    get_exams_count.short_description = 'Exams Count'
+    
+    def get_attached_colleges_count(self, obj):
+        return obj.attached_colleges.count()
+    get_attached_colleges_count.short_description = 'Attached Colleges Count'
+
+@admin.register(PGGroup)
+class PGGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'get_departments', 'created_at')
+    list_filter = ('department',)
+    search_fields = ('name', 'department__name')
+    ordering = ('name',)
+    filter_horizontal = ('department',)
+
+    def get_departments(self, obj):
+        return ", ".join([d.name for d in obj.department.all() if d.name])
+    get_departments.short_description = 'Departments'
+
+@admin.register(PGExamSchedule)
+class PGExamScheduleAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+    list_filter = ('exam', 'group', 'exam_date', 'sitting')
+    search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
+    ordering = ('exam_date', 'exam_time')
+
+
+@admin.register(PGExamRegistrationPayment)
+class PGExamRegistrationPaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        'order_id', 
+        'get_student_info', 
+        'amount', 
+        'payment_status', 
+        'tracking_id', 
+        'payment_mode', 
+        'created_at'
+    )
+    list_filter = ('payment_status', 'payment_mode', 'created_at')
+    search_fields = (
+        'order_id', 
+        'tracking_id', 
+        'bank_ref_no',
+        'registration__student__registration_no',
+        'registration__student__first_name',
+        'registration__student__mobile_no'
+    )
+    readonly_fields = (
+        'uid', 
+        'registration', 
+        'order_id', 
+        'tracking_id', 
+        'bank_ref_no', 
+        'raw_response', 
+        'created_at', 
+        'updated_at'
+    )
+    ordering = ('-created_at',)
+    
+    def get_student_info(self, obj):
+        student = obj.registration.student
+        return f"{student.first_name} ({student.registration_no})"
+    get_student_info.short_description = 'Student'
+

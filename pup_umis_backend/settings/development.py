@@ -67,7 +67,11 @@ if not CORS_ALLOWED_ORIGINS:
     CORS_ALLOWED_ORIGINS = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "http://localhost:8000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
+        "http://localhost:3010",
         "http://127.0.0.1:8000",
     ]
 
@@ -141,17 +145,17 @@ STORAGES = {
 # INSTALLED_APPS += ['debug_toolbar']
 # MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
 # INTERNAL_IPS = ['127.0.0.1']
-DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
-AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="ap-south-2")
+# DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+# AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME")
+# AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="ap-south-2")
 
-AWS_DEFAULT_ACL = None
-AWS_S3_FILE_OVERWRITE = False
-AWS_S3_ADDRESSING_STYLE = "virtual"
-AWS_S3_PUBLIC_MEDIA = False
-AWS_QUERYSTRING_AUTH = True
-AWS_QUERYSTRING_EXPIRE = 300
+# AWS_DEFAULT_ACL = None
+# AWS_S3_FILE_OVERWRITE = False
+# AWS_S3_ADDRESSING_STYLE = "virtual"
+# AWS_S3_PUBLIC_MEDIA = False
+# AWS_QUERYSTRING_AUTH = True
+# AWS_QUERYSTRING_EXPIRE = 300
 
-AWS_S3_OBJECT_PARAMETERS = {
-    "CacheControl": "max-age=86400",
-}
+# AWS_S3_OBJECT_PARAMETERS = {
+#     "CacheControl": "max-age=86400",
+# }

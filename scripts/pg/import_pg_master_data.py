@@ -4,8 +4,7 @@ Reads from courses_data/pg/ folder - specifically the Subject Detail_PG.xlsx fil
 IMPORTANT: Reads exact data from files - does NOT generate any data automatically.
 
 Usage:
-    poetry run python manage.py shell -c "exec(open('scripts/pg/import_pg_master_data.py').read()); import_pg_master_data()"
-"""
+  """
 import os
 import re
 from openpyxl import load_workbook

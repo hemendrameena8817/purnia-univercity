@@ -570,11 +570,14 @@ class PaymentResponseView(views.APIView):
             
             if hasattr(payment, 'registration') and hasattr(payment.registration, 'uid'):
                 uid = str(payment.registration.uid)
+                course_code = payment.registration.course.code if payment.registration.course else ""
+                
                 redirect_url = (
                     f"{frontend_url}/new-registration/registration-status"
                     f"?uid={uid}"
                     f"&payment_status={payment.payment_status.lower()}"
                     f"&order_id={order_id}"
+                    f"&course_code={course_code}"
                 )
                 if payment.payment_status == 'SUCCESS' and payment.registration.registration_number:
                     redirect_url += f"&registration_number={payment.registration.registration_number}"
@@ -743,3 +746,49 @@ class CheckRegistrationWindowView(views.APIView):
             "end_datetime": timezone.localtime(end) if end else None,
             "current_datetime": timezone.localtime(current_time)
         }, status=status.HTTP_200_OK)
+
+
+class RegistrationCardPDFView(views.APIView):
+    """
+    Generate and download Registration Card PDF for VOC students.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Download Registration Card PDF",
+        manual_parameters=[
+            openapi.Parameter('uid', openapi.IN_QUERY, description="Registration UID", type=openapi.TYPE_STRING, required=True),
+        ]
+    )
+    def get(self, request):
+        from django.http import HttpResponse
+        from .utils.pdf_utils import generate_voc_registration_card
+        
+        uid = request.query_params.get('uid')
+        if not uid:
+            return Response({"error": "UID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            registration = NewRegistration.objects.select_related(
+                'college', 'course', 'batch', 'session'
+            ).get(uid=uid, is_deleted=False)
+        except (NewRegistration.DoesNotExist, ValueError):
+            return Response({"error": "Registration not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+        if not registration.is_registration_completed:
+            return Response({"error": "Registration is not completed yet"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            # Generate PDF
+            pdf_buffer = generate_voc_registration_card(registration)
+            
+            # Return Response
+            response = HttpResponse(pdf_buffer, content_type='application/pdf')
+            filename = f"Registration_Card_{registration.registration_number or registration.aadhaar_no}.pdf"
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

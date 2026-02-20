@@ -69,7 +69,7 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
     list_select_related = ('college', 'department', 'program', 'degree', 'batch')
     show_full_result_count = False
     list_per_page = 50
-    raw_id_fields = ('user', 'college', 'department', 'program', 'degree', 'batch')
+    raw_id_fields = ('user', 'college', 'department', 'program', 'degree', 'batch','major_course', 'minor_course', "mdc_course")
     
     fieldsets = (
         ('Personal Information', {

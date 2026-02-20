@@ -8,7 +8,7 @@ Resolves Foreign Keys:
 - Batch (via name)
 
 Usage:
-    python DBMIGRATIONS/migrate_pg_course_structure.py [--dry-run]
+    python DBMIGRATIONS/migrate_pg_course_structure.py
 """
 
 import os

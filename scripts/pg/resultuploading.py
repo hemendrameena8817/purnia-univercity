@@ -204,17 +204,17 @@ def process_batch(records, student_map, dept_map, batch_map):
     # Query: Filter by students in batch (this is standard practice)
     existing_qs = PGStudentCourseAssessment.objects.filter(
         student_id__in=student_ids_in_batch
-    ).values('id', 'student_id', 'semester', 'paper_code', 'label')
+    ).values('id', 'student_id', 'semester', 'paper_code', 'label', 'exam_type')
     
     # Build Map: Key -> ID
     existing_map = {}
     for ex in existing_qs:
-        key = (ex['student_id'], ex['semester'], ex['paper_code'], ex['label'])
+        key = (ex['student_id'], ex['semester'], ex['paper_code'], ex['label'], ex['exam_type'])
         existing_map[key] = ex['id']
         
     # Step 3: Split into Create and Update
     for data in valid_data_list:
-        key = (data['student_id'], data['semester'], data['paper_code'], data['label'])
+        key = (data['student_id'], data['semester'], data['paper_code'], data['label'], data['exam_type'])
         existing_id = existing_map.get(key)
         
         obj = PGStudentCourseAssessment(**data)

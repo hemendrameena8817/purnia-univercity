@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment, PGCourseStructure
+from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment, PGCourseStructure, PGExamRegistration
 from colleges.models import College
 
 
@@ -45,13 +45,15 @@ class PGStudentProfileSerializer(serializers.ModelSerializer):
         model = PGStudentProfile
         fields = [
             'uid',
+            'first_name', 'last_name', 'hindi_name',
             'registration_no', 'roll_no',
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
-            'mobile_no', 'aadhar_no', 'address',
-            'college',
-            'department', 'degree', 'program',
-            'status', 'session', 'batch', 'is_active'
+            'mobile_no', 'aadhar_no', 'apaar_id', 'address',
+            'admission_date', 'enrollment_date',
+            'migration_submitted', 'last_university',
+            'college', 'department', 'degree', 'program',
+            'current_semester', 'session', 'batch'
         ]
         read_only_fields = ['uid']
 
@@ -116,9 +118,7 @@ class AssessmentDetailSerializer(serializers.ModelSerializer):
         model = PGStudentCourseAssessment
         fields = [
             'uid', 'semester', 'session', 'paper_code', 
-            'course_name', 'course_code', 'label',
-            'ind_max_marks', 'ind_pass_marks', 
-            'ind_marks_obtained', 'ind_is_absent'
+            'course_name'
         ]
 
 
@@ -159,3 +159,45 @@ class PGCollegeStudentSerializer(serializers.Serializer):
     ind_is_absent = serializers.BooleanField(allow_null=True)
     is_cia_fill = serializers.BooleanField()
     updated_at = serializers.DateTimeField()
+
+
+class PGExamRegistrationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for PG Exam Registration.
+    Includes student profile and assessment details.
+    """
+    student = PGStudentProfileSerializer(read_only=True)
+    assessments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PGExamRegistration
+        fields = [
+            'uid', 'student', 'sem', 'session', 'exam_type', 
+            'status', 'fees', 'is_open', 'assessments'
+        ]
+
+    def get_assessments(self, obj):
+        """
+        Fetch ESE assessments for the student matching:
+        - semester from the registration (obj.sem)
+        - label = ESE only
+        - exam_type from the registration (obj.exam_type)
+        """
+        sem_str = str(obj.sem) if obj.sem else ""
+        exam_type = obj.exam_type  # e.g. 'REGULAR' or 'BACK'
+
+        filters = {
+            'student': obj.student,
+            'semester__icontains': sem_str,
+            'label__icontains': 'ESE',
+        }
+
+        if exam_type:
+            filters['exam_type'] = exam_type
+
+        assessments = PGStudentCourseAssessment.objects.filter(
+            **filters
+        ).order_by('paper_code')
+
+        return AssessmentDetailSerializer(assessments, many=True).data
+
