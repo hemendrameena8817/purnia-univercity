@@ -1,0 +1,114 @@
+[
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-403",
+        "exam_date": null,
+        "exam_time": null,
+        "sitting": null
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-401",
+        "exam_date": "2026-02-10",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "common_course_structure": "MB-201",
+        "exam_date": "2026-02-10",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-402",
+        "exam_date": "2026-02-11",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "common_course_structure": "MB-202",
+        "exam_date": "2026-02-11",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-404",
+        "exam_date": "2026-02-12",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "common_course_structure": "MB-203",
+        "exam_date": "2026-02-12",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-FC-01",
+        "exam_date": "2026-02-13",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-MC-01",
+        "exam_date": "2026-02-13",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-HC-01",
+        "exam_date": "2026-02-13",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "common_course_structure": "MB-204",
+        "exam_date": "2026-02-13",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-FC-02",
+        "exam_date": "2026-02-14",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-HC-02",
+        "exam_date": "2026-02-14",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "common_course_structure": "MB-MC-02",
+        "exam_date": "2026-02-14",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "common_course_structure": "MB-205",
+        "exam_date": "2026-02-14",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "common_course_structure": "MB-206",
+        "exam_date": "2026-02-16",
+        "exam_time": "10:00 AM",
+        "sitting": "01:00 PM"
+    }
+]

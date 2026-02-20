@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>BTech Exam Attendance Sheet</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 10mm;
+      }
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        margin: 0;
+        padding: 0;
+      }
+      {% comment %} .attendance-container {
+        width: 100%;
+        height: 135mm; 
+        border-bottom: 1px dashed #ccc;
+        padding-bottom: 10mm;
+        margin-bottom: 5mm;
+        position: relative;
+        box-sizing: border-box;
+      } {% endcomment %}
+      {% comment %} .attendance-container:nth-child(2n) {
+        border-bottom: none;
+        page-break-after: always;
+      } {% endcomment %}
+
+
+      .attendance-container {
+  width: 100%;
+  min-height: 100%;
+  padding-bottom: 10mm;
+  box-sizing: border-box;
+
+  page-break-after: always;
+}
+
+.attendance-container:last-child {
+  page-break-after: auto;
+}
+
+
+      .header {
+        text-align: center;
+        margin-bottom: 10px;
+        padding-top: 5px;
+      }
+      .header h2 {
+        margin: 0;
+        font-size: 14pt;
+      }
+      .header p {
+        margin: 2px 0;
+        font-size: 10pt;
+        max-width: 350px;
+        margin: auto;
+      }
+
+      .university-logo {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 50px;
+      }
+      .barcode-container {
+        position: absolute;
+        top: 0;
+        right: 0;
+        text-align: center;
+        background: white;
+        padding: 5px;
+      }
+      .barcode {
+        height: 30px;
+        width: 170px;
+        max-width: 170px;
+        display: block;
+        margin: 0 auto;
+      }
+      .info-section {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding-top: 10px;
+      }
+      .student-details {
+        width: 75%;
+      }
+      .student-photo {
+        width: 80px;
+        height: 100px;
+        border: 1px solid #000;
+        text-align: center;
+        overflow: hidden;
+      }
+      .student-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .detail-row {
+        margin-bottom: 3px;
+        display: flex;
+      }
+      .label {
+        width: 150px;
+        font-weight: bold;
+      }
+      .value {
+        flex: 1;
+      }
+
+      .attendance-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 8pt;
+        margin-top: 5px;
+      }
+      .attendance-table th,
+      .attendance-table td {
+        border: 1px solid #000;
+        padding: 4px 2px;
+        text-align: center;
+      }
+      .attendance-table th {
+        background-color: #f2f2f2;
+      }
+      .subject-cell {
+        text-align: left !important;
+        padding-left: 5px !important;
+        width: 35%;
+      }
+
+      .cs-signature {
+        text-align: right;
+        margin-top: 50px;
+        font-weight: bold;
+        font-size: 9pt;
+      }
+    </style>
+  </head>
+  <body>
+    {% for student in attendance_data %}
+    <div class="attendance-container">
+      {% if university_logo %}
+      <img
+        src="data:image/png;base64,{{ university_logo }}"
+        class="university-logo"
+        alt="University Logo"
+      />
+      {% endif %} {% if student.barcode %}
+      <div class="barcode-container">
+        <img
+          src="data:image/png;base64,{{ student.barcode }}"
+          class="barcode"
+          alt=""
+        />
+      </div>
+      {% endif %}
+
+      <div class="header">
+        <h2>Purnea University, Purnia</h2>
+        <p>Attendance Sheet ({{ exam_header }})</p>
+      </div>
+
+      <div class="info-section">
+        <div class="student-details">
+          <div class="detail-row">
+            <span class="label">Name</span>
+            <span class="value">: {{ student.name|upper }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Registration No</span>
+            <span class="value">: {{ student.registration_no }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Roll No</span>
+            <span class="value">: {{ student.roll_no }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">College Name</span>
+            <span class="value">: {{ student.college_name }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Centre Code & Name</span>
+            <span class="value">: {{ center_name }}</span>
+          </div>
+        </div>
+        <div class="student-photo">
+          {% if student.photo %}
+          <img
+            src="data:image/png;base64,{{ student.photo }}"
+            alt="Student Photo"
+          />
+          {% else %}
+          <div style="padding-top: 35px">PHOTO</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <table class="attendance-table">
+        <thead>
+          <tr>
+            <th style="width: 30px">Sl No.</th>
+            <th>Date of Exam</th>
+            <th>SITTING</th>
+            <th>SUBJECT</th>
+            <th>Paper</th>
+            <th>A/B SL. NO.</th>
+            <th>Examinee Signature</th>
+            <th>Invigilator Signature</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for schedule in student.schedules %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ schedule.date }}</td>
+            <td>{{schedule.exam_time}} - {{ schedule.sitting }}</td>
+            <td class="subject-cell">
+              {{ schedule.subject_name }} ({{ schedule.subject_code }})
+            </td>
+            <td>{{ schedule.subject_code }}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="cs-signature">C.S. Signature</div>
+    </div>
+    {% endfor %}
+  </body>
+</html>
