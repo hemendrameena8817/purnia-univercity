@@ -1,0 +1,17 @@
+[
+    {
+        "exam": "M.B.A 4th Semester Examination June 2024",
+        "center": "12",
+        "attached_colleges": [
+            "18",
+            "50"
+        ]
+    },
+    {
+        "exam": "M.B.A 2nd Semester Examination June 2024",
+        "center": "12",
+        "attached_colleges": [
+            "50"
+        ]
+    }
+]

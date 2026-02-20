@@ -10,6 +10,12 @@ Usage Examples:
     # Regular students - Production run
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25
     
+    # SINGLE STUDENT - Dry run
+    python pg/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --registration-no PU2024001 --dry-run
+
+    # SINGLE STUDENT - Production run
+    python pg/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --registration-no PU2024001
+
     # Back paper students (all batches in session) - Dry run
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches --dry-run
     
@@ -18,9 +24,6 @@ Usage Examples:
     python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 2nd --session 2023-24 --include-all-batches
     python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 3rd --session 2024-25 --include-all-batches
     python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 4th --session 2024-25 --include-all-batches
-    
-    # Old batch format example
-    python pg/services/run_step1_cia_processing.py --batch 2023-25 --semester 1ST --session 2024-25 --dry-run
     
     # Session-wise processing (no batch specified)
     python pg/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --dry-run
@@ -95,6 +98,13 @@ Examples:
         action='store_true',
         help='Include students from all batches who have assessments in this session (for back paper processing)'
     )
+
+    parser.add_argument(
+        '--registration-no',
+        type=str,
+        default=None,
+        help='Process a single student by registration number (e.g., PU2024001)'
+    )
     
     args = parser.parse_args()
     
@@ -105,7 +115,10 @@ Examples:
     if not args.dry_run:
         print(f"\n⚠️  PRODUCTION MODE")
         print(f"This will create/update PGExamResult entries for:")
-        print(f"  Batch:    {args.batch if args.batch else 'ALL BATCHES (Session Wise)'}")
+        if args.registration_no:
+            print(f"  Student:  {args.registration_no} (Single Student)")
+        else:
+            print(f"  Batch:    {args.batch if args.batch else 'ALL BATCHES (Session Wise)'}")
         print(f"  Semester: {args.semester}")
         print(f"  Session:  {args.session}")
         response = input("\nContinue? (yes/no): ")
@@ -122,7 +135,8 @@ Examples:
         semester=args.semester,
         session=args.session,
         dry_run=args.dry_run,
-        include_all_batches=args.include_all_batches
+        include_all_batches=args.include_all_batches,
+        registration_no=args.registration_no
     )
     
     print("\n✅ Step 1 Complete!")

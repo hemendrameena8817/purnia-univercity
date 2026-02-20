@@ -1,0 +1,1810 @@
+[
+{
+  "model": "mba_sem.mbacourse",
+  "pk": 5,
+  "fields": {
+    "uid": "c2456ef8-1ea6-4928-b4b4-740e23260cbe",
+    "name": "MBA (Master of Business Administration\t)",
+    "discipline_code": "MBA",
+    "duration_years": 2,
+    "created_at": "2026-02-05T08:12:42.491Z",
+    "updated_at": "2026-02-11T07:08:11.488Z"
+  }
+},
+{
+  "model": "mba_sem.mbacourse",
+  "pk": 6,
+  "fields": {
+    "uid": "aaa85978-c9b8-4ed6-a17b-306d5c5fe638",
+    "name": "MBA (Marketing))",
+    "discipline_code": "MC",
+    "duration_years": 2,
+    "created_at": "2026-02-05T08:12:42.537Z",
+    "updated_at": "2026-02-09T08:15:16.989Z"
+  }
+},
+{
+  "model": "mba_sem.mbacourse",
+  "pk": 7,
+  "fields": {
+    "uid": "b2854f16-3e87-488a-9d79-d4089fcb4793",
+    "name": "MBA (Finance)",
+    "discipline_code": "FC",
+    "duration_years": 2,
+    "created_at": "2026-02-05T08:12:42.543Z",
+    "updated_at": "2026-02-05T08:12:42.543Z"
+  }
+},
+{
+  "model": "mba_sem.mbacourse",
+  "pk": 8,
+  "fields": {
+    "uid": "adbc7bb1-8b8e-480b-a01b-4afc86c8a186",
+    "name": "MBA (Human Resource)",
+    "discipline_code": "HC",
+    "duration_years": 2,
+    "created_at": "2026-02-05T08:12:42.561Z",
+    "updated_at": "2026-02-06T19:01:57.240Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 124,
+  "fields": {
+    "uid": "bb7f749e-9094-442f-aedc-39ae2980c291",
+    "semester": "1",
+    "course_name": "Principles and Practices of Management",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-101",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.304Z",
+    "updated_at": "2026-02-04T18:04:55.304Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 125,
+  "fields": {
+    "uid": "9488f01c-577a-4596-8b74-f7242dc94c26",
+    "semester": "1",
+    "course_name": "Managerial Economics",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-102",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.318Z",
+    "updated_at": "2026-02-04T18:04:55.318Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 126,
+  "fields": {
+    "uid": "36323c3e-1e86-4270-b562-b3c31cfbfe2b",
+    "semester": "1",
+    "course_name": "Statistical Methods for Decision-Making",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-103",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.333Z",
+    "updated_at": "2026-02-04T18:04:55.333Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 127,
+  "fields": {
+    "uid": "4b7a23f4-beba-4f7e-ba2b-5b1c534dfda3",
+    "semester": "1",
+    "course_name": "Accounting and Financial Analysis",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-104",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.347Z",
+    "updated_at": "2026-02-04T18:04:55.347Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 128,
+  "fields": {
+    "uid": "070adc2b-7fbf-4117-bf87-d58159743be1",
+    "semester": "1",
+    "course_name": "Marketing Management",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-105",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.360Z",
+    "updated_at": "2026-02-04T18:04:55.360Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 129,
+  "fields": {
+    "uid": "90c2a0ba-21b6-4695-831f-1d00d02d2086",
+    "semester": "1",
+    "course_name": "Human Resource Management",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-106",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.376Z",
+    "updated_at": "2026-02-04T18:04:55.376Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 130,
+  "fields": {
+    "uid": "2ec74e10-842f-403e-bf8b-d572028245c1",
+    "semester": "2",
+    "course_name": "Organisational Behaviour",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-201",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.390Z",
+    "updated_at": "2026-02-04T18:04:55.390Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 131,
+  "fields": {
+    "uid": "d7567eb5-cb88-45d8-97ab-d72bcb3a82fd",
+    "semester": "2",
+    "course_name": "Business Research Methods",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-202",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.405Z",
+    "updated_at": "2026-02-04T18:04:55.406Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 132,
+  "fields": {
+    "uid": "a6f41137-f0e0-4f6a-8f8b-5405ae5476ef",
+    "semester": "2",
+    "course_name": "Operations Research",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-203",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.419Z",
+    "updated_at": "2026-02-04T18:04:55.419Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 133,
+  "fields": {
+    "uid": "fe8709b8-8bb0-4da6-8d7e-704b4d276826",
+    "semester": "2",
+    "course_name": "Management Accounting and Control",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-204",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.433Z",
+    "updated_at": "2026-02-04T18:04:55.433Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 134,
+  "fields": {
+    "uid": "3e825122-ed77-46de-b799-e053bd245d77",
+    "semester": "2",
+    "course_name": "Financial Management",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-205",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.447Z",
+    "updated_at": "2026-02-04T18:04:55.447Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 135,
+  "fields": {
+    "uid": "e9c73538-0a2c-4644-8289-4232ac211306",
+    "semester": "2",
+    "course_name": "Project Management",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-206",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.460Z",
+    "updated_at": "2026-02-04T18:04:55.460Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 136,
+  "fields": {
+    "uid": "ffaa1de9-86f3-4e97-89e5-6b9a9ebac77a",
+    "semester": "3",
+    "course_name": "Strategic Management",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-301",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.475Z",
+    "updated_at": "2026-02-04T18:04:55.475Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 137,
+  "fields": {
+    "uid": "da3ae01f-7980-45e2-b33a-ec4f63e4046c",
+    "semester": "3",
+    "course_name": "Legal Aspects of Business",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-302",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.490Z",
+    "updated_at": "2026-02-04T18:04:55.490Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 138,
+  "fields": {
+    "uid": "f2f6220c-e375-4f75-9731-3f36502de5b3",
+    "semester": "3",
+    "course_name": "Project Study",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-303",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.501Z",
+    "updated_at": "2026-02-04T18:04:55.501Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 139,
+  "fields": {
+    "uid": "9a150711-a32f-4e99-b755-d05fc8377ddf",
+    "semester": "3",
+    "course_name": "Summer Internship",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-304",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.511Z",
+    "updated_at": "2026-02-04T18:04:55.511Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 140,
+  "fields": {
+    "uid": "cd4863a6-0d1f-4263-abd0-9d418830a1d4",
+    "semester": "3",
+    "course_name": "Security Analysis and Portfolio Management",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-FC-01",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.517Z",
+    "updated_at": "2026-02-04T18:04:55.517Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 141,
+  "fields": {
+    "uid": "49e40cab-e50d-4009-b490-dd8e58753655",
+    "semester": "3",
+    "course_name": "Corporate Tax Planning and Management",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-FC-02",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.531Z",
+    "updated_at": "2026-02-04T18:04:55.531Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 142,
+  "fields": {
+    "uid": "36960f11-3baf-4956-896f-e91dd33550b9",
+    "semester": "3",
+    "course_name": "Labour and Employment Laws in India",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-HC-01",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.544Z",
+    "updated_at": "2026-02-04T18:04:55.544Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 143,
+  "fields": {
+    "uid": "79a865b1-6be2-45ec-94a9-7c95f76f7737",
+    "semester": "3",
+    "course_name": "Industrial Relations",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-HC-02",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.558Z",
+    "updated_at": "2026-02-04T18:04:55.558Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 144,
+  "fields": {
+    "uid": "7a4acc7b-142b-458b-ad73-078f3ef9cb0e",
+    "semester": "3",
+    "course_name": "Consumer Behaviour",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-MC-01",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.570Z",
+    "updated_at": "2026-02-04T18:04:55.570Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 145,
+  "fields": {
+    "uid": "6b65ead7-60c3-4086-969c-a29cb93e7445",
+    "semester": "3",
+    "course_name": "Services Marketing",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-MC-02",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.584Z",
+    "updated_at": "2026-02-04T18:04:55.584Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 146,
+  "fields": {
+    "uid": "10a12955-c635-4a2e-84f7-d893a1603dc3",
+    "semester": "4",
+    "course_name": "Corporate Governance and Business Ethics",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-401",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.599Z",
+    "updated_at": "2026-02-04T18:04:55.599Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 147,
+  "fields": {
+    "uid": "55955a0a-a117-4a9a-8ecb-4f43b7ea0f3a",
+    "semester": "4",
+    "course_name": "Computer Application and Management Information System",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-402",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.612Z",
+    "updated_at": "2026-02-04T18:04:55.612Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 148,
+  "fields": {
+    "uid": "79eb17e4-dd8c-4f84-948f-4ebc057f905d",
+    "semester": "4",
+    "course_name": "Business Communication",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-404",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.625Z",
+    "updated_at": "2026-02-04T18:04:55.625Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 149,
+  "fields": {
+    "uid": "4955af4e-fa6c-4061-8c7b-79b54bf9f34d",
+    "semester": "4",
+    "course_name": "Comprehensive Viva-Voce",
+    "course_type": "Core",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-403",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.638Z",
+    "updated_at": "2026-02-04T18:04:55.638Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 150,
+  "fields": {
+    "uid": "3e63435f-35c9-4a13-b959-6e91b7eca319",
+    "semester": "4",
+    "course_name": "Banking and Financial Services",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-FC-01",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.646Z",
+    "updated_at": "2026-02-04T18:04:55.646Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 151,
+  "fields": {
+    "uid": "82632304-e600-4040-9001-541149aa3948",
+    "semester": "4",
+    "course_name": "Financial Derivatives",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-FC-02",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.658Z",
+    "updated_at": "2026-02-04T18:04:55.658Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 152,
+  "fields": {
+    "uid": "fd719756-5016-4899-9c25-ebf98927b4e3",
+    "semester": "4",
+    "course_name": "Management of Change",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-HC-01",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.671Z",
+    "updated_at": "2026-02-04T18:04:55.671Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 153,
+  "fields": {
+    "uid": "09a687aa-86ef-483d-b5c3-6d8e7f638a13",
+    "semester": "4",
+    "course_name": "Group Dynamics",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-HC-02",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.684Z",
+    "updated_at": "2026-02-04T18:04:55.684Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 154,
+  "fields": {
+    "uid": "71b5a634-7e85-4f02-b6ac-a5a2e74c9f92",
+    "semester": "4",
+    "course_name": "Sales and Distribution Management",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-MC-01",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.698Z",
+    "updated_at": "2026-02-04T18:04:55.698Z"
+  }
+},
+{
+  "model": "mba_sem.mbacommoncoursestructure",
+  "pk": 155,
+  "fields": {
+    "uid": "74bc4e4a-bf04-4b65-8dff-f086ea71292f",
+    "semester": "4",
+    "course_name": "Strategic Marketing",
+    "course_type": "Core Elective",
+    "ltp": null,
+    "marks": 100,
+    "code": "MB-MC-02",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.727Z",
+    "updated_at": "2026-02-04T18:04:55.727Z"
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 117,
+  "fields": {
+    "uid": "f8de086b-49ad-48a7-b001-6a34eb09bc3c",
+    "course_name": "Principles and Practices of Management",
+    "course_short_name": "PPM",
+    "course_type": "Core",
+    "course_code": "MB-101",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 1",
+    "label": "CIA",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.307Z",
+    "updated_at": "2026-02-04T18:04:55.307Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 118,
+  "fields": {
+    "uid": "23e54f80-ea6f-4370-8465-feba3b2ee283",
+    "course_name": "Principles and Practices of Management",
+    "course_short_name": "PPM",
+    "course_type": "Core",
+    "course_code": "MB-101",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 1",
+    "label": "ESE",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.313Z",
+    "updated_at": "2026-02-04T18:04:55.313Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 119,
+  "fields": {
+    "uid": "59ec9169-76d7-4d2d-848e-e8ab0285e921",
+    "course_name": "Managerial Economics",
+    "course_short_name": "ME",
+    "course_type": "Core",
+    "course_code": "MB-102",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 1",
+    "label": "CIA",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.320Z",
+    "updated_at": "2026-02-04T18:04:55.320Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 120,
+  "fields": {
+    "uid": "7d80f833-4483-4661-a51d-d7fd3314540a",
+    "course_name": "Managerial Economics",
+    "course_short_name": "ME",
+    "course_type": "Core",
+    "course_code": "MB-102",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 1",
+    "label": "ESE",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.327Z",
+    "updated_at": "2026-02-04T18:04:55.327Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 121,
+  "fields": {
+    "uid": "113e168d-2ddf-4e8c-96b7-88b2abd8a2a3",
+    "course_name": "Statistical Methods for Decision-Making",
+    "course_short_name": "SMDM",
+    "course_type": "Core",
+    "course_code": "MB-103",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 1",
+    "label": "CIA",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.335Z",
+    "updated_at": "2026-02-04T18:04:55.335Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 122,
+  "fields": {
+    "uid": "c0214298-d3cc-4918-a837-8788ddc2dee4",
+    "course_name": "Statistical Methods for Decision-Making",
+    "course_short_name": "SMDM",
+    "course_type": "Core",
+    "course_code": "MB-103",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 1",
+    "label": "ESE",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.341Z",
+    "updated_at": "2026-02-04T18:04:55.342Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 123,
+  "fields": {
+    "uid": "7efdf396-d52e-4e18-8a68-f870b55ba3e3",
+    "course_name": "Accounting and Financial Analysis",
+    "course_short_name": "AFA",
+    "course_type": "Core",
+    "course_code": "MB-104",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 1",
+    "label": "CIA",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.349Z",
+    "updated_at": "2026-02-04T18:04:55.349Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 124,
+  "fields": {
+    "uid": "6fd5f0f3-6133-4e53-a6f8-231f0aac0e9c",
+    "course_name": "Accounting and Financial Analysis",
+    "course_short_name": "AFA",
+    "course_type": "Core",
+    "course_code": "MB-104",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 1",
+    "label": "ESE",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.355Z",
+    "updated_at": "2026-02-04T18:04:55.355Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 125,
+  "fields": {
+    "uid": "b4370e34-84b5-4922-b3fd-666122ff83a1",
+    "course_name": "Marketing Management",
+    "course_short_name": "MM",
+    "course_type": "Core",
+    "course_code": "MB-105",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 1",
+    "label": "CIA",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.361Z",
+    "updated_at": "2026-02-04T18:04:55.361Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 126,
+  "fields": {
+    "uid": "27324eb4-e1b5-4faf-900e-3bb5c21f53d5",
+    "course_name": "Marketing Management",
+    "course_short_name": "MM",
+    "course_type": "Core",
+    "course_code": "MB-105",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 1",
+    "label": "ESE",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.368Z",
+    "updated_at": "2026-02-04T18:04:55.368Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 127,
+  "fields": {
+    "uid": "33252901-5f0a-44c2-b6c5-ecbe90893ebd",
+    "course_name": "Human Resource Management",
+    "course_short_name": "HRM",
+    "course_type": "Core",
+    "course_code": "MB-106",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 1",
+    "label": "CIA",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.377Z",
+    "updated_at": "2026-02-04T18:04:55.377Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 128,
+  "fields": {
+    "uid": "ad0ee71f-fc92-47fa-97b4-ead09e9b87f2",
+    "course_name": "Human Resource Management",
+    "course_short_name": "HRM",
+    "course_type": "Core",
+    "course_code": "MB-106",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 1",
+    "label": "ESE",
+    "semester": "1",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.382Z",
+    "updated_at": "2026-02-04T18:04:55.382Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 129,
+  "fields": {
+    "uid": "0aaddf46-5d27-4ae7-bc86-1d4592312d24",
+    "course_name": "Organisational Behaviour",
+    "course_short_name": "OB",
+    "course_type": "Core",
+    "course_code": "MB-201",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 2",
+    "label": "CIA",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.392Z",
+    "updated_at": "2026-02-04T18:04:55.392Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 130,
+  "fields": {
+    "uid": "2d4a9ae4-5b68-4bef-91f8-11123cd25bff",
+    "course_name": "Organisational Behaviour",
+    "course_short_name": "OB",
+    "course_type": "Core",
+    "course_code": "MB-201",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 2",
+    "label": "ESE",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.399Z",
+    "updated_at": "2026-02-04T18:04:55.399Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 131,
+  "fields": {
+    "uid": "0f92044d-9909-4f13-90d3-3133e235bbba",
+    "course_name": "Business Research Methods",
+    "course_short_name": "BRM",
+    "course_type": "Core",
+    "course_code": "MB-202",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 2",
+    "label": "CIA",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.408Z",
+    "updated_at": "2026-02-04T18:04:55.408Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 132,
+  "fields": {
+    "uid": "9dac90d0-cf6e-4e9c-8cd1-c4cda0e6c39f",
+    "course_name": "Business Research Methods",
+    "course_short_name": "BRM",
+    "course_type": "Core",
+    "course_code": "MB-202",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 2",
+    "label": "ESE",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.413Z",
+    "updated_at": "2026-02-04T18:04:55.413Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 133,
+  "fields": {
+    "uid": "15548873-53a4-43fd-8409-7c790e580a22",
+    "course_name": "Operations Research",
+    "course_short_name": "OR",
+    "course_type": "Core",
+    "course_code": "MB-203",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 2",
+    "label": "CIA",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.422Z",
+    "updated_at": "2026-02-04T18:04:55.422Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 134,
+  "fields": {
+    "uid": "63574567-d658-46bc-b20d-82b12d6571b0",
+    "course_name": "Operations Research",
+    "course_short_name": "OR",
+    "course_type": "Core",
+    "course_code": "MB-203",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 2",
+    "label": "ESE",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.427Z",
+    "updated_at": "2026-02-04T18:04:55.427Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 135,
+  "fields": {
+    "uid": "6433020c-5710-4d16-b527-c346a33e27c0",
+    "course_name": "Management Accounting and Control",
+    "course_short_name": "MAC",
+    "course_type": "Core",
+    "course_code": "MB-204",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 2",
+    "label": "CIA",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.435Z",
+    "updated_at": "2026-02-04T18:04:55.435Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 136,
+  "fields": {
+    "uid": "df9f891b-1136-498e-be7d-1aeddcb457b3",
+    "course_name": "Management Accounting and Control",
+    "course_short_name": "MAC",
+    "course_type": "Core",
+    "course_code": "MB-204",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 2",
+    "label": "ESE",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.441Z",
+    "updated_at": "2026-02-04T18:04:55.441Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 137,
+  "fields": {
+    "uid": "311f1afd-8307-4b03-9700-cb9a8fbccb2f",
+    "course_name": "Financial Management",
+    "course_short_name": "FM",
+    "course_type": "Core",
+    "course_code": "MB-205",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 2",
+    "label": "CIA",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.448Z",
+    "updated_at": "2026-02-04T18:04:55.448Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 138,
+  "fields": {
+    "uid": "10090cbf-9ec4-4aac-8f13-de1f3a74181b",
+    "course_name": "Financial Management",
+    "course_short_name": "FM",
+    "course_type": "Core",
+    "course_code": "MB-205",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 2",
+    "label": "ESE",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.455Z",
+    "updated_at": "2026-02-04T18:04:55.455Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 139,
+  "fields": {
+    "uid": "f1a7e92f-f806-4ee1-a00d-c7d85a956685",
+    "course_name": "Project Management",
+    "course_short_name": "PM",
+    "course_type": "Core",
+    "course_code": "MB-206",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 2",
+    "label": "CIA",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.462Z",
+    "updated_at": "2026-02-04T18:04:55.462Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 140,
+  "fields": {
+    "uid": "08a67eeb-ef5e-4d0c-98dd-82b0a3f125a4",
+    "course_name": "Project Management",
+    "course_short_name": "PM",
+    "course_type": "Core",
+    "course_code": "MB-206",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 2",
+    "label": "ESE",
+    "semester": "2",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.468Z",
+    "updated_at": "2026-02-04T18:04:55.468Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 141,
+  "fields": {
+    "uid": "881ee0f7-73b4-43d8-8a92-2d203e650058",
+    "course_name": "Strategic Management",
+    "course_short_name": "SM",
+    "course_type": "Core",
+    "course_code": "MB-301",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.477Z",
+    "updated_at": "2026-02-04T18:04:55.478Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 142,
+  "fields": {
+    "uid": "c6cf4fc6-76ce-441b-9b03-e42e485a752e",
+    "course_name": "Strategic Management",
+    "course_short_name": "SM",
+    "course_type": "Core",
+    "course_code": "MB-301",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.483Z",
+    "updated_at": "2026-02-04T18:04:55.483Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 143,
+  "fields": {
+    "uid": "dd26074c-5f58-429e-bd5f-05f2708b4c1f",
+    "course_name": "Legal Aspects of Business",
+    "course_short_name": "LAB",
+    "course_type": "Core",
+    "course_code": "MB-302",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.492Z",
+    "updated_at": "2026-02-04T18:04:55.492Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 144,
+  "fields": {
+    "uid": "b5a42f60-27e5-406f-8942-275ac10c0126",
+    "course_name": "Legal Aspects of Business",
+    "course_short_name": "LAB",
+    "course_type": "Core",
+    "course_code": "MB-302",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.497Z",
+    "updated_at": "2026-02-04T18:04:55.497Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 145,
+  "fields": {
+    "uid": "ab1dc194-9730-431f-bdb2-b863c72252d7",
+    "course_name": "Project Study",
+    "course_short_name": "PS",
+    "course_type": "Core",
+    "course_code": "MB-303",
+    "max_marks": "100.00",
+    "min_marks": "45.00",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.505Z",
+    "updated_at": "2026-02-04T18:04:55.505Z",
+    "credit": 8
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 146,
+  "fields": {
+    "uid": "4228f68c-825c-4369-8f14-532e91f3b580",
+    "course_name": "Summer Internship",
+    "course_short_name": "SI",
+    "course_type": "Core",
+    "course_code": "MB-304",
+    "max_marks": "100.00",
+    "min_marks": "45.00",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.512Z",
+    "updated_at": "2026-02-04T18:04:55.512Z",
+    "credit": 8
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 147,
+  "fields": {
+    "uid": "8d4d468e-7813-44dd-a242-11aa2fe0ad9b",
+    "course_name": "Security Analysis and Portfolio Management",
+    "course_short_name": "SAPM",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-01",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.519Z",
+    "updated_at": "2026-02-04T18:04:55.519Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 148,
+  "fields": {
+    "uid": "de450422-3492-4ede-ad72-afe9cad6775e",
+    "course_name": "Security Analysis and Portfolio Management",
+    "course_short_name": "SAPM",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-01",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.525Z",
+    "updated_at": "2026-02-04T18:04:55.525Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 149,
+  "fields": {
+    "uid": "096d7647-bd9e-4976-9169-66eb3f7f0b91",
+    "course_name": "Corporate Tax Planning and Management",
+    "course_short_name": "CTPM",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-02",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.532Z",
+    "updated_at": "2026-02-04T18:04:55.532Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 150,
+  "fields": {
+    "uid": "63af7b16-3b01-4e45-b41b-4ff155771c97",
+    "course_name": "Corporate Tax Planning and Management",
+    "course_short_name": "CTPM",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-02",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.538Z",
+    "updated_at": "2026-02-04T18:04:55.538Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 151,
+  "fields": {
+    "uid": "715ae3f7-8ed3-44e9-ae11-8d6c6b0436b4",
+    "course_name": "Labour and Employment Laws in India",
+    "course_short_name": "LELI",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-01",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.546Z",
+    "updated_at": "2026-02-04T18:04:55.546Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 152,
+  "fields": {
+    "uid": "25f07bf4-a7b3-46ec-ac3f-cde2a120e59d",
+    "course_name": "Labour and Employment Laws in India",
+    "course_short_name": "LELI",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-01",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.551Z",
+    "updated_at": "2026-02-04T18:04:55.551Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 153,
+  "fields": {
+    "uid": "d203b83d-7ef1-4aab-afd7-7e57ed7adc8d",
+    "course_name": "Industrial Relations",
+    "course_short_name": "IR",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-02",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.560Z",
+    "updated_at": "2026-02-04T18:04:55.560Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 154,
+  "fields": {
+    "uid": "7af9eaa0-9497-4b2a-be90-6201af81c442",
+    "course_name": "Industrial Relations",
+    "course_short_name": "IR",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-02",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.565Z",
+    "updated_at": "2026-02-04T18:04:55.565Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 155,
+  "fields": {
+    "uid": "6412b75b-a430-42a1-a800-c6434d1a4d11",
+    "course_name": "Consumer Behaviour",
+    "course_short_name": "CB",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-01",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.572Z",
+    "updated_at": "2026-02-04T18:04:55.572Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 156,
+  "fields": {
+    "uid": "6b898d15-dd91-4e89-b44e-5795f4b2d1e2",
+    "course_name": "Consumer Behaviour",
+    "course_short_name": "CB",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-01",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.578Z",
+    "updated_at": "2026-02-04T18:04:55.578Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 157,
+  "fields": {
+    "uid": "4bce4b96-ed7b-4eed-9a6e-0b53d5c04525",
+    "course_name": "Services Marketing",
+    "course_short_name": "SMK",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-02",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 3",
+    "label": "CIA",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.586Z",
+    "updated_at": "2026-02-04T18:04:55.586Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 158,
+  "fields": {
+    "uid": "7c99707d-4cfb-4ed7-bac4-1a47cb5807b6",
+    "course_name": "Services Marketing",
+    "course_short_name": "SMK",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-02",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 3",
+    "label": "ESE",
+    "semester": "3",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.592Z",
+    "updated_at": "2026-02-04T18:04:55.592Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 159,
+  "fields": {
+    "uid": "fd104614-96c5-4969-901c-0e3a151f549c",
+    "course_name": "Corporate Governance and Business Ethics",
+    "course_short_name": "CGBE",
+    "course_type": "Core",
+    "course_code": "MB-401",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.600Z",
+    "updated_at": "2026-02-04T18:04:55.600Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 160,
+  "fields": {
+    "uid": "e6f0cfdc-6b38-4dbd-aaa3-ed46456ddeaf",
+    "course_name": "Corporate Governance and Business Ethics",
+    "course_short_name": "CGBE",
+    "course_type": "Core",
+    "course_code": "MB-401",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.606Z",
+    "updated_at": "2026-02-04T18:04:55.606Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 161,
+  "fields": {
+    "uid": "11b15411-081e-4fce-9020-cbfbe5491e34",
+    "course_name": "Computer Application and Management Information System",
+    "course_short_name": "CAMIS",
+    "course_type": "Core",
+    "course_code": "MB-402",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.613Z",
+    "updated_at": "2026-02-04T18:04:55.613Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 162,
+  "fields": {
+    "uid": "48931a1d-1731-41e6-8014-42da1c2b8aba",
+    "course_name": "Computer Application and Management Information System",
+    "course_short_name": "CAMIS",
+    "course_type": "Core",
+    "course_code": "MB-402",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.619Z",
+    "updated_at": "2026-02-04T18:04:55.619Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 163,
+  "fields": {
+    "uid": "8caf0f1a-0e28-4bdb-9474-f10ad5e19276",
+    "course_name": "Business Communication",
+    "course_short_name": "BC",
+    "course_type": "Core",
+    "course_code": "MB-404",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.627Z",
+    "updated_at": "2026-02-04T18:04:55.627Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 164,
+  "fields": {
+    "uid": "10c56ca9-ee9f-44b1-9fa2-021e792a9418",
+    "course_name": "Business Communication",
+    "course_short_name": "BC",
+    "course_type": "Core",
+    "course_code": "MB-404",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.632Z",
+    "updated_at": "2026-02-04T18:04:55.632Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 165,
+  "fields": {
+    "uid": "c998c14c-ffa4-4e09-80d5-2db5308303d1",
+    "course_name": "Comprehensive Viva-Voce",
+    "course_short_name": "VV",
+    "course_type": "Core",
+    "course_code": "MB-403",
+    "max_marks": "100.00",
+    "min_marks": "45.00",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.641Z",
+    "updated_at": "2026-02-04T18:04:55.641Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 166,
+  "fields": {
+    "uid": "96a515bb-3822-499f-9506-ff9540fcd3db",
+    "course_name": "Banking and Financial Services",
+    "course_short_name": "BFS",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-01",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.648Z",
+    "updated_at": "2026-02-04T18:04:55.648Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 167,
+  "fields": {
+    "uid": "5cfaa1f7-a62f-47c0-a36a-d12e9b6ed712",
+    "course_name": "Banking and Financial Services",
+    "course_short_name": "BFS",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-01",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.653Z",
+    "updated_at": "2026-02-04T18:04:55.653Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 168,
+  "fields": {
+    "uid": "6a793048-7daa-46c0-93a6-02b5f715de9a",
+    "course_name": "Financial Derivatives",
+    "course_short_name": "FD",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-02",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.660Z",
+    "updated_at": "2026-02-04T18:04:55.660Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 169,
+  "fields": {
+    "uid": "a110b61f-c365-47f7-9ac7-c8a0430f8579",
+    "course_name": "Financial Derivatives",
+    "course_short_name": "FD",
+    "course_type": "Core Elective",
+    "course_code": "MB-FC-02",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.665Z",
+    "updated_at": "2026-02-04T18:04:55.665Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 170,
+  "fields": {
+    "uid": "0d0a858e-0fa0-4888-a954-5afab153273b",
+    "course_name": "Management of Change",
+    "course_short_name": "MOC",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-01",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.672Z",
+    "updated_at": "2026-02-04T18:04:55.672Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 171,
+  "fields": {
+    "uid": "87c4ca7e-059f-4f3e-a528-964a048d3484",
+    "course_name": "Management of Change",
+    "course_short_name": "MOC",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-01",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.679Z",
+    "updated_at": "2026-02-04T18:04:55.679Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 172,
+  "fields": {
+    "uid": "b6ced844-f34b-4661-b9ce-4082871a694c",
+    "course_name": "Group Dynamics",
+    "course_short_name": "GD",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-02",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.685Z",
+    "updated_at": "2026-02-04T18:04:55.685Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 173,
+  "fields": {
+    "uid": "f0317aec-d679-42e8-91f8-ae1b2440c49b",
+    "course_name": "Group Dynamics",
+    "course_short_name": "GD",
+    "course_type": "Core Elective",
+    "course_code": "MB-HC-02",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.692Z",
+    "updated_at": "2026-02-04T18:04:55.692Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 174,
+  "fields": {
+    "uid": "982ef9b4-7b82-48c1-bde9-7ae3eec78e31",
+    "course_name": "Sales and Distribution Management",
+    "course_short_name": "SDM",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-01",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.706Z",
+    "updated_at": "2026-02-04T18:04:55.707Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 175,
+  "fields": {
+    "uid": "7dedc86a-acec-47fc-a811-34adc62d2401",
+    "course_name": "Sales and Distribution Management",
+    "course_short_name": "SDM",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-01",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.716Z",
+    "updated_at": "2026-02-04T18:04:55.716Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 176,
+  "fields": {
+    "uid": "0866a5ef-5e8c-40b0-ac91-12452962a909",
+    "course_name": "Strategic Marketing",
+    "course_short_name": "STM",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-02",
+    "max_marks": "30.00",
+    "min_marks": "13.50",
+    "description": "MBA Semester 4",
+    "label": "CIA",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.729Z",
+    "updated_at": "2026-02-04T18:04:55.729Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbacoursestructure",
+  "pk": 177,
+  "fields": {
+    "uid": "4b5a5274-cd29-4b4b-b55e-fdbc7492ec2d",
+    "course_name": "Strategic Marketing",
+    "course_short_name": "STM",
+    "course_type": "Core Elective",
+    "course_code": "MB-MC-02",
+    "max_marks": "70.00",
+    "min_marks": "31.50",
+    "description": "MBA Semester 4",
+    "label": "ESE",
+    "semester": "4",
+    "json_data": null,
+    "created_at": "2026-02-04T18:04:55.739Z",
+    "updated_at": "2026-02-04T18:04:55.739Z",
+    "credit": 4
+  }
+},
+{
+  "model": "mba_sem.mbaexam",
+  "pk": 3,
+  "fields": {
+    "uid": "51f63d0d-ad5a-4ab9-b698-cd134d3e2598",
+    "name": "M.B.A 4th Semester Examination June 2024",
+    "semester": 4,
+    "session": "2024",
+    "exam_month_year": "Feb 2026",
+    "publication_date": "2026-02-03",
+    "created_at": "2026-02-04T19:18:02.708Z",
+    "updated_at": "2026-02-05T04:49:52.541Z"
+  }
+},
+{
+  "model": "mba_sem.mbaexam",
+  "pk": 4,
+  "fields": {
+    "uid": "9db104a8-3ee5-4c7e-894c-928ab2c88c03",
+    "name": "M.B.A 2nd Semester Examination June 2024",
+    "semester": 2,
+    "session": "2024",
+    "exam_month_year": "Feb 2026",
+    "publication_date": "2026-02-03",
+    "created_at": "2026-02-06T05:49:36.700Z",
+    "updated_at": "2026-02-06T07:19:17.961Z"
+  }
+}
+]

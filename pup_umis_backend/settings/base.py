@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'plw',
     'mca_sem',
     'btech',
+    'mba_sem',
     'ug_before_cbcs',
 ]
 
