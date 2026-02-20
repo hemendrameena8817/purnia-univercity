@@ -153,20 +153,35 @@ class Command(BaseCommand):
             live_major = None
             if local_profile.major_course:
                 live_major = UGDepartment.objects.using('live').filter(
-                    code=local_profile.major_course.code
+                    code=local_profile.major_course.code,
+                    is_publish=True
                 ).first()
+                if not live_major:
+                    self.stderr.write(self.style.WARNING(
+                        f"  ⚠ major_course code '{local_profile.major_course.code}' not found (published) on live DB"
+                    ))
 
             live_minor = None
             if local_profile.minor_course:
                 live_minor = UGDepartment.objects.using('live').filter(
-                    code=local_profile.minor_course.code
+                    code=local_profile.minor_course.code,
+                    is_publish=True
                 ).first()
+                if not live_minor:
+                    self.stderr.write(self.style.WARNING(
+                        f"  ⚠ minor_course code '{local_profile.minor_course.code}' not found (published) on live DB"
+                    ))
 
             live_mdc = None
             if local_profile.mdc_course:
                 live_mdc = UGDepartment.objects.using('live').filter(
-                    code=local_profile.mdc_course.code
+                    code=local_profile.mdc_course.code,
+                    is_publish=True
                 ).first()
+                if not live_mdc:
+                    self.stderr.write(self.style.WARNING(
+                        f"  ⚠ mdc_course code '{local_profile.mdc_course.code}' not found (published) on live DB"
+                    ))
 
             if dry_run:
                 self.stdout.write(self.style.SUCCESS(
@@ -206,51 +221,60 @@ class Command(BaseCommand):
                         )
                         self.stdout.write(f"  ✓ Created UserAccount: {live_user.username}")
 
-                    # ── 4. Create UGStudentProfile on live DB (skip if already exists) ──
+                    # ── 4. Create or Update UGStudentProfile on live DB ──────────
                     existing = UGStudentProfile.objects.using('live').filter(
                         registration_no=reg_no
                     ).first()
 
+                    profile_fields = dict(
+                        user=live_user,
+                        first_name=local_profile.first_name,
+                        last_name=local_profile.last_name,
+                        hindi_name=local_profile.hindi_name,
+                        address=local_profile.address,
+                        admission_date=local_profile.admission_date,
+                        date_of_birth=local_profile.date_of_birth,
+                        aadhar_no=local_profile.aadhar_no,
+                        apaar_id=local_profile.apaar_id,
+                        mobile_no=local_profile.mobile_no,
+                        migration_submitted=local_profile.migration_submitted,
+                        last_university=local_profile.last_university,
+                        gender=local_profile.gender,
+                        caste=local_profile.caste,
+                        enrollment_date=local_profile.enrollment_date,
+                        roll_no=local_profile.roll_no,
+                        father_name=local_profile.father_name,
+                        mother_name=local_profile.mother_name,
+                        current_semester=2,
+                        session='2025-26',
+                        status=local_profile.status,
+                        is_active=local_profile.is_active,
+                        json_data=local_profile.json_data,
+                        # Resolved FKs
+                        college=live_college,
+                        department=live_department,
+                        program=live_program,
+                        degree=live_degree,
+                        batch=live_batch,
+                        major_course=live_major,
+                        minor_course=live_minor,
+                        mdc_course=live_mdc,
+                    )
+
                     if existing:
-                        self.stdout.write(self.style.WARNING(
-                            f"  ⏭  Profile already exists for {reg_no} — skipping (no changes made)"
+                        # Update all fields on existing profile
+                        for field, val in profile_fields.items():
+                            setattr(existing, field, val)
+                        existing.save(using='live', update_fields=list(profile_fields.keys()))
+                        self.stdout.write(self.style.SUCCESS(
+                            f"  ✓ Updated UGStudentProfile: {reg_no} "
+                            f"(MJC={live_major}, MIC={live_minor}, MDC={live_mdc})"
                         ))
-                        stats['skipped'] += 1
+                        stats['synced'] += 1
                     else:
                         UGStudentProfile.objects.using('live').create(
                             registration_no=reg_no,
-                            user=live_user,
-                            first_name=local_profile.first_name,
-                            last_name=local_profile.last_name,
-                            hindi_name=local_profile.hindi_name,
-                            address=local_profile.address,
-                            admission_date=local_profile.admission_date,
-                            date_of_birth=local_profile.date_of_birth,
-                            aadhar_no=local_profile.aadhar_no,
-                            apaar_id=local_profile.apaar_id,
-                            mobile_no=local_profile.mobile_no,
-                            migration_submitted=local_profile.migration_submitted,
-                            last_university=local_profile.last_university,
-                            gender=local_profile.gender,
-                            caste=local_profile.caste,
-                            enrollment_date=local_profile.enrollment_date,
-                            roll_no=local_profile.roll_no,
-                            father_name=local_profile.father_name,
-                            mother_name=local_profile.mother_name,
-                            current_semester=2,
-                            session='2025-26',  # Fixed session for this sync batch
-                            status=local_profile.status,
-                            is_active=local_profile.is_active,
-                            json_data=local_profile.json_data,
-                            # Resolved FKs
-                            college=live_college,
-                            department=live_department,
-                            program=live_program,
-                            degree=live_degree,
-                            batch=live_batch,
-                            major_course=live_major,
-                            minor_course=live_minor,
-                            mdc_course=live_mdc,
+                            **profile_fields,
                             # Note: profile_image/signature not copied — shared S3 storage
                         )
                         self.stdout.write(self.style.SUCCESS(
