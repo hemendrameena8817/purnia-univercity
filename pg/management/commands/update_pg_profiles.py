@@ -188,7 +188,11 @@ class Command(BaseCommand):
         """
         Syncs existing profiles in target_db using data from default db.
         Assumes registration_no is the unique key.
+        Handles Foreign Keys (Department, Program, Degree, College) by name/code lookup.
         """
+        from pg.models import PGDepartment, PGProgram, PGDegree
+        from colleges.models import College
+
         self.stdout.write(self.style.SUCCESS(f"Starting Cross-DB Sync (Local -> {target_db})..."))
 
         # Fetch all target profiles
@@ -196,9 +200,35 @@ class Command(BaseCommand):
         total_target = target_profiles.count()
         self.stdout.write(f"Found {total_target} profiles in target DB ({target_db}).")
 
-        # Prepare list of fields to sync (exclude system fields AND all FK/relation fields)
-        # FK fields are excluded because local IDs may not exist in live's related tables
-        exclude_fields = ['id', 'uid', 'user', 'created_at', 'updated_at']
+        # 1. Pre-fetch Target Lookups to avoid N+1 queries during sync
+        self.stdout.write("Loading target referencing objects (Departments, Programs, Colleges)...")
+        
+        # Department Map: Name -> Object
+        target_depts = {
+            d.name: d for d in PGDepartment.objects.using(target_db).all() if d.name
+        }
+        
+        # Program Map: Name -> Object
+        target_programs = {
+            p.name: p for p in PGProgram.objects.using(target_db).all() if p.name
+        }
+        
+        # Degree Map: Name -> Object
+        target_degrees = {
+            d.name: d for d in PGDegree.objects.using(target_db).all() if d.name
+        }
+        
+        # College Map: Code -> Object (Prefer Code > Name)
+        target_colleges_by_code = {
+            c.college_code: c for c in College.objects.using(target_db).all() if c.college_code
+        }
+        target_colleges_by_name = {
+            c.name: c for c in College.objects.using(target_db).all() if c.name
+        }
+
+        # Prepare list of fields to sync (exclude system fields and relations we handle manually)
+        exclude_fields = ['id', 'uid', 'user', 'created_at', 'updated_at', 
+                         'college', 'department', 'program', 'degree']
         fields_to_sync = [
             f.name for f in PGStudentProfile._meta.fields 
             if f.name not in exclude_fields and not f.is_relation
@@ -208,13 +238,14 @@ class Command(BaseCommand):
         processed_count = 0
         updated_count = 0
 
-        # Pre-fetch local profiles into a dictionary for faster lookup
-        # Warning: If local DB is huge, this might consume memory. 
-        # But for 2500 profiles it's fine.
+        # Pre-fetch local profiles
         self.stdout.write("Loading local profiles...")
+        # Select related to avoid N+1 on local side too
         local_profiles_map = {
             p.registration_no: p 
-            for p in PGStudentProfile.objects.using('default').all()
+            for p in PGStudentProfile.objects.using('default').select_related(
+                'department', 'program', 'degree', 'college'
+            ).all()
         }
         self.stdout.write(f"Loaded {len(local_profiles_map)} local profiles.")
 
@@ -226,14 +257,13 @@ class Command(BaseCommand):
             local_profile = local_profiles_map.get(target_profile.registration_no)
             
             if not local_profile:
-                # No matching local profile, skip
                 continue
 
             needs_save = False
             changes = []
 
+            # A. Sync Scalar Fields
             for field_name in fields_to_sync:
-                # Only plain scalar fields (FK fields excluded above)
                 local_val = getattr(local_profile, field_name)
                 target_val = getattr(target_profile, field_name)
 
@@ -241,6 +271,57 @@ class Command(BaseCommand):
                     changes.append(f"{field_name}: '{target_val}'->'{local_val}'")
                     setattr(target_profile, field_name, local_val)
                     needs_save = True
+
+            # B. Sync Foreign Keys (Lookup by Name/Code)
+            
+            # 1. Department
+            if local_profile.department:
+                local_dept_name = local_profile.department.name
+                target_dept_obj = target_depts.get(local_dept_name)
+                
+                if target_dept_obj and target_profile.department != target_dept_obj:
+                    changes.append(f"Department: '{target_profile.department}'->'{local_dept_name}'")
+                    target_profile.department = target_dept_obj
+                    needs_save = True
+            
+            # 2. Program
+            if local_profile.program:
+                local_prog_name = local_profile.program.name
+                target_prog_obj = target_programs.get(local_prog_name)
+                
+                if target_prog_obj and target_profile.program != target_prog_obj:
+                    changes.append(f"Program: '{target_profile.program}'->'{local_prog_name}'")
+                    target_profile.program = target_prog_obj
+                    needs_save = True
+
+            # 3. Degree
+            if local_profile.degree:
+                local_deg_name = local_profile.degree.name
+                target_deg_obj = target_degrees.get(local_deg_name)
+                
+                if target_deg_obj and target_profile.degree != target_deg_obj:
+                    changes.append(f"Degree: '{target_profile.degree}'->'{local_deg_name}'")
+                    target_profile.degree = target_deg_obj
+                    needs_save = True
+
+            # 4. College
+            if local_profile.college:
+                # Try lookup by Code first, then Name
+                local_col_code = local_profile.college.college_code
+                local_col_name = local_profile.college.name
+                
+                target_col_obj = None
+                if local_col_code:
+                    target_col_obj = target_colleges_by_code.get(local_col_code)
+                
+                if not target_col_obj and local_col_name:
+                    target_col_obj = target_colleges_by_name.get(local_col_name)
+                
+                if target_col_obj and target_profile.college != target_col_obj:
+                    changes.append(f"College: '{target_profile.college}'->'{target_col_obj}'")
+                    target_profile.college = target_col_obj
+                    needs_save = True
+
             
             if needs_save:
                 updated_count += 1
@@ -253,10 +334,12 @@ class Command(BaseCommand):
         if not dry_run:
              if profiles_to_update:
                 self.stdout.write("Saving changes...")
-                # We ccan't use bulk_update easily with all fields without specifying them explicitl.
-                # And bulk_update with 30+ fields might be heavy.
-                # But it's better than N updates.
-                PGStudentProfile.objects.using(target_db).bulk_update(profiles_to_update, fields_to_sync, batch_size=500)
+                # We use simple bulk_update for scalar fields + FK IDs
+                # Note: bulk_update works for FKs if we pass the field name (e.g. 'department')
+                # It updates the underlying _id column.
+                all_fields_to_update = fields_to_sync + ['department', 'program', 'degree', 'college']
+                
+                PGStudentProfile.objects.using(target_db).bulk_update(profiles_to_update, all_fields_to_update, batch_size=500)
                 self.stdout.write(self.style.SUCCESS(f"Successfully updated {len(profiles_to_update)} profiles."))
         elif dry_run:
             self.stdout.write(self.style.SUCCESS(f"Dry run complete. Would have updated {len(profiles_to_update)} profiles."))
