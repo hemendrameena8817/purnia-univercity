@@ -56,4 +56,10 @@ urlpatterns = [
     path("college-students/",MBACollegeStudentsView.as_view(),name="mba-college-students"),
     path("marks-entry/",MBAMarksEntryView.as_view(),name="mba-marks-entry"),
     path("student-assessments/",MBAStudentCourseAssessmentAPIView.as_view(),name="mba-student-assessments"),
+    path(
+        "student-assessments/history/",
+        MBAStudentCourseAssessmentHistoryAPIView.as_view(),
+        name="mba-college-assessment-history"
+    ),
+
 ]   
