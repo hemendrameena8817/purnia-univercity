@@ -54,7 +54,7 @@ class PGBatchAdmin(admin.ModelAdmin):
 class PGStudentProfileAdmin(admin.ModelAdmin):
     list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
-    list_filter = ('status', 'gender', 'college', 'department', 'program', 'degree', 
+    list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
     search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 
                     'mobile_no', 'aadhar_no')
@@ -80,7 +80,7 @@ class PGStudentProfileAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Personal Information', {
             'fields': ('uid', 'user', 'first_name', 'last_name', 'hindi_name',
-                      'date_of_birth', 'gender', 'caste', 'mobile_no', 'aadhar_no', 'address')
+                      'date_of_birth', 'gender', 'caste', 'religion', 'nationality', 'medium_of_student', 'mobile_no', 'aadhar_no', 'address')
         }),
         ('Academic Information', {
             'fields': ('registration_no', 'roll_no', 'college', 'department', 
@@ -411,7 +411,7 @@ class PGExamRegistrationResource(resources.ModelResource):
 @admin.register(PGExamRegistration)
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
-    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'start_date', 'end_date',)
+    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
     list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type')
     search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session')
     ordering = ('-created_at',)
@@ -426,6 +426,10 @@ class PGExamRegistrationAdmin(ImportExportModelAdmin):
         }),
         ('Fees', {
             'fields': ('fees',)
+        }),
+        ('Documents', {
+            'fields': ('admission_receipt',),
+            'classes': ('collapse',)
         }),
         ('Additional Data', {
             'fields': ('json_data',),

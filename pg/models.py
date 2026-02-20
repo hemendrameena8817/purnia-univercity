@@ -1,6 +1,7 @@
 import uuid
 from django.db import models
-
+from pup_umis_backend.storage_backends import DocumentStorage, MediaStorage
+from pup_umis_backend.upload_paths import unique_file_path
 
 class PGFaculty(models.Model):
     """
@@ -207,7 +208,7 @@ class PGStudentProfile(models.Model):
     # Personal Information
     religion = models.CharField(max_length=50, null=True, blank=True)
     nationality = models.CharField(max_length=50, null=True, blank=True)
-
+    medium_of_student = models.CharField(max_length=50, null=True, blank=True)
     # Family Information
     father_name = models.CharField(max_length=255, null=True, blank=True)
     mother_name = models.CharField(max_length=255, null=True, blank=True)
@@ -254,8 +255,8 @@ class PGStudentProfile(models.Model):
     ec_course = models.CharField(max_length=250, null=True, blank=True, help_text="Elective Course (EC)")
 
     # Documents
-    profile_image = models.ImageField(upload_to='pg_students/profiles/', null=True, blank=True)
-    signature = models.ImageField(upload_to='pg_students/signatures/', null=True, blank=True)
+    profile_image = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('pg_students/profiles/'), null=True, blank=True)
+    signature = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('pg_students/signatures/'), null=True, blank=True)
 
     is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
@@ -623,7 +624,7 @@ class PGExamRegistration(models.Model):
         on_delete=models.CASCADE,
         related_name='exam_registrations'
     )
-    admission_receipt = models.FileField(upload_to='pg/admission_receipts/', null=True, blank=True, help_text="Admission Receipt")
+    admission_receipt = models.FileField(storage=MediaStorage(), upload_to=unique_file_path('pg/admission_receipts/'), null=True, blank=True, help_text="Admission Receipt")
     start_date = models.DateTimeField(null=True, blank=True, help_text="Start Date")
     end_date = models.DateTimeField(null=True, blank=True, help_text="End Date")
     is_open = models.BooleanField(default=False, help_text="Is Open")

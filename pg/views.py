@@ -941,7 +941,7 @@ class PGInitiatePaymentView(APIView):
             f"redirect_url={redirect_url}&cancel_url={cancel_url}&"
             f"language=EN&billing_name={student.get_full_name()}&"
             f"billing_tel={student.mobile_no or ''}&"
-            f"billing_email={student.user.email if hasattr(student, 'user') else ''}"
+            f"billing_email={(student.user.email or '') if hasattr(student, 'user') else ''}"
         )
 
         encrypted_data = encrypt(merchant_data, working_key)
@@ -1149,6 +1149,11 @@ class PGStudentUploadView(APIView):
         if caste:
             student.caste = caste
             updated_fields.append('caste')
+
+        medium = request.data.get('medium')
+        if medium:
+            student.medium_of_student = medium
+            updated_fields.append('medium_of_student')
 
         # ── 5. Handle PGExamRegistration uploads / updates ────────────────────
         reg_updated_fields = []
