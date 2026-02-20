@@ -217,6 +217,7 @@ def generate_pg_registration_card_pdf(student, registration):
             'roll_no': student.roll_no,
             'batch': student.batch,
             'caste': student.caste,
+            'religion': student.religion,
         },
         'logo_url':        logo_src,
         'college_name':    college_name,
