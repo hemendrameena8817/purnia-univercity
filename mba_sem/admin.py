@@ -35,7 +35,7 @@ class MBACourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(MBACommonCourseStructure)
 class MBACommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('semester', 'course_name', 'course_type', 'marks', 'code', 'marks')
+    list_display = ('uid','semester', 'course_name', 'course_type', 'marks', 'code', 'marks')
     list_filter = ('semester', 'course_type')
     search_fields = ('course_name', 'code')
 
@@ -84,3 +84,48 @@ class MBAExamResultAdmin(admin.ModelAdmin):
     list_display = ('student', 'semester', 'session', 'semester_result', 'total_marks_obtained', 'percentage')
     list_filter = ('semester', 'session', 'semester_result')
     search_fields = ('student__roll_no',)
+
+
+@admin.register(MBAStudentCourseAssessment)
+class StudentCourseAssessmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "uid",
+        "get_roll_no",
+        "student",
+        "semester",
+        "paper_code",
+        "label",
+        "exam_type",
+        "ind_marks_obtained",
+        "ind_is_absent",
+        "ind_is_pass",
+        "sgpa",
+        "created_at",
+    )
+
+    list_filter = (
+        "semester",
+        "label",
+        "exam_type",
+        "batch",
+        "session",
+        "paper_code"
+    )
+
+    search_fields = (
+        "student__roll_no",
+        "paper_code",
+        "course_name",
+    )
+
+    def get_roll_no(self, obj):
+        return obj.student.roll_no if obj.student else ""
+
+    # autocomplete_fields = ("student", "batch")
+
+    # list_select_related = ("student", "batch")
+
+    ordering = ("-created_at",)
+
+    # list_per_page = 50
+

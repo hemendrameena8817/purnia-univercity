@@ -136,7 +136,7 @@ class MBAStudentProfile(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.first_name or ''} {self.last_name or ''} ({self.registration_no})"
+        return f"{self.first_name or ''} {self.last_name or ''} ({self.registration_no}) ({self.roll_no})"
 
     def get_full_name(self):
         return f"{self.first_name or ''} {self.last_name or ''}".strip()
@@ -467,3 +467,152 @@ class MBAExamResult(models.Model):
 
     def __str__(self):
         return f"{self.student} | Sem {self.semester} | {self.semester_result}"
+
+
+class MBAStudentCourseAssessment(models.Model):
+    """
+    Semester-wise assessment + marks for a student course
+    using flexible labels (CIA-Theory, ESE-Practical, etc.)
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    mba_exam = models.ForeignKey(MBAExam, on_delete=models.PROTECT, null=True)
+    course_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Name")
+    course_short_name = models.CharField(max_length=250, null=True, blank=True, help_text="Course Short Name (e.g., 'IM' for 'Introductory Microeconomics').")
+    student = models.ForeignKey(
+        MBAStudentProfile,
+        on_delete=models.CASCADE,
+        help_text="Student",
+        related_name='mba_student_course_assessment'
+    )
+    course_type = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Course Type")
+    course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    paper_code = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Paper Code")
+
+    semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester")
+    label = models.CharField(max_length=100, db_index=True, help_text="Assessment label (e.g. CIA-Theory, ESE-Practical)")
+    degree = models.CharField(max_length=20, null=True, blank=True)
+    session = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Session")
+    batch = models.ForeignKey(
+        MBABatch,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+    college_code = models.CharField(max_length=10, null=True, blank=True, help_text="College Code")
+    exam_type = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Type Regular/Back")
+
+    ###attendance###
+    attendance = models.CharField(max_length=10, null=True, blank=True, help_text="Attendance")
+    ###attendance###
+
+    ####Individual####
+    ind_max_marks = models.IntegerField(null=True, blank=True, help_text="Individual MAX MARKS")
+    ind_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual PASS MARKS")
+    ind_is_absent = models.BooleanField(default=False, db_index=True, help_text="Is Absent")
+    ind_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual MARKS OBTAINED")
+    ind_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual GRACE MARKS OBTAINED")
+    ind_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual FINAL MARKS OBTAINED")
+    ind_is_pass = models.BooleanField(null=True, blank=True, help_text="Is Pass")
+    ####Individual####
+
+    ####combined####
+    comb_max_marks = models.IntegerField(null=True, blank=True, help_text="Total MAX MARKS")
+    comb_max_credits = models.IntegerField(null=True, blank=True, help_text="Total MAX CREDIT")
+    comb_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total PASS MARKS")
+    comb_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total MARKS OBTAINED")
+    comb_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRACE MARKS OBTAINED")
+    comb_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total FINAL MARKS OBTAINED")
+    comb_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total CREDIT OBTAINED")
+    comb_numeric_grade = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total NUMERIC GRADE")
+    comb_letter_grade = models.CharField(max_length=10, null=True, blank=True, help_text="Total LETTER GRADE")
+    comb_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
+    ####combined####
+
+    ####course####
+    course_max_marks = models.IntegerField(null=True, blank=True, help_text="Course MAX MARKS")
+    course_max_credits = models.IntegerField(null=True, blank=True, help_text="Course MAX CREDIT")
+    course_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course PASS MARKS")
+    course_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course MARKS OBTAINED")
+    course_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course GRACE MARKS")
+    course_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course FINAL MARKS OBTAINED")
+    course_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course CREDIT OBTAINED")
+    course_grade_point = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course GRADE POINT")
+    ####course####
+ 
+    ####semester####
+    sem_max_credit = models.IntegerField(null=True, blank=True, help_text="Semester MAX CREDIT")
+    sem_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester CREDIT OBTAINED")
+    sgpa = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRADE POINT")
+    sem_result = models.CharField(max_length=10, null=True, blank=True, help_text="Semester Result eg: pass/fail/promoted")
+    next_sem_status = models.CharField(max_length=10, null=True, blank=True, help_text="Next Semester Status eg: eligible/not eligible")
+    sem_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRACE MARKS OBTAINED")
+    ####semester####
+
+    #####temp#####
+    temp_total_gp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
+    #####temp#####
+
+    json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
+    created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
+    updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
+    
+    class Meta:
+        verbose_name = 'MBA Student Course Assessment'
+        verbose_name_plural = 'MBA Student Course Assessments'
+        ordering = ['-created_at']
+        unique_together = ('student', 'paper_code', 'semester', 'label', 'exam_type', 'session')
+        
+        # Composite indexes for common query patterns
+        indexes = [
+            # Student-based queries
+            models.Index(fields=['student', 'semester'], name='mba_idx_student_sem'),
+            models.Index(fields=['student', 'semester', 'label'], name='mba_idx_stud_sem_label'),
+            
+            # Department-based queries (for faculty reports via department FK)
+            # models.Index(fields=['department', 'semester'], name='idx_dept_sem'),
+            # models.Index(fields=['department', 'semester', 'label'], name='idx_dept_sem_label'),
+            
+            # Batch-based queries
+            models.Index(fields=['batch', 'semester'], name='mba_idx_batch_sem'),
+            
+            # Course-based queries
+            models.Index(fields=['paper_code', 'semester'], name='mba_idx_paper_sem'),
+            models.Index(fields=['semester', 'label'], name='mba_idx_sem_label'),
+            
+            # CRITICAL: Registration duplicate checking (30k students optimization)
+            # Includes exam_type to differentiate regular vs back exams
+            models.Index(fields=['student', 'semester', 'session', 'paper_code', 'label', 'exam_type'], 
+                        name='mba_idx_reg_dup_check'),
+        ]
+
+    def save(self, *args, **kwargs):
+        """
+        Override save to validate and calculate pass/fail status
+        """
+        # Step 1: Validate ind_marks_obtained doesn't exceed ind_max_marks
+        if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
+            if self.ind_marks_obtained > self.ind_max_marks:
+                raise ValueError(
+                    f"Individual marks obtained ({self.ind_marks_obtained}) "
+                    f"cannot exceed maximum marks ({self.ind_max_marks})"
+                )
+        
+        # Step 2: Calculate ind_is_pass based on ind_pass_marks
+        if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
+            # If absent, mark as fail
+            if self.ind_is_absent:
+                self.ind_is_pass = False
+            else:
+                # Pass if marks obtained >= pass marks
+                self.ind_is_pass = self.ind_marks_obtained >= self.ind_pass_marks
+        elif self.ind_is_absent:
+            # If absent but no marks data, still mark as fail
+            self.ind_is_pass = False
+        
+        # Call parent save
+        super().save(*args, **kwargs)
+        
+    def __str__(self):
+        return f"{self.student} | Sem {self.semester} | {self.label}"
+
+
