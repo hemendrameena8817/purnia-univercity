@@ -1,0 +1,67 @@
+[
+{
+  "model": "mba_sem.mbabatch",
+  "pk": 1,
+  "fields": {
+    "uid": "21af8baa-c405-4299-91de-2ffd87789d62",
+    "name": "2022-2024",
+    "session": null,
+    "is_active": true,
+    "json_data": null,
+    "created_at": "2026-02-04T10:36:39.134Z",
+    "updated_at": "2026-02-04T10:36:41.784Z"
+  }
+},
+{
+  "model": "mba_sem.mbabatch",
+  "pk": 2,
+  "fields": {
+    "uid": "e96a3880-4e1b-41a5-9a81-3597f6c7df76",
+    "name": "2018-20",
+    "session": null,
+    "is_active": true,
+    "json_data": null,
+    "created_at": "2026-02-04T16:15:33.988Z",
+    "updated_at": "2026-02-04T16:15:33.988Z"
+  }
+},
+{
+  "model": "mba_sem.mbabatch",
+  "pk": 3,
+  "fields": {
+    "uid": "eb5a0cf0-675b-49d8-a553-32948bb14fb5",
+    "name": "2019-21",
+    "session": null,
+    "is_active": true,
+    "json_data": null,
+    "created_at": "2026-02-04T16:15:34.057Z",
+    "updated_at": "2026-02-04T16:15:34.057Z"
+  }
+},
+{
+  "model": "mba_sem.mbabatch",
+  "pk": 4,
+  "fields": {
+    "uid": "046ec9a1-c26a-4389-9d4d-f8fbc14b8b22",
+    "name": "2023-25",
+    "session": null,
+    "is_active": true,
+    "json_data": null,
+    "created_at": "2026-02-04T16:15:34.368Z",
+    "updated_at": "2026-02-04T16:15:34.369Z"
+  }
+},
+{
+  "model": "mba_sem.mbabatch",
+  "pk": 5,
+  "fields": {
+    "uid": "5dff98ab-7e97-4d58-a702-4fe0ec21e6c0",
+    "name": "2022-24",
+    "session": null,
+    "is_active": true,
+    "json_data": null,
+    "created_at": "2026-02-04T16:15:34.378Z",
+    "updated_at": "2026-02-04T16:15:34.378Z"
+  }
+}
+]

@@ -29,16 +29,42 @@
             box-sizing: border-box;
         }
 
-        /* WATERMARK */
-        .watermark {
+        /* WATERMARK - Centered on Table */
+        .table-rel-container {
+            position: relative;
+            width: 158mm;
+            /* Match table width */
+        }
+
+        .watermark-table-center {
             position: absolute;
-            top: 40%;
-            left: 50%;
+            top: 60%;
+            left: 60%;
             transform: translate(-50%, -50%);
             width: 90mm;
             height: 90mm;
-            opacity: 0.12;
-            z-index: -1;
+            opacity: 0.15;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* WATERMARK - Centered on Student Details */
+        .details-wrapper {
+            position: relative;
+            /* Ensure watermark is absolute to this */
+        }
+
+        .watermark-details {
+            position: absolute;
+            top: 50%;
+            left: 45%;
+            /* Adjusted slightly left to center on table, excluding photo box */
+            transform: translate(-50%, -50%);
+            width: 90mm;
+            height: 90mm;
+            opacity: 0.15;
+            z-index: 0;
+            pointer-events: none;
         }
 
         /* HEADER */
@@ -96,10 +122,15 @@
         }
 
         .details-table {
-            width: 158mm;
+            width: 153mm;
+            /* Reduced */
             border-collapse: collapse;
             border-top: 0.3mm solid black;
             border-left: 0.3mm solid black;
+            position: relative;
+            z-index: 1;
+            /* Above watermark */
+            background: transparent;
         }
 
         .details-table td {
@@ -122,7 +153,8 @@
 
         /* PHOTO BOX */
         .photo-box {
-            width: 35mm;
+            width: 40mm;
+            /* Increased from 35mm */
             height: 64mm;
             /* 8 rows × 8mm */
             border: 0.3mm solid black;
@@ -133,7 +165,8 @@
 
         .photo-img {
             margin-top: 2mm;
-            width: 31mm;
+            width: 35mm;
+            /* Increased proportional to box */
             height: 40mm;
             object-fit: contain;
             border: 1px solid #ddd;
@@ -150,12 +183,14 @@
 
         /* PAPERS TABLE */
         .papers-table {
-            margin-left: 1mm;
-            margin-right: 1mm;
-            width: 99%;
-            margin-top: 4mm;
+            width: 100%;
             border-collapse: collapse;
             border: 0.3mm solid black;
+            position: relative;
+            z-index: 1;
+            /* Above watermark */
+            background: transparent;
+            /* Ensure watermark shows through */
         }
 
         .papers-table th {
@@ -230,10 +265,7 @@
 <body>
     <div class="main-container">
 
-        <!-- Watermark -->
-        {% if logo_url %}
-        <img src="{{ logo_url }}" class="watermark" alt="Watermark">
-        {% endif %}
+
 
         <!-- Header -->
         <div class="header">
@@ -242,58 +274,80 @@
             {% endif %}
             <span class="uni-name-hindi">पूर्णियाँ विश्वविद्यालय, पूर्णियाँ</span>
             <span class="uni-name-eng">Purnea University, Purnia</span>
-            <span class="card-type">PG EXAM REGISTRATION CARD</span>
+            <span class="card-type">PG EXAMINATION FORM</span>
             <span class="session-line">
-                {{ semester_text }} SEMESTER &nbsp;|&nbsp; BATCH: {{ batch }} &nbsp;|&nbsp; GENDER: {{ student.gender }}
+                {{ semester_text }} SEMESTER &nbsp;|&nbsp; SESSION: {{ batch }}
             </span>
         </div>
 
         <!-- Student Details + Photo -->
         <div class="details-wrapper">
 
-            <!-- Left Table -->
-            <table class="details-table">
-                <!-- R1: Reg No -->
-                <tr>
-                    <td class="label-col">REGISTRATION NUMBER</td>
-                    <td class="value-col" colspan="3">{{ student.registration_no }}</td>
-                </tr>
-                <!-- R2: Name -->
-                <tr>
-                    <td class="label-col">NAME OF THE STUDENT</td>
-                    <td class="value-col" colspan="3">{{ student.full_name }}</td>
-                </tr>
-                <!-- R3: Father -->
-                <tr>
-                    <td class="label-col">FATHER'S NAME</td>
-                    <td class="value-col" colspan="3">{{ student.father_name }}</td>
-                </tr>
-                <!-- R4: Mother -->
-                <tr>
-                    <td class="label-col">MOTHER'S NAME</td>
-                    <td class="value-col" colspan="3">{{ student.mother_name }}</td>
-                </tr>
-                <!-- R5: Gender -->
-                <tr>
-                    <td class="label-col">GENDER</td>
-                    <td class="value-col" colspan="3">{{ student.gender }}</td>
-                </tr>
-                <!-- R6: College -->
-                <tr>
-                    <td class="label-col">NAME OF THE COLLEGE</td>
-                    <td class="value-col" colspan="3">{{ college_name }}</td>
-                </tr>
-                <!-- R7: Department -->
-                <tr>
-                    <td class="label-col">DEPARTMENT</td>
-                    <td class="value-col" colspan="3">{{ department_name }}</td>
-                </tr>
-                <!-- R8: Semester + Session -->
-                <tr>
-                    <td class="label-col">SEMESTER / SESSION</td>
-                    <td class="value-col" colspan="3">{{ semester_text }} / {{ session }}</td>
-                </tr>
-            </table>
+            <!-- Left Table with Watermark -->
+            <div class="table-rel-container">
+                {% if logo_url %}
+                <img src="{{ logo_url }}" class="watermark-table-center" alt="Watermark">
+                {% endif %}
+
+                <table class="details-table">
+                    <!-- R1: Reg No -->
+                    <tr>
+                        <td class="label-col">REGISTRATION NUMBER</td>
+                        <td class="value-col" colspan="3">{{ student.registration_no }}</td>
+                    </tr>
+                    <tr>
+                        <td class="label-col">ROLL NUMBER</td>
+                        <td class="value-col" colspan="3">{{ student.roll_no }}</td>
+                    </tr>
+                    <!-- R2: Name -->
+                    <tr>
+                        <td class="label-col">NAME OF THE STUDENT</td>
+                        <td class="value-col" colspan="3">{{ student.full_name }}</td>
+                    </tr>
+                    <!-- R3: Father -->
+                    <tr>
+                        <td class="label-col">FATHER'S NAME</td>
+                        <td class="value-col" colspan="3">{{ student.father_name }}</td>
+                    </tr>
+                    <!-- R4: Mother -->
+                    <tr>
+                        <td class="label-col">MOTHER'S NAME</td>
+                        <td class="value-col" colspan="3">{{ student.mother_name }}</td>
+                    </tr>
+                    <!-- R5: Gender -->
+                    <tr>
+                        <td class="label-col">GENDER</td>
+                        <td class="value-col" colspan="3">{{ student.gender }}</td>
+                    </tr>
+                    <!-- R6: Religion -->
+                    <tr>
+                        <td class="label-col">RELIGION</td>
+                        <td class="value-col" colspan="3">{{ student.religion }}</td>
+                    </tr>
+                    <!-- R7: Category -->
+                    <tr>
+                        <td class="label-col">CATEGORY</td>
+                        <td class="value-col" colspan="3">{{ student.caste }}</td>
+                    </tr>
+                 
+
+                    <!-- R6: College -->
+                    <tr>
+                        <td class="label-col">NAME OF THE COLLEGE</td>
+                        <td class="value-col" colspan="3">{{ college_name }}</td>
+                    </tr>
+                    <!-- R7: Department -->
+                    <tr>
+                        <td class="label-col">DEPARTMENT</td>
+                        <td class="value-col" colspan="3">{{ department_name }}</td>
+                    </tr>
+                    <!-- R8: Semester + Session -->
+                    <tr>
+                        <td class="label-col">SEMESTER / SESSION</td>
+                        <td class="value-col" colspan="3">{{ semester_text }} / {{ session }}</td>
+                    </tr>
+                </table>
+            </div>
 
             <!-- Right Photo Box -->
             <div class="photo-box">
@@ -311,33 +365,33 @@
                 {% endif %}
             </div>
 
+
         </div>
 
-        <!-- Papers Table -->
-        {% if papers %}
-        <table class="papers-table">
-            <tr>
-                <th class="sno-col">S.No</th>
-                <th class="code-col">Course</th>
-                <th class="code-col">Paper Code</th>
-                <th class="name-col">Course Name</th>
-            </tr>
-            {% for p in papers %}
-            <tr>
-                <td class="sno-col">{{ forloop.counter }}</td>
-                <td class="code-col">{{ p.course }}</td>
-                <td class="code-col">{{ p.code }}</td>
-                <td class="name-col">{{ p.name }}</td>
-            </tr>
-            {% endfor %}
-        </table>
-        {% endif %}
-
-
-
-        <div class="footer-note">
-            This is a computer-generated registration card. No signature required.
+        <!-- Bottom Section: Table + Watermark -->
+        <div class="bottom-section">
+            <!-- Papers Table -->
+            {% if papers %}
+            <table class="papers-table">
+                <tr>
+                    <th class="sno-col">S.No</th>
+                    <th class="code-col">Course</th>
+                    <th class="code-col">Paper Code</th>
+                    <th class="name-col">Course Name</th>
+                </tr>
+                {% for p in papers %}
+                <tr>
+                    <td class="sno-col">{{ forloop.counter }}</td>
+                    <td class="code-col">{{ p.course }}</td>
+                    <td class="code-col">{{ p.code }}</td>
+                    <td class="name-col">{{ p.name }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+            {% endif %}
         </div>
+
+
 
     </div>
 </body>
