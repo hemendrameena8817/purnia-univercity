@@ -46,7 +46,7 @@ class MCACommonCourseStructureAdmin(admin.ModelAdmin):
 
 @admin.register(MCAExam)
 class MCAExamAdmin(admin.ModelAdmin):
-    list_display = ('uid', 'name', 'session', 'exam_month_year', 'publication_date')
+    list_display = ('uid', 'name', 'session', 'batch', 'exam_month_year', 'publication_date')
     readonly_fields = ('uid',)
     search_fields = ('name', 'session')
 
@@ -75,9 +75,10 @@ class MCAExamRegistrationAdmin(admin.ModelAdmin):
 
 @admin.register(MCAStudentAssessment)
 class MCAStudentAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'course_code', 'semester', 'label', 'ind_marks_obtained', 'ind_is_pass')
-    list_filter = ('semester', 'label', 'exam_type', 'batch')
-    search_fields = ('student__roll_no', 'course_name', 'course_code')
+    list_display = ('student', 'exam', 'course', 'course_structure', 'label', 'ind_marks_obtained', 'ind_is_pass')
+    list_filter = ('exam', 'course', 'course_structure__semester', 'label', 'batch')
+    search_fields = ('student__roll_no', 'course_structure__course_name', 'course_structure__course_code')
+    list_select_related = ('student', 'exam', 'course', 'course_structure', 'batch')
 
 @admin.register(MCAExamResult)
 class MCAExamResultAdmin(admin.ModelAdmin):

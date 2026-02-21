@@ -10,7 +10,8 @@ from .views import (
     MCAStudentAssessmentListView, MCAStudentAssessmentDetailView,
     MCAExamResultListView, MCAExamResultDetailView,
     MCASemesterRegistrationListView, MCAExamRegistrationListView,
-    MCAAdmitCardPDFView, MCABulkAdmitCardPDFView, MCARollSheetPDFView, MCAAttendanceSheetPDFView
+    MCAAdmitCardPDFView, MCABulkAdmitCardPDFView, MCARollSheetPDFView, 
+    MCAAttendanceSheetPDFView, MCATabularRecordPDFView
 )
 
 urlpatterns = [
@@ -63,4 +64,7 @@ urlpatterns = [
     path('roll-sheet/pdf/', MCARollSheetPDFView.as_view(), name='mca-roll-sheet-pdf'),
     # Attendance Sheet
     path('attendance-sheet/pdf/', MCAAttendanceSheetPDFView.as_view(), name='mca-attendance-sheet-pdf'),
+    
+    # Tabular Record (TR)
+    path('tr/pdf/', MCATabularRecordPDFView.as_view(), name='mca-tr-pdf'),
 ]

@@ -156,6 +156,8 @@ class MCACourseStructure(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    is_active = models.BooleanField(default=True)
+
     class Meta:
         verbose_name = 'MCA Course Structure'
         verbose_name_plural = 'MCA Course Structures'
@@ -178,6 +180,8 @@ class MCACommonCourseStructure(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    is_active = models.BooleanField(default=True)
+
     class Meta:
         verbose_name = 'MCA Common Course Structure'
         verbose_name_plural = 'MCA Common Course Structures'
@@ -194,7 +198,13 @@ class MCAExam(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255, null=True, blank=True)            # MCA 4th Semester Examination
     semester = models.PositiveIntegerField(null=True, blank=True)         # 4
-    session = models.CharField(max_length=20, null=True, blank=True)        # 2022-24
+    session = models.CharField(max_length=20, null=True, blank=True)   
+    batch = models.ForeignKey(
+        MCABatch,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )    
     exam_month_year = models.CharField(max_length=20, null=True, blank=True) # June 2024
     publication_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -354,10 +364,20 @@ class MCAStudentAssessment(models.Model):
         on_delete=models.CASCADE,
         related_name='course_assessments'
     )
-    course_name = models.CharField(max_length=250, null=True, blank=True)
-    course_type = models.CharField(max_length=200, null=True, blank=True, db_index=True)
-    course_code = models.CharField(max_length=200, null=True, blank=True, db_index=True)
-    semester = models.CharField(max_length=200, null=True, blank=True, db_index=True)
+    course = models.ForeignKey(
+        MCACourse,
+        on_delete=models.CASCADE,
+        related_name='student_assessments_course',
+        null=True,
+        blank=True
+    )
+    course_structure = models.ForeignKey(
+        MCACourseStructure,
+        on_delete=models.CASCADE,
+        related_name='student_assessments_course_structure',
+        null=True,
+        blank=True
+    )
     label = models.CharField(max_length=200, db_index=True, choices=ASSESSMENT_LABEL_CHOICES)
     session = models.CharField(max_length=200, null=True, blank=True, db_index=True)
     batch = models.ForeignKey(
@@ -367,6 +387,14 @@ class MCAStudentAssessment(models.Model):
         null=True,
         blank=True
     )
+    exam = models.ForeignKey(
+        'MCAExam', 
+        on_delete=models.CASCADE, 
+        related_name='student_assessments_exam',
+        null=True, 
+        blank=True
+    )
+    semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester of the assessment, e.g., '1', '2'")
     college_code = models.CharField(max_length=200, null=True, blank=True)
     exam_type = models.CharField(max_length=200, choices=EXAM_TYPE_CHOICES, null=True, blank=True, db_index=True)
     attendance = models.CharField(max_length=200, null=True, blank=True)
@@ -406,21 +434,27 @@ class MCAStudentAssessment(models.Model):
         verbose_name_plural = 'MCA Student Assessments'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['student', 'semester'], name='idx_mca_stud_sem'),
-            models.Index(fields=['batch', 'semester'], name='idx_mca_batch_sem'),
-            models.Index(fields=['course_code', 'semester'], name='idx_mca_course_sem'),
+            models.Index(fields=['student', 'course_structure'], name='idx_mca_stud_struct'),
+            models.Index(fields=['batch', 'course_structure'], name='idx_mca_batch_struct'),
+            models.Index(fields=['exam'], name='idx_mca_exam'),
         ]
         
     def save(self, *args, **kwargs):
         if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
             if self.ind_marks_obtained > self.ind_max_marks:
                 raise ValueError(f"Marks ({self.ind_marks_obtained}) > Max ({self.ind_max_marks})")
+        
+        # Calculate pass status including grace marks
         if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
-            self.ind_is_pass = self.ind_marks_obtained >= self.ind_pass_marks if not self.ind_is_absent else False
+            grace = self.ind_grace_obtained or 0
+            total_for_pass = self.ind_marks_obtained + grace
+            self.ind_is_pass = total_for_pass >= self.ind_pass_marks if not self.ind_is_absent else False
+            
         super().save(*args, **kwargs)
         
     def __str__(self):
-        return f"{self.student} | {self.semester} | {self.label}"
+        sem = self.course_structure.semester if self.course_structure else 'N/A'
+        return f"{self.student} | {sem} | {self.label}"
 
 class MCAExamResult(models.Model):
     """
