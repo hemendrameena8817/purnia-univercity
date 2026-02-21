@@ -22,6 +22,19 @@ Usage Examples:
     # Back paper production run
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches
 
+
+# Dry run first (recommended)
+python pg/services/run_step1_cia_processing.py \
+    --semester 3RD \
+    --session 2024-25 \
+    --registration-no PU2024001 \
+    --dry-run
+
+# Production run
+python pg/services/run_step1_cia_processing.py \
+    --semester 3RD \
+    --session 2024-25 \
+    --registration-no PU2024001
 Note: Run this after CIA marks have been entered for all students.
 """
 
@@ -49,7 +62,7 @@ class PGCIAResultProcessingService:
     # 1. INITIALIZATION & SETUP
     ################################################################################
     
-    def __init__(self, batch: str = None, semester: str = None, session: str = None, include_all_batches: bool = False):
+    def __init__(self, batch: str = None, semester: str = None, session: str = None, include_all_batches: bool = False, registration_no: str = None):
         """
         Initialize service
         
@@ -59,13 +72,15 @@ class PGCIAResultProcessingService:
             session: Academic session (e.g., '2024-25')
             include_all_batches: If True, includes students from all batches who have
                                assessments in this session (for back paper processing)
+            registration_no: If set, process only this single student
         """
         self.batch = batch
         self.semester = semester
         self.session = session
         self.include_all_batches = include_all_batches
+        self.registration_no = registration_no
         
-        if not self.batch:
+        if not self.batch and not self.registration_no:
             self.include_all_batches = True
         self.stats = {
             'total_students': 0,
@@ -103,7 +118,13 @@ class PGCIAResultProcessingService:
                 return self.stats
         
         # Get students based on filtering mode
-        if self.include_all_batches:
+        if self.registration_no:
+            # Single student mode
+            students = PGStudentProfile.objects.filter(
+                registration_no=self.registration_no
+            ).distinct()
+            print(f"\n📊 Processing SINGLE student: {self.registration_no}")
+        elif self.include_all_batches:
             # Include ALL students with assessments in this session (for back papers)
             students = PGStudentProfile.objects.filter(
                 course_assessments__semester=self.semester,
@@ -505,7 +526,7 @@ class PGCIAResultProcessingService:
         return f"{(count / self.stats['students_with_cia']) * 100:.2f}"
 
 
-def run_cia_processing(batch: str = None, semester: str = None, session: str = None, dry_run: bool = False, include_all_batches: bool = False) -> Dict:
+def run_cia_processing(batch: str = None, semester: str = None, session: str = None, dry_run: bool = False, include_all_batches: bool = False, registration_no: str = None) -> Dict:
     """
     Convenience function to run Step 1: PG CIA Result Processing
     
@@ -515,9 +536,10 @@ def run_cia_processing(batch: str = None, semester: str = None, session: str = N
         session: Academic session (e.g., '2024-25')
         dry_run: If True, don't save to database
         include_all_batches: If True, includes students from all batches (for back papers)
+        registration_no: If set, process only this single student
         
     Returns:
         Dictionary with processing statistics
     """
-    service = PGCIAResultProcessingService(batch, semester, session, include_all_batches)
+    service = PGCIAResultProcessingService(batch, semester, session, include_all_batches, registration_no)
     return service.process(dry_run=dry_run)
