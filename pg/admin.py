@@ -2,6 +2,11 @@ from django.contrib import admin
 from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
+from accounts.models import UserAccount
+from colleges.models import College
+from import_export import resources, fields
+from import_export.widgets import ForeignKeyWidget
+from import_export.admin import ImportExportModelAdmin
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
@@ -9,6 +14,18 @@ from .models import (
     PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule,
     PGExamRegistrationPayment,
 )
+
+
+class SafeForeignKeyWidget(ForeignKeyWidget):
+    """
+    Custom widget that uses filter().first() instead of get() to avoid
+    MultipleObjectsReturned error when duplicate related objects exist.
+    """
+    def clean(self, value, row=None, *args, **kwargs):
+        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
+        if val:
+            return self.model.objects.filter(**{self.field: val}).first()
+        return None
 
 
 @admin.register(PGFaculty)
@@ -50,8 +67,64 @@ class PGBatchAdmin(admin.ModelAdmin):
     ordering = ('name',)
 
 
+class PGStudentProfileResource(resources.ModelResource):
+    """
+    Resource for importing/exporting PGStudentProfile records.
+
+    FK columns in the import file:
+      - user       → UserAccount.username
+      - college    → College.college_code
+      - department → PGDepartment.name
+      - program    → PGProgram.name
+      - degree     → PGDegree.name
+    """
+
+    user = fields.Field(
+        column_name='user',
+        attribute='user',
+        widget=ForeignKeyWidget(UserAccount, field='username')
+    )
+    college = fields.Field(
+        column_name='college',
+        attribute='college',
+        widget=SafeForeignKeyWidget(College, field='college_code')
+    )
+    department = fields.Field(
+        column_name='department',
+        attribute='department',
+        widget=SafeForeignKeyWidget(PGDepartment, field='name')
+    )
+    program = fields.Field(
+        column_name='program',
+        attribute='program',
+        widget=SafeForeignKeyWidget(PGProgram, field='name')
+    )
+    degree = fields.Field(
+        column_name='degree',
+        attribute='degree',
+        widget=SafeForeignKeyWidget(PGDegree, field='name')
+    )
+
+    class Meta:
+        model = PGStudentProfile
+        exclude = ('uid', 'profile_image', 'signature')
+        import_id_fields = ('registration_no',)
+        export_order = (
+            'id', 'registration_no', 'roll_no', 'first_name', 'last_name',
+            'hindi_name', 'user', 'college', 'department', 'program', 'degree',
+            'gender', 'date_of_birth', 'mobile_no', 'aadhar_no', 'apaar_id',
+            'address', 'father_name', 'mother_name', 'religion', 'nationality',
+            'medium_of_student', 'caste', 'current_semester', 'session', 'batch',
+            'status', 'is_active', 'admission_date', 'enrollment_date',
+            'migration_submitted', 'last_university',
+            'cc_course', 'sec_course', 'ec_course',
+            'created_at', 'updated_at',
+        )
+
+
 @admin.register(PGStudentProfile)
-class PGStudentProfileAdmin(admin.ModelAdmin):
+class PGStudentProfileAdmin(ImportExportModelAdmin):
+    resource_class = PGStudentProfileResource
     list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
@@ -139,22 +212,9 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
     )
 
 
-from import_export import resources, fields
-from import_export.widgets import ForeignKeyWidget
-from import_export.admin import ImportExportModelAdmin
 
-class SafeForeignKeyWidget(ForeignKeyWidget):
-    """
-    Custom widget that uses filter().first() instead of get() to avoid 
-    MultipleObjectsReturned error when duplicate related objects exist.
-    """
-    def clean(self, value, row=None, *args, **kwargs):
-        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
-        if val:
-            # Look up object using the specified field
-            # Use filter().first() instead of get()
-            return self.model.objects.filter(**{self.field: val}).first()
-        return None
+
+
 
 class PGStudentCourseAssessmentResource(resources.ModelResource):
     student = fields.Field(
