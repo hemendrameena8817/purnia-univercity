@@ -396,11 +396,35 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     get_student_name.admin_order_field = 'student__first_name'
 
 
+class PGSemesterRegistrationResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+
+    class Meta:
+        model = PGSemesterRegistration
+        exclude = ('uid',)
+        import_id_fields = ('student', 'sem', 'session')
+
+
 @admin.register(PGSemesterRegistration)
-class PGSemesterRegistrationAdmin(admin.ModelAdmin):
+class PGSemesterRegistrationAdmin(ImportExportModelAdmin):
+    resource_class = PGSemesterRegistrationResource
     list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_eligible', 'start_date', 'end_date')
     list_filter = ('sem', 'is_open', 'status', 'exam_eligible', 'session')
-    search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session', 'remarks')
+    search_fields = (
+        'student__registration_no',
+        'student__roll_no',
+        'student__first_name',
+        'student__last_name',
+        'student__aadhar_no',
+        'student__mobile_no',
+        'session',
+        'remarks',
+    )
+    raw_id_fields = ('student',)
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
@@ -473,7 +497,16 @@ class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
     list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
     list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'student__department')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'student__roll_no', 'session')
+    search_fields = (
+        'student__registration_no',
+        'student__roll_no',
+        'student__first_name',
+        'student__last_name',
+        'student__aadhar_no',
+        'student__mobile_no',
+        'session',
+    )
+    raw_id_fields = ('student',)
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
