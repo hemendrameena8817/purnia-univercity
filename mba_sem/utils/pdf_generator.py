@@ -903,8 +903,13 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
         ws.cell(row=sign_row, column=50).value = "Controller of Examination"
 
-        wb.remove(master_sheet)
-        wb.save(temp_excel)
+    # =========================
+    # 🔥 TEMPLATE REMOVE (ONLY ONCE)
+    # =========================
+    if "MASTER_TEMPLATE" in wb.sheetnames:
+        wb.remove(wb["MASTER_TEMPLATE"])
+    # wb.remove(master_sheet)
+    wb.save(temp_excel)
 
     subprocess.run([
         "soffice", "--headless",
