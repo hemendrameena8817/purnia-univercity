@@ -26,6 +26,8 @@ class MBAStudentProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('uid',)
     search_fields = ('roll_no', 'registration_no', 'first_name', 'last_name', 'user__username')
     list_filter = ('college', 'batch', 'status')
+    raw_id_fields = ("user", "college", "course", "batch")
+
 
 @admin.register(MBACourseStructure)
 class MBACourseStructureAdmin(admin.ModelAdmin):
@@ -50,6 +52,7 @@ class MBAExamCenterMappingAdmin(admin.ModelAdmin):
     list_display = ('exam', 'center')
     list_filter = ('exam', 'center')
     filter_horizontal = ('attached_colleges',)
+    raw_id_fields = ("exam", "center")
 
 @admin.register(MBAExamSchedule)
 class MBAExamScheduleAdmin(admin.ModelAdmin):
@@ -66,6 +69,7 @@ class MBASemesterRegistrationAdmin(admin.ModelAdmin):
 class MBAExamRegistrationAdmin(admin.ModelAdmin):
     list_display = ('student', 'get_roll_no', 'sem', 'session', 'status', 'is_open')
     list_filter = ('sem', 'session', 'status', 'is_open')
+    raw_id_fields = ("student","exam")
 
     def get_roll_no(self, obj):
         return obj.student.roll_no if obj.student else None
@@ -117,6 +121,8 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
         "paper_code",
         "course_name",
     )
+
+    raw_id_fields = ("student", "batch", "mba_exam")
 
     def get_roll_no(self, obj):
         return obj.student.roll_no if obj.student else ""

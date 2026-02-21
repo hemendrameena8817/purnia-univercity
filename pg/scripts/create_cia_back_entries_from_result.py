@@ -28,9 +28,11 @@ import os
 import sys
 import django
 import argparse
+from pathlib import Path
 
-# Setup Django
-sys.path.append('/home/gaurav/Desktop/purniya/pup-umis-backend')
+# Setup Django — works on ANY machine (local, AWS, etc.)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # pg/scripts/ → pg/ → project root
+sys.path.insert(0, str(BASE_DIR))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
 django.setup()
 
