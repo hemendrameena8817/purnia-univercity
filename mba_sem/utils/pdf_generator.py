@@ -1,6 +1,15 @@
 from openpyxl.drawing.image import Image as XLImage
 import math
 
+GRADE_STRUCTURE = [
+    {"min": 91, "max": 100, "numeric": 10, "letter": "O",   "desc": "Outstanding"},
+    {"min": 81, "max": 90,  "numeric": 9,  "letter": "A++", "desc": "Excellent"},
+    {"min": 71, "max": 80,  "numeric": 8,  "letter": "A+",  "desc": "Very Good"},
+    {"min": 61, "max": 70,  "numeric": 7,  "letter": "A",   "desc": "Good"},
+    {"min": 51, "max": 60,  "numeric": 6,  "letter": "B+",  "desc": "Average"},
+    {"min": 45, "max": 50,  "numeric": 5,  "letter": "B",   "desc": "Pass"},
+    {"min": 0,  "max": 44,  "numeric": 0,  "letter": "F",   "desc": "Fail"},
+]
 
 def generate_mba_admit_card_pdf(student, exam):
     from weasyprint import HTML, CSS
@@ -587,19 +596,50 @@ def calculate_grade_point(numeric_grade, credit_obtained):
 
 def get_letter_and_description(gpa):
 
-    numeric = int(gpa)   # floor logic (no rounding)
+    percent_value = float(gpa) * 10
 
-    mapping = {
-        10: ("O", "Outstanding"),
-        9: ("A++", "Excellent"),
-        8: ("A+", "Very Good"),
-        7: ("A", "Good"),
-        6: ("B+", "Average"),
-        5: ("B", "Pass"),
-    }
+    if 91 <= percent_value <= 100:
+        return "O", "Outstanding"
+    elif 81 <= percent_value < 91:
+        return "A++", "Excellent"
+    elif 71 <= percent_value < 81:
+        return "A+", "Very Good"
+    elif 61 <= percent_value < 71:
+        return "A", "Good"
+    elif 51 <= percent_value < 61:
+        return "B+", "Average"
+    elif 45 <= percent_value < 51:
+        return "B", "Pass"
+    else:
+        return "F", "Fail"
 
-    return mapping.get(numeric, ("F", "Fail"))
+def write_grade_table(ws, start_row=5, start_col=53):
 
+    headers = [
+        "Percentage Range",
+        "Numerical of Letter Grade",
+        "Letter Grade",
+        "Description of Grade"
+    ]
+
+    # Write headers
+    for col, header in enumerate(headers):
+        ws.cell(row=start_row, column=start_col + col).value = header
+
+    # Write grade data dynamically
+    for i, rule in enumerate(GRADE_STRUCTURE):
+
+        if rule["min"] == 0:
+            percentage_text = "<45"
+            numeric_text = "<5"
+        else:
+            percentage_text = f"{rule['min']}-{rule['max']}"
+            numeric_text = rule["numeric"]
+
+        ws.cell(row=start_row + 1 + i, column=start_col).value = percentage_text
+        ws.cell(row=start_row + 1 + i, column=start_col + 1).value = numeric_text
+        ws.cell(row=start_row + 1 + i, column=start_col + 2).value = rule["letter"]
+        ws.cell(row=start_row + 1 + i, column=start_col + 3).value = rule["desc"]
 
 def generate_mba_result_pdf(students, college, semester, batch_uid=None):
 
@@ -734,6 +774,10 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
 
             col_pointer += SUBJECT_WIDTH
 
+        # ===== GRADE TABLE =====
+        # grade_table_start_col = col_pointer + 3
+        # write_grade_table(ws, start_row=5, start_col=grade_table_start_col)
+
         # ===== FOOTER COUNTERS =====
         page_total = 0
         page_pass = 0
@@ -816,8 +860,8 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
                 gpa = 0
 
             letter, desc = get_letter_and_description(gpa)
-            # result_status = "Fail" if failed else "Pass"
-            result_status = "Pass"
+            result_status = "Fail" if failed else "Pass"
+            # result_status = "Pass"
 
             page_total += 1
 
@@ -844,20 +888,27 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         ws.cell(row=footer_row + 2, column=2).value = f"Promoted : {page_promoted}"
 
         # ===== CENTER BLOCK =====
-        ws.cell(row=footer_row, column=10).value = f"Expelled : {page_expelled}"
-        ws.cell(row=footer_row + 1, column=10).value = f"Fail : {page_fail}"
-        ws.cell(row=footer_row + 2, column=10).value = f"Qualified : {page_pass}"
+        ws.cell(row=footer_row, column=5).value = f"Expelled : {page_expelled}"
+        ws.cell(row=footer_row + 1, column=5).value = f"Fail : {page_fail}"
+        ws.cell(row=footer_row + 2, column=5).value = f"Qualified : {page_pass}"
 
         # ===== RIGHT BLOCK =====
-        ws.cell(row=footer_row, column=22).value = f"Absent : {page_absent}"
-        ws.cell(row=footer_row + 1, column=22).value = f"Result Pending : {page_pending}"
+        ws.cell(row=footer_row + 1, column=12).value = f"Absent : {page_absent}"
+        ws.cell(row=footer_row + 2, column=12).value = f"Result Pending : {page_pending}"
 
         # ===== SIGN AREA =====
-        ws.cell(row=footer_row + 1, column=32).value = "Compared By Address"
-        ws.cell(row=footer_row + 1, column=44).value = "Full Signature of Tabulator-cum-scrutinizer with date"
+        sign_row = footer_row + 2
 
+        ws.cell(row=sign_row, column=22).value = "Compared By Address"
+        ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
+        ws.cell(row=sign_row, column=50).value = "Controller of Examination"
 
-    wb.remove(master_sheet)
+    # =========================
+    # 🔥 TEMPLATE REMOVE (ONLY ONCE)
+    # =========================
+    if "MASTER_TEMPLATE" in wb.sheetnames:
+        wb.remove(wb["MASTER_TEMPLATE"])
+    # wb.remove(master_sheet)
     wb.save(temp_excel)
 
     subprocess.run([

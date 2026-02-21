@@ -13,11 +13,11 @@ from mba_sem.models import (
 
 def run():
 
-    print("Starting SCA import for 2nd Semester only...")
+    print("Starting SCA import for 4nd Semester only...")
 
     registrations = (
         MBAExamRegistration.objects
-        .filter(sem=2)  # 🔥 Only 2nd Semester
+        .filter(sem=4)  # 🔥 Only 4th Semester
         .select_related("student", "exam", "student__batch")
         .prefetch_related("exam_subjects")
     )
@@ -29,7 +29,7 @@ def run():
 
     #     student = reg.student
     #     exam = reg.exam
-    #     semester = "2"   # Force 2nd sem
+    #     semester = "4"  
     #     session = reg.session
     #     batch = student.batch
     #     exam_type = reg.exam_type
@@ -70,15 +70,16 @@ def run():
     #             )
         
     queryset = MBAStudentCourseAssessment.objects.filter(
-        semester="2",
-        # label="ESE-Theory"
+        semester="4",
+        label="ESE-Practical",
+        paper_code="MB-403"
     )
 
-    updated_count = queryset.update(course_max_credits="4")
+    updated_count = queryset.update(ind_pass_marks="45")
 
-    print(updated_count)
+    # print(updated_count)
 
-    print(f"Updated {updated_count} records successfully.")
+    # print(f"Updated {updated_count} records successfully.")
     print("Update Completed.")
 
     with transaction.atomic():
@@ -89,7 +90,7 @@ def run():
 
     print("Created:", len(create_list))
     print("Skipped duplicates:", skipped)
-    print("2nd Semester Import Done.")
+    print("4nd Semester Import Done.")
 
 
 if __name__ == "__main__":

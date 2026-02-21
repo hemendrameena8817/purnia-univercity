@@ -901,7 +901,7 @@ class MBACollegeStudentsView(APIView):
         batch = request.query_params.get("batch")
         subject_uid = request.query_params.get("subject")
         label_get = request.query_params.get("label")
-        College_uid = request.query_params.get("college_uid")
+        college_uid = request.query_params.get("college_uid")
 
         filters = {
             # "student__college": user_college
@@ -913,15 +913,14 @@ class MBACollegeStudentsView(APIView):
         if batch:
             filters["batch__name"] = batch
 
-        if College_uid:
-            filters["college__"]
+        if college_uid:
+            filters["student__college__uid"] = college_uid
 
         if label_get:
             label_get = label_get.strip().lower()
 
             if label_get in ["cia", "ese"]:
                 filters["label__istartswith"] = label_get
-
 
         # Subject Filter Add
         if subject_uid:
@@ -1037,26 +1036,18 @@ class MBAStudentCourseAssessmentAPIView(APIView):
     # --------------------------------------
     def get(self, request):
 
-        if request.user.user_type != "college_user":
+        if request.user.user_type != "university_admin":
             return Response(
                 {"error": "Access denied."},
                 status=status.HTTP_403_FORBIDDEN
             )
-
-        try:
-            user_college = request.user.college_profile.college
-        except AttributeError:
-            return Response(
-                {"error": "College profile not found."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+        
         semester = request.query_params.get("semester")
         session = request.query_params.get("session")
         paper_code = request.query_params.get("paper_code")
 
         filters = {
-            "student__college": user_college
+            # "student__college": user_college
         }
 
         if semester:
@@ -1070,7 +1061,7 @@ class MBAStudentCourseAssessmentAPIView(APIView):
 
         queryset = (
             MBAStudentCourseAssessment.objects
-            .filter(**filters)
+            .filter(**filters, ind_marks_obtained__isnull=True)
             .select_related("student")
             .order_by("student__roll_no")
         )
@@ -1099,20 +1090,6 @@ class MBAStudentCourseAssessmentAPIView(APIView):
     # --------------------------------------
     def post(self, request):
 
-        if request.user.user_type != "college_user":
-            return Response(
-                {"error": "Access denied."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        try:
-            user_college = request.user.college_profile.college
-        except AttributeError:
-            return Response(
-                {"error": "College profile not found."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         if not isinstance(request.data, list):
             return Response(
                 {"error": "Expected a list of assessment objects."},
@@ -1131,14 +1108,6 @@ class MBAStudentCourseAssessmentAPIView(APIView):
                 if serializer.is_valid():
 
                     student = serializer.validated_data["student"]
-
-                    # 🔥 Security Check
-                    if student.college != user_college:
-                        errors.append({
-                            "student": student.id,
-                            "error": "Student does not belong to your college."
-                        })
-                        continue
 
                     try:
                         serializer.save()
@@ -1163,4 +1132,71 @@ class MBAStudentCourseAssessmentAPIView(APIView):
 
         return Response(response_data, status=status.HTTP_201_CREATED)
 
+class MBAStudentCourseAssessmentHistoryAPIView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        if request.user.user_type != "university_admin":
+            return Response(
+                {"error": "Access denied."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
+        semester = request.query_params.get("semester")
+        batch = request.query_params.get("batch")
+        subject_uid = request.query_params.get("subject")
+        label_get = request.query_params.get("label")
+        college_uid = request.query_params.get("college_uid")
+        paper_code = request.query_params.get("paper_code")
+        filters = {
+            # "student__college": user_college
+        }
+
+        if semester:
+            filters["semester"] = semester
+
+        if batch:
+            filters["batch__name"] = batch
+
+        if college_uid:
+            filters["student__college__uid"] = college_uid
+
+        if paper_code:
+            filters["paper_code"] = paper_code
+
+        if label_get:
+            label_get = label_get.strip().lower()
+
+            if label_get in ["cia", "ese"]:
+                filters["label__istartswith"] = label_get
+
+        # Subject Filter Add
+        if subject_uid:
+            try:
+                subject = MBACommonCourseStructure.objects.get(uid=subject_uid)
+                if subject.code:
+                    filters["paper_code"] = subject.code
+            except MBACommonCourseStructure.DoesNotExist:
+                return Response(
+                    {"error": "Subject not found."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+        assessments = (
+            MBAStudentCourseAssessment.objects
+            .filter(**filters, ind_marks_obtained__isnull=False)
+            .select_related("student")
+            .order_by("student__roll_no")
+        )
+
+        from mba_sem.pagination import StandardResultsSetPagination
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(assessments, request)
+
+        serializer = MBACollegeStudentSerializer(page, many=True)
+
+        return paginator.get_paginated_response(serializer.data)
+
