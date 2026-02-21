@@ -1,9 +1,11 @@
 """
-Script to import PG Common Course Structure data from ODS file.
-This data is based on structureofcourse.ods with semester and department information.
+Script to import PG Common Course Structure data from ODS/XLSX file.
 
 Usage:
     python scripts/pg/pgcommoncourse.py
+    python scripts/pg/pgcommoncourse.py --file /path/to/structureofcourse.ods
+    python scripts/pg/pgcommoncourse.py --file /path/to/structureofcourse.xlsx
+    python scripts/pg/pgcommoncourse.py --clear   # wipe and re-import
 """
 
 import os
@@ -15,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
 django.setup()
 
-def import_common_course_structure(clear_existing=False):
+def import_common_course_structure(clear_existing=False, file_path=None):
     """Import PG Common Course Structure data from ODS file."""
     import pandas as pd
     from pg.models import PGCommonCourseStructure, PGDepartment
@@ -24,27 +26,40 @@ def import_common_course_structure(clear_existing=False):
     print("IMPORTING PG COMMON COURSE STRUCTURE FROM ODS FILE")
     print("="*70)
     
-    # Path to ODS file
-    ods_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-                            'courses_data', 'pg', 'structureofcourse.xlsx')
-    
-    # Check if file exists
-    if not os.path.exists(ods_path):
-        ods_path = 'courses_data/pg/structureofcourse.xlsx'
-        if not os.path.exists(ods_path):
-            print(f"❌ ODS file not found at: {ods_path}")
+    # Resolve file: use --file arg or auto-detect .xlsx/.ods
+    import subprocess
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    engine = None
+
+    if not file_path:
+        for fname, eng in [('structureofcourse.xlsx', 'openpyxl'), ('structureofcourse.ods', 'odf')]:
+            candidate = os.path.join(base_dir, 'courses_data', 'pg', fname)
+            if os.path.exists(candidate):
+                file_path = candidate
+                engine = eng
+                break
+        if not file_path:
+            print("❌ File not found. Use --file /path/to/structureofcourse.ods")
             return
-    
-    print(f"\n📁 Reading ODS file: {ods_path}")
-    
+
+    if not os.path.exists(file_path):
+        print(f"❌ File not found: {file_path}")
+        return
+
+    # Auto-detect actual format (handles ODS renamed as .xlsx)
+    result = subprocess.run(['file', file_path], capture_output=True, text=True)
+    engine = 'odf' if 'OpenDocument' in result.stdout else 'openpyxl'
+
+    print(f"\n📁 Reading file: {file_path} (engine: {engine})")
+
     # Clear existing data if requested
     if clear_existing:
         print("\n🗑️  Clearing existing PGCommonCourseStructure data...")
         PGCommonCourseStructure.objects.all().delete()
         print("   Cleared all PGCommonCourseStructure records")
-    
-    # Read ODS file
-    df = pd.read_excel(ods_path, engine='openpyxl')
+
+    # Read file
+    df = pd.read_excel(file_path, engine=engine)
     
     print(f"   Total rows in ODS: {len(df)}")
     print(f"   Columns: {list(df.columns)}")
@@ -170,4 +185,9 @@ def import_common_course_structure(clear_existing=False):
 
 
 if __name__ == '__main__':
-    import_common_course_structure(clear_existing=False)
+    import argparse
+    parser = argparse.ArgumentParser(description='Import PG Common Course Structure')
+    parser.add_argument('--file', type=str, default=None, help='Path to .ods or .xlsx file')
+    parser.add_argument('--clear', action='store_true', help='Clear existing data before import')
+    args = parser.parse_args()
+    import_common_course_structure(clear_existing=args.clear, file_path=args.file)
