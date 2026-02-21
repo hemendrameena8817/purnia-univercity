@@ -1,5 +1,66 @@
 import os
 import sys
+import django
+import json
+from pathlib import Path
+
+
+# ----------------------------
+# Django Setup
+# ----------------------------
+BASE_DIR = Path(__file__).resolve().parent
+sys.path.append(str(BASE_DIR))
+
+os.environ.setdefault(
+    "DJANGO_SETTINGS_MODULE",
+    "pup_umis_backend.settings"
+)
+
+django.setup()
+
+
+# ----------------------------
+# Import Models
+# ----------------------------
+from mba_sem.models import MBAExamSchedule
+
+
+def export_exam_schedule(output_file="mba_exam_schedule.json"):
+
+    print("🚀 Extracting MBA Exam Schedule...\n")
+
+    queryset = MBAExamSchedule.objects.select_related(
+        "exam",
+        "common_course_structure"
+    )
+
+    data = []
+
+    for obj in queryset:
+        record = {
+            "exam": obj.exam.name if obj.exam else None,
+            "common_course_structure": (
+                obj.common_course_structure.code
+                if obj.common_course_structure else None
+            ),
+            "exam_date": str(obj.exam_date) if obj.exam_date else None,
+            "exam_time": obj.exam_time,
+            "sitting": obj.sitting,
+        }
+
+        data.append(record)
+
+    with open(output_file, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"✅ Export completed → {output_file}")
+    print(f"📦 Total Records: {len(data)}")
+
+
+if __name__ == "__main__":
+    export_exam_schedule()
+import os
+import sys
 import json
 from pathlib import Path
 

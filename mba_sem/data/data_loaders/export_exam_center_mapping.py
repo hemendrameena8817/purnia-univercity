@@ -9,21 +9,15 @@ from pathlib import Path
 # -----------------------------------
 def get_project_root():
     current = Path(__file__).resolve()
-
     for parent in current.parents:
         if (parent / "manage.py").exists():
             return parent
-
-    raise Exception("❌ manage.py not found. Project root not detected.")
+    raise Exception("❌ manage.py not found.")
 
 
 BASE_DIR = get_project_root()
 sys.path.append(str(BASE_DIR))
 
-
-# -----------------------------------
-# ⚙️ Setup Django
-# -----------------------------------
 os.environ.setdefault(
     "DJANGO_SETTINGS_MODULE",
     "pup_umis_backend.settings"
@@ -54,14 +48,12 @@ def export_exam_center_mapping(output_file="mba_exam_center_mapping.json"):
     data = []
 
     for obj in queryset:
-
         record = {
             "exam": obj.exam.name if obj.exam else None,
             "center": obj.center.college_code if obj.center else None,
-            "attached_colleges": [
-                college.college_code
-                for college in obj.attached_colleges.all()
-            ]
+            "attached_colleges": list(
+                obj.attached_colleges.values_list("college_code", flat=True)
+            )
         }
 
         data.append(record)
@@ -75,8 +67,5 @@ def export_exam_center_mapping(output_file="mba_exam_center_mapping.json"):
     print(f"📦 Total Records: {len(data)}")
 
 
-# -----------------------------------
-# ▶️ Run Script
-# -----------------------------------
 if __name__ == "__main__":
     export_exam_center_mapping()
