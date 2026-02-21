@@ -4,7 +4,7 @@ import re
 import pandas as pd
 from decimal import Decimal
 import django
-
+# python scripts/pg/coursestructure.py
 # Setup Django Environment
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
