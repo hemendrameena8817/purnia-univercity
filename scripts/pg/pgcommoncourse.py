@@ -26,11 +26,11 @@ def import_common_course_structure(clear_existing=False):
     
     # Path to ODS file
     ods_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
-                            'courses_data', 'pg', 'structureofcourse.ods')
+                            'courses_data', 'pg', 'structureofcourse.xlsx')
     
     # Check if file exists
     if not os.path.exists(ods_path):
-        ods_path = 'courses_data/pg/structureofcourse.ods'
+        ods_path = 'courses_data/pg/structureofcourse.xlsx'
         if not os.path.exists(ods_path):
             print(f"❌ ODS file not found at: {ods_path}")
             return
@@ -44,7 +44,7 @@ def import_common_course_structure(clear_existing=False):
         print("   Cleared all PGCommonCourseStructure records")
     
     # Read ODS file
-    df = pd.read_excel(ods_path, engine='odf')
+    df = pd.read_excel(ods_path, engine='openpyxl')
     
     print(f"   Total rows in ODS: {len(df)}")
     print(f"   Columns: {list(df.columns)}")
