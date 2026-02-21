@@ -57,6 +57,7 @@ MJC_COURSE_MAP = {
     "Principles & Functions of Marketing": "Marketing",
     "Fundamentals of HRM": "HRM",
     "Fandamentals of HRM": "HRM",
+    "Accounting & Finance": "AC",
 }
 
 MIC_COURSE_MAP = {
@@ -94,6 +95,7 @@ MIC_COURSE_MAP = {
     "Principles & Functions of Marketing": "Marketing",
     "Fundamentals of HRM": "HRM",
     "Fandamentals of HRM": "HRM",
+    "Accounting & Finance": "AC",
 }
 
 MDC_COURSE_MAP = {
@@ -125,6 +127,7 @@ MDC_COURSE_MAP = {
     "Study of Urdu Fiction": "URD",
     "Sanskrit Vyakaran": "SNK",
     "MIL - Urdu": "URD",
+    "Accounting & Finance": "AC",
 }
 
 
