@@ -582,8 +582,22 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
         })
     )
 
+class PGExamResultResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+
+    class Meta:
+        model = PGExamResult
+        exclude = ('uid',)
+        import_id_fields = ('student', 'semester', 'session')
+
+
 @admin.register(PGExamResult)
-class PGExamResultAdmin(admin.ModelAdmin):
+class PGExamResultAdmin(ImportExportModelAdmin):
+    resource_class = PGExamResultResource
     list_display = (
         'get_student_regno',
         'get_student_name',
@@ -625,7 +639,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
     
     readonly_fields = (
         'uid',
-        'get_student_full_info',
+        # 'get_student_full_info',
         'get_cia_courses',
         'get_ese_courses',
         'created_at',
@@ -633,7 +647,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
     )
     
     ordering = ('-created_at',)
-    
+    raw_id_fields = ('student',)
     list_per_page = 50
     
     # Add custom actions
@@ -887,7 +901,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Student Information', {
-            'fields': ('get_student_full_info',)
+            'fields': ('student',)
         }),
         ('Exam Details', {
             'fields': ('uid', 'semester', 'session')
