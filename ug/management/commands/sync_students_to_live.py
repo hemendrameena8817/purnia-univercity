@@ -79,7 +79,7 @@ class Command(BaseCommand):
 
         # Fixed values for SemesterRegistration
         SEM_REG_START = datetime.datetime(2026, 2, 15, 0, 0, 0, tzinfo=datetime.timezone.utc)
-        SEM_REG_END   = datetime.datetime(2026, 2, 20, 23, 59, 59, tzinfo=datetime.timezone.utc)
+        SEM_REG_END   = datetime.datetime(2026, 2, 22, 00, 00, 00, tzinfo=datetime.timezone.utc)
 
         stats = {'synced': 0, 'skipped': 0, 'errors': 0}
 
@@ -303,7 +303,7 @@ class Command(BaseCommand):
                                 batch=live_batch,
                                 sem=3,
                                 session='2025-26',
-                                status='PENDING',
+                                status='OPEN',
                                 is_open=True,
                                 start_date=SEM_REG_START,
                                 end_date=SEM_REG_END,
