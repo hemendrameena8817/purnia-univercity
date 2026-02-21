@@ -50,7 +50,13 @@ def main():
         '--student-id',
         type=int,
         default=None,
-        help='Process only a specific student ID'
+        help='Process only a specific student DB ID'
+    )
+    parser.add_argument(
+        '--registration-no',
+        type=str,
+        default=None,
+        help='Process only a specific student by Registration/Enrollment No (e.g. 2122B060047)'
     )
     parser.add_argument(
         '--batch',
@@ -83,6 +89,17 @@ def main():
     
     print("\n" + "-" * 80)
     
+    # Resolve registration-no to student_id if provided
+    if args.registration_no:
+        from pg.models import PGStudentProfile
+        try:
+            student = PGStudentProfile.objects.get(registration_no=args.registration_no)
+            args.student_id = student.id
+            print(f"✅ Found student: {student.first_name} {student.last_name} (DB ID: {student.id})")
+        except PGStudentProfile.DoesNotExist:
+            print(f"❌ ERROR: No student found with registration no '{args.registration_no}'")
+            return
+
     # Process single student or all eligible students
     if args.student_id:
         result = NextSemesterAssessmentService.create_assessments_for_student(
