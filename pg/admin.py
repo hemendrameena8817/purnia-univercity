@@ -2,6 +2,11 @@ from django.contrib import admin
 from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
+from accounts.models import UserAccount
+from colleges.models import College
+from import_export import resources, fields
+from import_export.widgets import ForeignKeyWidget
+from import_export.admin import ImportExportModelAdmin
 from .models import (
     PGFaculty, PGDepartment, PGDegree, PGProgram, PGBatch, PGStudentProfile,
     PGCourseStructure, PGStudentCourseAssessment, PGSemesterRegistration, PGExamRegistration,
@@ -9,6 +14,18 @@ from .models import (
     PGExam, PGExamCenterMapping, PGGroup, PGExamSchedule,
     PGExamRegistrationPayment,
 )
+
+
+class SafeForeignKeyWidget(ForeignKeyWidget):
+    """
+    Custom widget that uses filter().first() instead of get() to avoid
+    MultipleObjectsReturned error when duplicate related objects exist.
+    """
+    def clean(self, value, row=None, *args, **kwargs):
+        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
+        if val:
+            return self.model.objects.filter(**{self.field: val}).first()
+        return None
 
 
 @admin.register(PGFaculty)
@@ -50,8 +67,64 @@ class PGBatchAdmin(admin.ModelAdmin):
     ordering = ('name',)
 
 
+class PGStudentProfileResource(resources.ModelResource):
+    """
+    Resource for importing/exporting PGStudentProfile records.
+
+    FK columns in the import file:
+      - user       → UserAccount.username
+      - college    → College.college_code
+      - department → PGDepartment.name
+      - program    → PGProgram.name
+      - degree     → PGDegree.name
+    """
+
+    user = fields.Field(
+        column_name='user',
+        attribute='user',
+        widget=ForeignKeyWidget(UserAccount, field='username')
+    )
+    college = fields.Field(
+        column_name='college',
+        attribute='college',
+        widget=SafeForeignKeyWidget(College, field='college_code')
+    )
+    department = fields.Field(
+        column_name='department',
+        attribute='department',
+        widget=SafeForeignKeyWidget(PGDepartment, field='name')
+    )
+    program = fields.Field(
+        column_name='program',
+        attribute='program',
+        widget=SafeForeignKeyWidget(PGProgram, field='name')
+    )
+    degree = fields.Field(
+        column_name='degree',
+        attribute='degree',
+        widget=SafeForeignKeyWidget(PGDegree, field='name')
+    )
+
+    class Meta:
+        model = PGStudentProfile
+        exclude = ('uid', 'profile_image', 'signature')
+        import_id_fields = ('registration_no',)
+        export_order = (
+            'id', 'registration_no', 'roll_no', 'first_name', 'last_name',
+            'hindi_name', 'user', 'college', 'department', 'program', 'degree',
+            'gender', 'date_of_birth', 'mobile_no', 'aadhar_no', 'apaar_id',
+            'address', 'father_name', 'mother_name', 'religion', 'nationality',
+            'medium_of_student', 'caste', 'current_semester', 'session', 'batch',
+            'status', 'is_active', 'admission_date', 'enrollment_date',
+            'migration_submitted', 'last_university',
+            'cc_course', 'sec_course', 'ec_course',
+            'created_at', 'updated_at',
+        )
+
+
 @admin.register(PGStudentProfile)
-class PGStudentProfileAdmin(admin.ModelAdmin):
+class PGStudentProfileAdmin(ImportExportModelAdmin):
+    resource_class = PGStudentProfileResource
     list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
@@ -139,22 +212,9 @@ class PGCourseStructureAdmin(admin.ModelAdmin):
     )
 
 
-from import_export import resources, fields
-from import_export.widgets import ForeignKeyWidget
-from import_export.admin import ImportExportModelAdmin
 
-class SafeForeignKeyWidget(ForeignKeyWidget):
-    """
-    Custom widget that uses filter().first() instead of get() to avoid 
-    MultipleObjectsReturned error when duplicate related objects exist.
-    """
-    def clean(self, value, row=None, *args, **kwargs):
-        val = super(ForeignKeyWidget, self).clean(value, row=row, *args, **kwargs)
-        if val:
-            # Look up object using the specified field
-            # Use filter().first() instead of get()
-            return self.model.objects.filter(**{self.field: val}).first()
-        return None
+
+
 
 class PGStudentCourseAssessmentResource(resources.ModelResource):
     student = fields.Field(
@@ -336,11 +396,35 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     get_student_name.admin_order_field = 'student__first_name'
 
 
+class PGSemesterRegistrationResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+
+    class Meta:
+        model = PGSemesterRegistration
+        exclude = ('uid',)
+        import_id_fields = ('student', 'sem', 'session')
+
+
 @admin.register(PGSemesterRegistration)
-class PGSemesterRegistrationAdmin(admin.ModelAdmin):
+class PGSemesterRegistrationAdmin(ImportExportModelAdmin):
+    resource_class = PGSemesterRegistrationResource
     list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_eligible', 'start_date', 'end_date')
     list_filter = ('sem', 'is_open', 'status', 'exam_eligible', 'session')
-    search_fields = ('student__first_name', 'student__last_name', 'student__roll_no', 'session', 'remarks')
+    search_fields = (
+        'student__registration_no',
+        'student__roll_no',
+        'student__first_name',
+        'student__last_name',
+        'student__aadhar_no',
+        'student__mobile_no',
+        'session',
+        'remarks',
+    )
+    raw_id_fields = ('student',)
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
@@ -413,7 +497,16 @@ class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
     list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
     list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'student__department')
-    search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 'student__roll_no', 'session')
+    search_fields = (
+        'student__registration_no',
+        'student__roll_no',
+        'student__first_name',
+        'student__last_name',
+        'student__aadhar_no',
+        'student__mobile_no',
+        'session',
+    )
+    raw_id_fields = ('student',)
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
@@ -489,8 +582,22 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
         })
     )
 
+class PGExamResultResource(resources.ModelResource):
+    student = fields.Field(
+        column_name='student',
+        attribute='student',
+        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+    )
+
+    class Meta:
+        model = PGExamResult
+        exclude = ('uid',)
+        import_id_fields = ('student', 'semester', 'session')
+
+
 @admin.register(PGExamResult)
-class PGExamResultAdmin(admin.ModelAdmin):
+class PGExamResultAdmin(ImportExportModelAdmin):
+    resource_class = PGExamResultResource
     list_display = (
         'get_student_regno',
         'get_student_name',
@@ -532,7 +639,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
     
     readonly_fields = (
         'uid',
-        'get_student_full_info',
+        # 'get_student_full_info',
         'get_cia_courses',
         'get_ese_courses',
         'created_at',
@@ -540,7 +647,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
     )
     
     ordering = ('-created_at',)
-    
+    raw_id_fields = ('student',)
     list_per_page = 50
     
     # Add custom actions
@@ -794,7 +901,7 @@ class PGExamResultAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Student Information', {
-            'fields': ('get_student_full_info',)
+            'fields': ('student',)
         }),
         ('Exam Details', {
             'fields': ('uid', 'semester', 'session')
