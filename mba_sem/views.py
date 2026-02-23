@@ -667,6 +667,7 @@ class MBAResultSheetPDFView(View):
         semester = request.GET.get("semester")
         batch_uid = request.GET.get("batch_uid")
         exam_uid = request.GET.get("exam_uid")
+        course_uid = request.GET.get("course_uid")
 
         if not college_uid or not exam_uid:
             return HttpResponse(
@@ -695,10 +696,10 @@ class MBAResultSheetPDFView(View):
             students = students.filter(
                 batch__uid=batch_uid
             )
-        # if course_uid:
-        #     students = students.filter(
-        #         course__uid=course_uid
-        #     )
+        if course_uid:
+            students = students.filter(
+                course__uid=course_uid
+            )
         print(f"{students = }")
         # pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
         generator = MBAResultGenerator(students, college, semester, batch_uid, exam_name=exam_name)
