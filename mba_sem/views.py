@@ -656,6 +656,8 @@ class MBAAttendanceSheetPDFView(View):
         )
         return response
 
+from .utils.tr import *
+from mba_sem.utils.tr.result_generator import MBAResultGenerator
 class MBAResultSheetPDFView(View):
     def get(self, request):
         print("pppp")
@@ -664,10 +666,11 @@ class MBAResultSheetPDFView(View):
         college_uid = request.GET.get("college_uid")
         semester = request.GET.get("semester")
         batch_uid = request.GET.get("batch_uid")
+        exam_uid = request.GET.get("exam_uid")
 
-        if not college_uid:
+        if not college_uid or not exam_uid:
             return HttpResponse(
-                "PDF generation failed, College UID is required!",
+                "PDF generation failed, College UID and Exam UID are required!",
                 status=400
             )
 
@@ -678,15 +681,29 @@ class MBAResultSheetPDFView(View):
                 "PDF generation failed, Invalid College UID!",
                 status=400
             )
-        
-        students = MBAStudentProfile.objects.filter(mba_student_course_assessment__semester=semester).distinct().order_by("roll_no")
+
+        exam = MBAExam.objects.filter(uid=exam_uid).last()
+        exam_name = exam.name if exam else None
+
+        # Filter students who are registered for this specific exam
+        students = MBAStudentProfile.objects.filter(
+            exam_registrations__exam__uid=exam_uid,
+            college=college
+        ).distinct().order_by("roll_no")
+
         if batch_uid:
             students = students.filter(
                 batch__uid=batch_uid
             )
-
+        # if course_uid:
+        #     students = students.filter(
+        #         course__uid=course_uid
+        #     )
         print(f"{students = }")
-        pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
+        # pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
+        generator = MBAResultGenerator(students, college, semester, batch_uid, exam_name=exam_name)
+        print(f"{generator = }")
+        pdf_content = generator.generate()
 
         if not pdf_content:
             return HttpResponse("PDF generation failed", status=500)
