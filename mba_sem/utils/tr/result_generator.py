@@ -16,12 +16,13 @@ class MBAResultGenerator:
         "courses_data/mba/MBA_Result_final.xlsx"
     )
 
-    def __init__(self, students, college, semester, batch_uid=None):
+    def __init__(self, students, college, semester, batch_uid=None, exam_name=None):
         print("RESULT GENETOR.PY")
         self.students = list(students)
         self.college = college
         self.semester = str(semester)
         self.batch_uid = batch_uid
+        self.exam_name = exam_name
 
     def generate(self):
 
@@ -54,7 +55,8 @@ class MBAResultGenerator:
             subject_master=subject_master,
             student_map=student_map,
             subject_codes=subject_codes,
-            semester=self.semester
+            semester=self.semester,
+            exam_name=self.exam_name
         )
 
         builder.build()
