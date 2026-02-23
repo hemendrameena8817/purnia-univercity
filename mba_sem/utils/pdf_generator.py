@@ -690,6 +690,7 @@ def write_full_exam_line(ws, all_assessments):
         f"{exam.name}, "
         f"Examination held in the month of {exam.exam_month_year}"
     )
+
 def generate_mba_result_pdf(students, college, semester, batch_uid=None):
 
     import os
@@ -710,6 +711,7 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
     def normalize(code):
         # return code
         return (code or "").replace("-", "").replace(" ", "").upper().strip()
+    
 
     def safe(obj, field):
         if obj and hasattr(obj, field):
@@ -975,14 +977,14 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
                 page_fail += 1
 
 
-            ws.cell(row=row_pointer, column=47).value = total_credit_allotted
-            ws.cell(row=row_pointer, column=48).value = total_credit_earned
-            ws.cell(row=row_pointer, column=49).value = gpa
-            ws.cell(row=row_pointer, column=50).value = letter
-            ws.cell(row=row_pointer, column=51).value = desc
-            ws.cell(row=row_pointer, column=52).value = result_status
+            summary_col = col_pointer   # after subject loop
 
-            row_pointer += 1
+            ws.cell(row=row_pointer, column=summary_col).value = total_credit_allotted
+            ws.cell(row=row_pointer, column=summary_col + 1).value = total_credit_earned
+            ws.cell(row=row_pointer, column=summary_col + 2).value = gpa
+            ws.cell(row=row_pointer, column=summary_col + 3).value = letter
+            ws.cell(row=row_pointer, column=summary_col + 4).value = desc
+            ws.cell(row=row_pointer, column=summary_col + 5).value = result_status
         
         footer_row = row_pointer + 7
 
@@ -1001,7 +1003,7 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         ws.cell(row=footer_row + 2, column=12).value = f"Result Pending : {page_pending}"
 
         # ===== SIGN AREA =====
-        sign_row = footer_row + 2
+        sign_row = footer_row + 2   
 
         ws.cell(row=sign_row, column=22).value = "Compared By Address"
         ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
@@ -1035,3 +1037,50 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
 
     return pdf_bytes
 
+    def _build_footer(self, ws, student_chunk):
+
+        footer_row = self.DATA_START_ROW + len(student_chunk) + 2
+
+        # ---- Page Counters ----
+        page_total = len(student_chunk)
+        page_pass = 0
+        page_fail = 0
+        page_absent = 0
+        page_pending = 0
+        page_expelled = 0
+        page_promoted = 0
+
+        # Result status column index
+        summary_col = 55
+        result_status_col = summary_col + 5
+
+        # Count from sheet (already calculated result)
+        for i in range(len(student_chunk)):
+            row = self.DATA_START_ROW + i
+            status = ws.cell(row=row, column=result_status_col).value
+
+            if status == "Pass":
+                page_pass += 1
+            elif status == "Fail":
+                page_fail += 1
+
+        # ===== LEFT BLOCK =====
+        ws.cell(row=footer_row, column=2).value = f"No of Candidate : {page_total}"
+        ws.cell(row=footer_row + 1, column=2).value = f"Pass : {page_pass}"
+        ws.cell(row=footer_row + 2, column=2).value = f"Promoted : {page_promoted}"
+
+        # ===== CENTER BLOCK =====
+        ws.cell(row=footer_row, column=5).value = f"Expelled : {page_expelled}"
+        ws.cell(row=footer_row + 1, column=5).value = f"Fail : {page_fail}"
+        ws.cell(row=footer_row + 2, column=5).value = f"Qualified : {page_pass}"
+
+        # ===== RIGHT BLOCK =====
+        ws.cell(row=footer_row + 1, column=12).value = f"Absent : {page_absent}"
+        ws.cell(row=footer_row + 2, column=12).value = f"Result Pending : {page_pending}"
+
+        # ===== SIGN AREA =====
+        sign_row = footer_row + 4
+
+        ws.cell(row=sign_row, column=22).value = "Compared By Address"
+        ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
+        ws.cell(row=sign_row, column=50).value = "Controller of Examination"

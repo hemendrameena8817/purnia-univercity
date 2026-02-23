@@ -656,6 +656,8 @@ class MBAAttendanceSheetPDFView(View):
         )
         return response
 
+from .utils.tr import *
+from mba_sem.utils.tr.result_generator import MBAResultGenerator
 class MBAResultSheetPDFView(View):
     def get(self, request):
         print("pppp")
@@ -690,7 +692,9 @@ class MBAResultSheetPDFView(View):
                 course__uid=course_uid
             )
         print(f"{students = }")
-        pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
+        # pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
+        generator = MBAResultGenerator(students, college, semester, batch_uid)
+        pdf_content = generator.generate()
 
         if not pdf_content:
             return HttpResponse("PDF generation failed", status=500)
