@@ -26,7 +26,8 @@ class MBAResultExcelBuilder:
         subject_master,
         student_map,
         subject_codes,
-        semester
+        semester,
+        exam_name=None
     ):
         self.wb = wb
         self.master_sheet = master_sheet
@@ -37,6 +38,7 @@ class MBAResultExcelBuilder:
         self.student_map = student_map or {}
         self.subject_codes = subject_codes or []
         self.semester = str(semester)
+        self.exam_name = exam_name
         self.subject_structure = {}
 
     # ======================================================
@@ -46,8 +48,7 @@ class MBAResultExcelBuilder:
     def _add_logo(self, ws):
 
         logo_path = os.path.join(
-            settings.MEDIA_ROOT,
-            "common",
+            "static/images/",
             "purnea-logo.png"
         )
 
@@ -64,7 +65,7 @@ class MBAResultExcelBuilder:
 
     # ======================================================
     # BUILD
-    # ======================================================
+    # ========================f==============================
 
     def build(self):
 
@@ -92,7 +93,7 @@ class MBAResultExcelBuilder:
     # ======================================================
 
     def _build_header(self, ws, student_chunk):
-
+        ws["A4"] = self.exam_name or ""
         ws["AP4"] = f"Dept./College : {self.college.name}"
 
         if student_chunk and student_chunk[0].course:
