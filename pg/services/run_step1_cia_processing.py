@@ -14,7 +14,7 @@ Usage Examples:
     python pg/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --registration-no PU2024001 --dry-run
 
     # SINGLE STUDENT - Production run
-    python pg/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --registration-no PU2024001
+    python pg/services/run_step1_cia_processing.py --semester 2nd --session 2024-25 --registration-no 1907B060207 --dry-run
 
     # Back paper students (all batches in session) - Dry run
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches --dry-run

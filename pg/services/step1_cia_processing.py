@@ -17,7 +17,7 @@ Usage Examples:
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches --dry-run
     
     # Production run (saves to database)
-    python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25
+    python pg/services/run_step1_cia_processing.py --semester 3RD --session 2025-26
     
     # Back paper production run
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches
@@ -90,6 +90,7 @@ class PGCIAResultProcessingService:
             'exam_results_created': 0,
             'exam_results_updated': 0,
             'exam_registrations_created': 0,
+            'exam_registrations_skipped': 0,  # Already existed — not updated
         }
         self.failed_students = []  # Track failed student reg numbers
     
@@ -461,28 +462,40 @@ class PGCIAResultProcessingService:
             
     def _create_exam_registration(self, student: PGStudentProfile):
         """
-        Create exam registration (form fillup) for ESE
-        Only for students who passed CIA
+        Create exam registration (form fillup) for ESE.
+        Only for students who passed CIA.
+
+        Policy:
+          - If a PGExamRegistration entry already EXISTS  → SKIP (do not update)
+          - If it does NOT exist                          → CREATE only
         """
         # Convert semester string to integer (1ST -> 1, 2ND -> 2, etc.)
         sem_map = {
             '1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4,
         }
-        sem_int = sem_map.get(self.semester, 1)  # Default to 1 if not found
-        
-        # Check if registration already exists
-        registration, created = PGExamRegistration.objects.get_or_create(
+        sem_int = sem_map.get(self.semester.upper(), 1)  # Default to 1 if not found
+
+        # Check if registration already exists — if so, SKIP entirely
+        existing = PGExamRegistration.objects.filter(
             student=student,
             sem=sem_int,
             session=self.session,
-            defaults={
-                'status': 'PENDING',
-                'is_open': True,
-            }
+        ).first()
+
+        if existing:
+            # Entry already exists — do NOT update, just skip
+            self.stats['exam_registrations_skipped'] += 1
+            return
+
+        # No existing entry — CREATE a new one
+        PGExamRegistration.objects.create(
+            student=student,
+            sem=sem_int,
+            session=self.session,
+            status='PENDING',
+            is_open=True,
         )
-        
-        if created:
-            self.stats['exam_registrations_created'] += 1
+        self.stats['exam_registrations_created'] += 1
 
     ################################################################################
     # 4. REPORTING UTILITIES
@@ -493,7 +506,7 @@ class PGCIAResultProcessingService:
         print("\n" + "="*100)
         print("📊 STEP 1: PG CIA RESULT PROCESSING")
         print("="*100)
-        print(f"Batch:    {self.batch}")
+        print(f"Batch:    {self.batch if self.batch else 'ALL BATCHES (Session Wise)'}")
         print(f"Semester: {self.semester}")
         print(f"Session:  {self.session}")
         print("="*100)
@@ -514,9 +527,10 @@ class PGCIAResultProcessingService:
             for idx, reg_no in enumerate(self.failed_students, 1):
                 print(f"   {idx}. {reg_no}")
         
-        print(f"\nPGExamResult Entries Created: {self.stats['exam_results_created']:,}")
-        print(f"PGExamResult Entries Updated: {self.stats['exam_results_updated']:,}")
-        print(f"PGExamRegistrations Created:  {self.stats['exam_registrations_created']:,}")
+        print(f"\nPGExamResult Entries Created:      {self.stats['exam_results_created']:,}")
+        print(f"PGExamResult Entries Updated:      {self.stats['exam_results_updated']:,}")
+        print(f"PGExamRegistrations Created:       {self.stats['exam_registrations_created']:,}")
+        print(f"PGExamRegistrations Skipped:       {self.stats['exam_registrations_skipped']:,}  (already existed — not modified)")
         print("="*100)
     
     def _percentage(self, count: int) -> str:
