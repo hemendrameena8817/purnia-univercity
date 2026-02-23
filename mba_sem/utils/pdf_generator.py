@@ -1152,8 +1152,8 @@ def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None
                     label = str(rec.label or "").upper()
                     marks = float(
                         rec.ind_final_marks_obtained
-                        or rec.ind_marks_obtained
-                        or 0
+                        if rec.ind_final_marks_obtained is not None
+                        else (rec.ind_marks_obtained or 0)
                     )
                     if label.startswith("ESE"):
                         ese_marks = marks
@@ -1163,8 +1163,8 @@ def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None
             total = ese_marks + cia_marks
             numeric = calculate_numeric_grade(total)
             
-            # Use same logic as excel_builder: numeric < 4 means failed the subject (for 10-point scale)
-            if numeric < 4:
+            # numeric < 5 is the Fail grade (below 45 marks)
+            if numeric < 5:
                 failed = True
                 break
         

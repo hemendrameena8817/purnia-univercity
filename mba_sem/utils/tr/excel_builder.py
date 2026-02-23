@@ -153,7 +153,11 @@ class MBAResultExcelBuilder:
 
             self.subject_structure[code] = {
                 "headers": headers,
-                "credit": credit
+                "credit": credit,
+                "has_ese": has_ese,
+                "has_cia": has_cia,
+                "ese_pass": ese_pass,
+                "cia_pass": cia_pass,
             }
 
             width = len(headers)
@@ -231,47 +235,77 @@ class MBAResultExcelBuilder:
             total_credit_earned = 0
             total_grade_points = 0
             failed = False
+            student_appeared = False
 
             for code, meta in self.subject_structure.items():
 
                 headers = meta["headers"]
                 credit_alloted = float(meta.get("credit", 0))
+                has_ese = meta.get("has_ese", False)
+                has_cia = meta.get("has_cia", False)
+                ese_pass_req = float(meta.get("ese_pass", 0))
+                cia_pass_req = float(meta.get("cia_pass", 0))
 
                 ese_marks = 0
                 cia_marks = 0
+                ese_passed = True
+                cia_passed = True
+                ese_absent = False
+                cia_absent = False
+
+                ese_found = False
+                cia_found = False
 
                 for rec in self.student_map.get(student.id, []):
                     if rec.paper_code == code:
                         label = str(rec.label or "").upper()
+                        is_absent = bool(rec.ind_is_absent)
                         marks = float(
                             rec.ind_final_marks_obtained
-                            or rec.ind_marks_obtained
-                            or 0
+                            if rec.ind_final_marks_obtained is not None
+                            else (rec.ind_marks_obtained or 0)
                         )
                         if label.startswith("ESE"):
                             ese_marks = marks
-                        if label.startswith("CIA"):
+                            ese_found = True
+                            ese_absent = is_absent
+                        elif label.startswith("CIA"):
                             cia_marks = marks
+                            cia_found = True
+                            cia_absent = is_absent
+
+                # Determine if passed both parts
+                if has_ese:
+                    ese_passed = (ese_marks >= ese_pass_req) if (ese_found and not ese_absent) else (ese_pass_req <= 0)
+                if has_cia:
+                    cia_passed = (cia_marks >= cia_pass_req) if (cia_found and not cia_absent) else (cia_pass_req <= 0)
 
                 total = ese_marks + cia_marks
-                numeric = calculate_numeric_grade(total)
+                numeric = calculate_numeric_grade(total) if not (ese_absent and cia_absent) else 0
 
-                credit_earned = credit_alloted if numeric >= 4 else 0
-                gp = calculate_grade_point(numeric, credit_earned)
+                # Track if student appeared for AT LEAST ONE component
+                if ese_found and not ese_absent: student_appeared = True
+                if cia_found and not cia_absent: student_appeared = True
 
-                if credit_earned == 0:
+                # CREDIT LOGIC
+                if ese_passed and cia_passed and numeric >= 5 and not (ese_absent or cia_absent):
+                    credit_earned = credit_alloted
+                else:
+                    credit_earned = 0
                     failed = True
+
+                gp = calculate_grade_point(numeric, credit_earned)
 
                 total_credit_allotted += credit_alloted
                 total_credit_earned += credit_earned
                 total_grade_points += gp
 
                 values = {
-                    "ESE": ese_marks,
-                    "CIA": cia_marks,
-                    "Total": total,
+                    "ESE": "AB" if ese_absent else ese_marks,
+                    "CIA": "AB" if cia_absent else cia_marks,
+                    "Total": "AB" if (ese_absent and cia_absent) else total,
                     "Credit Alloted": credit_alloted,
-                    "Numeric Grade": numeric,
+                    "Numeric Grade": numeric if not (ese_absent and cia_absent) else 0,
                     "Credit Earned": credit_earned,
                     "GP": gp
                 }
@@ -284,12 +318,24 @@ class MBAResultExcelBuilder:
 
                 col_pointer += len(headers)
 
-            gpa = round(
-                total_grade_points / total_credit_earned, 2
-            ) if total_credit_earned > 0 else 0
-
-            letter, desc = get_letter_and_description(gpa)
-            result_status = "Fail" if failed else "Pass"
+            # ===== GPA & OVERALL RESULT =====
+            if not student_appeared:
+                # Student did not appear for ANY component
+                gpa = 0.00
+                letter, desc = "AB", "Absent"
+                result_status = "Absent"
+            elif failed:
+                # If any subject is failed (credit_earned=0), the overall result is Fail
+                gpa = 0.00
+                letter, desc = "F", "Fail"
+                result_status = "Fail"
+            else:
+                # If all subjects passed, calculate weighted GPA
+                gpa = round(
+                    total_grade_points / total_credit_earned, 2
+                ) if total_credit_earned > 0 else 0
+                letter, desc = get_letter_and_description(gpa)
+                result_status = "Pass"
 
             summary_col = 55
 
@@ -325,6 +371,8 @@ class MBAResultExcelBuilder:
                 page_pass += 1
             elif status == "Fail":
                 page_fail += 1
+            elif status == "Absent":
+                page_absent += 1
 
         # ===== LEFT BLOCK =====
         ws.cell(row=footer_row, column=2).value = f"No of Students : {page_total}"
@@ -334,7 +382,7 @@ class MBAResultExcelBuilder:
         # ===== CENTER BLOCK =====
         ws.cell(row=footer_row, column=8).value = f"Expelled : {page_expelled}"
         ws.cell(row=footer_row + 1, column=8).value = f"Fail : {page_fail}"
-        ws.cell(row=footer_row + 2, column=8).value = f"Qualified : 00"
+        ws.cell(row=footer_row + 2, column=8).value = f"Qualified : {page_pass}"
 
         # ===== RIGHT BLOCK =====
         ws.cell(row=footer_row + 1 , column=14).value = f"Absent : {page_absent}"
