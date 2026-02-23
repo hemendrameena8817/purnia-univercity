@@ -1084,3 +1084,112 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         ws.cell(row=sign_row, column=22).value = "Compared By Address"
         ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
         ws.cell(row=sign_row, column=50).value = "Controller of Examination"
+
+def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None):
+    from weasyprint import HTML
+    from django.conf import settings
+    from django.template.loader import get_template
+    from pup_umis_backend.utils.file_utils import image_to_base64
+    from .tr.selectors import fetch_assessments
+    from .tr.grading import calculate_numeric_grade, calculate_grade_point
+    from mba_sem.models import MBAStudentProfile, MBACourseStructure
+    import os, logging
+
+    logger = logging.getLogger(__name__)
+
+    # 1. Fetch Students
+    student_filters = {
+        "exam_registrations__exam": exam,
+        "college": college
+    }
+    if course_uid:
+        student_filters["course__uid"] = course_uid
+
+    students = MBAStudentProfile.objects.filter(
+        **student_filters
+    ).distinct().order_by("roll_no")
+
+    if not students.exists():
+        return None
+
+    # 2. Fetch Assessments & subject info
+    all_assessments, subject_master, student_map, subject_codes = fetch_assessments(
+        students, college, semester
+    )
+
+    # 3. Subject Structure for calculating pass/fail
+    subject_structure = {}
+    for code in subject_codes:
+        structures = MBACourseStructure.objects.filter(
+            course_code=code,
+            semester=str(semester)
+        )
+        credit = 0
+        for obj in structures:
+            credit = float(obj.credit or 0)
+            break
+        subject_structure[code] = {"credit": credit}
+
+    # 4. Process Status
+    pass_roll_nos = []
+    fail_roll_nos = []
+
+    for student in students:
+        failed = False
+        has_data = False
+        
+        student_recs = student_map.get(student.id, [])
+        if student_recs:
+            has_data = True
+
+        for code, meta in subject_structure.items():
+            credit_allotted = float(meta.get("credit", 0))
+            ese_marks = 0
+            cia_marks = 0
+            
+            for rec in student_recs:
+                if rec.paper_code == code:
+                    label = str(rec.label or "").upper()
+                    marks = float(
+                        rec.ind_final_marks_obtained
+                        or rec.ind_marks_obtained
+                        or 0
+                    )
+                    if label.startswith("ESE"):
+                        ese_marks = marks
+                    if label.startswith("CIA"):
+                        cia_marks = marks
+
+            total = ese_marks + cia_marks
+            numeric = calculate_numeric_grade(total)
+            
+            # Use same logic as excel_builder: numeric < 4 means failed the subject (for 10-point scale)
+            if numeric < 4:
+                failed = True
+                break
+        
+        if failed or not has_data:
+            fail_roll_nos.append(student.roll_no or str(student.uid))
+        else:
+            pass_roll_nos.append(student.roll_no or str(student.uid))
+
+    # 5. Template Context
+    logo_path = os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")
+    context = {
+        "university_logo": image_to_base64(logo_path) if os.path.exists(logo_path) else None,
+        "exam_name": exam.name,
+        "pass_roll_nos": pass_roll_nos,
+        "fail_roll_nos": fail_roll_nos,
+        "pass_count": len(pass_roll_nos),
+        "fail_count": len(fail_roll_nos),
+        "total_count": len(pass_roll_nos) + len(fail_roll_nos),
+    }
+
+    # 6. Render & Generate
+    html_string = get_template("mba_sem/result_declaration.html").render(context)
+    try:
+        pdf_file = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
+        return pdf_file
+    except Exception as e:
+        logger.error(f"Failed to generate Result Declaration PDF: {e}")
+        return None
