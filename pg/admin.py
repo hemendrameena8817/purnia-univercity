@@ -314,6 +314,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
         'ind_is_absent', 'sem_result',
         'is_cia_fill', 'is_ese_fill',
         'department',
+        'college_code',
     )
 
     # Search on indexed fields only

@@ -4,7 +4,7 @@ import re
 import pandas as pd
 from decimal import Decimal
 import django
-
+# python scripts/pg/coursestructure.py
 # Setup Django Environment
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
@@ -12,23 +12,40 @@ django.setup()
 
 from pg.models import PGCourseStructure, PGDepartment
 
-def run():
+def run(file_path=None):
+    import subprocess
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    file_path = os.path.join(base_dir, 'courses_data/pg/structureofcourse.ods')
-    
+
+    # Resolve file: use provided path or auto-detect .xlsx/.ods
+    engine = None
+    if not file_path:
+        for fname, eng in [('structureofcourse.xlsx', 'openpyxl'), ('structureofcourse.ods', 'odf')]:
+            candidate = os.path.join(base_dir, 'courses_data', 'pg', fname)
+            if os.path.exists(candidate):
+                file_path = candidate
+                engine = eng
+                break
+        if not file_path:
+            print("File not found. Use --file /path/to/structureofcourse.ods")
+            return
+
     if not os.path.exists(file_path):
         print(f"File not found: {file_path}")
         return
 
-    print(f"Reading ODS file: {file_path}")
-    
+    # Auto-detect actual format (handles ODS renamed as .xlsx)
+    result = subprocess.run(['file', file_path], capture_output=True, text=True)
+    engine = 'odf' if 'OpenDocument' in result.stdout else 'openpyxl'
+
+    print(f"Reading file: {file_path} (engine: {engine})")
+
     try:
-        df = pd.read_excel(file_path, engine='odf')
+        df = pd.read_excel(file_path, engine=engine)
         # Clean column names
         df.columns = [str(c).strip() for c in df.columns]
         print("Columns found:", df.columns.tolist())
     except Exception as e:
-        print(f"Error reading ODS file: {e}")
+        print(f"Error reading file: {e}")
         return
 
     # Map ODS columns to standardized keys
@@ -262,4 +279,8 @@ def run():
     print(f"Done. Created: {count_created}, Skipped/Updated: {count_skipped}")
 
 if __name__ == "__main__":
-    run()
+    import argparse
+    parser = argparse.ArgumentParser(description='Import PG Course Structure')
+    parser.add_argument('--file', type=str, default=None, help='Path to .ods or .xlsx file')
+    args = parser.parse_args()
+    run(file_path=args.file)
