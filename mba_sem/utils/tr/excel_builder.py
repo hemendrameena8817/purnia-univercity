@@ -349,8 +349,9 @@ class MBAResultExcelBuilder:
             row_pointer += 1
 
     def _build_footer(self, ws, student_chunk):
+        MAX_STUDENTS_PER_PAGE = 5
 
-        footer_row = self.DATA_START_ROW + len(student_chunk) + 4
+        footer_row = self.DATA_START_ROW + MAX_STUDENTS_PER_PAGE - 1 + 4
 
         page_total = len(student_chunk)
         page_pass = 0
@@ -382,7 +383,7 @@ class MBAResultExcelBuilder:
         # ===== CENTER BLOCK =====
         ws.cell(row=footer_row, column=8).value = f"Expelled : {page_expelled}"
         ws.cell(row=footer_row + 1, column=8).value = f"Fail : {page_fail}"
-        ws.cell(row=footer_row + 2, column=8).value = f"Qualified : {page_pass}"
+        ws.cell(row=footer_row + 2, column=8).value = f"Qualified : 0"
 
         # ===== RIGHT BLOCK =====
         ws.cell(row=footer_row + 1 , column=14).value = f"Absent : {page_absent}"
