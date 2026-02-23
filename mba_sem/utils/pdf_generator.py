@@ -1174,7 +1174,7 @@ def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None
             pass_roll_nos.append(student.roll_no or str(student.uid))
 
     # 5. Template Context
-    logo_path = os.path.join(settings.MEDIA_ROOT, "static/images/purnea-logo.png")
+    logo_path = os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")
     context = {
         "university_logo": image_to_base64(logo_path) if os.path.exists(logo_path) else None,
         "exam_name": exam.name,
