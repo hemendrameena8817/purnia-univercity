@@ -15,11 +15,14 @@ def calculate_numeric_grade(total):
     try:
         total = float(total)
     except:
-        return ""
+        return 0
 
-    for rule in GRADE_STRUCTURE:
-        if rule["min"] <= total <= rule["max"]:
-            return rule["numeric"]
+    if total >= 91: return 10
+    if total >= 81: return 9
+    if total >= 71: return 8
+    if total >= 61: return 7
+    if total >= 51: return 6
+    if total >= 45: return 5
     return 0
 
 
