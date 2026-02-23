@@ -49,7 +49,8 @@ urlpatterns = [
     path('bulk-admit-card/pdf/', MBABulkAdmitCardPDFView.as_view(), name='mba-bulk-admit-card-pdf'),
     path('roll-sheet/pdf/', MBARollSheetPDFView.as_view(), name='mba-roll-sheet-pdf'),
     path('mba/attendance-sheet/pdf/', MBAAttendanceSheetPDFView.as_view(),name='mba-attendance-sheet-pdf'),
-    path('mba/result/',MBAResultSheetPDFView.as_view(),name="mba-result-sheet-pdf"),
+    path('mba/result/', MBAResultSheetPDFView.as_view(), name="mba-result-sheet-pdf"),
+    path('mba/result-declaration/pdf/', MBAResultDeclarationPDFView.as_view(), name="mba-result-declaration-pdf"),
 
     path('mba-department/', MBACourseGetAPI.as_view(), name='mba-courses-department'),
     path("course-subjects/", CourseSubjectsViaRegistrationAPIView.as_view(),name="course-subjects-via-registration"),

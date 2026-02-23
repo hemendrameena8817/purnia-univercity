@@ -181,23 +181,15 @@ class PGExamRegistrationSerializer(serializers.ModelSerializer):
         """
         Fetch ESE assessments for the student matching:
         - semester from the registration (obj.sem)
-        - label = ESE only
-        - exam_type from the registration (obj.exam_type)
+        - label starts with 'ESE'
+        - No exam_type filter — returns both REGULAR and BACK subjects
         """
         sem_str = str(obj.sem) if obj.sem else ""
-        exam_type = obj.exam_type  # e.g. 'REGULAR' or 'BACK'
-
-        filters = {
-            'student': obj.student,
-            'semester__icontains': sem_str,
-            'label__icontains': 'ESE',
-        }
-
-        if exam_type:
-            filters['exam_type'] = exam_type
 
         assessments = PGStudentCourseAssessment.objects.filter(
-            **filters
+            student=obj.student,
+            semester__icontains=sem_str,
+            label__icontains='ESE',
         ).order_by('paper_code')
 
         return AssessmentDetailSerializer(assessments, many=True).data
