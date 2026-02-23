@@ -184,7 +184,7 @@ def generate_pg_registration_card_pdf(student, registration):
             semester=semester_text,
             session=session,
             exam_type__iexact=exam_type,
-            label='CIA',          # One row per paper (CIA is the representative row)
+            label__istartswith='ESE',   # Use ESE entries — exist for both REGULAR & BACK students
         )
         .select_related('department')
         .order_by('paper_code')
