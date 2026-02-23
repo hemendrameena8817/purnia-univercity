@@ -220,7 +220,7 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
     student = fields.Field(
         column_name='student',
         attribute='student',
-        widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
+        widget=SafeForeignKeyWidget(PGStudentProfile, field='registration_no')
     )
     batch = fields.Field(
         column_name='batch',
@@ -230,62 +230,76 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
     department = fields.Field(
         column_name='department',
         attribute='department',
-        widget=ForeignKeyWidget(PGDepartment, field='name')
+        widget=SafeForeignKeyWidget(PGDepartment, field='name')
     )
 
     class Meta:
         model = PGStudentCourseAssessment
-        exclude = ('uid',)  # Exclude UID to allow auto-generation
-        # Default behavior includes all other fields.
-        # import_id_fields = ('id',) # Default is 'id', which works for creation (if id missing) or update.
+        exclude = ('uid',)
+
+    def skip_row(self, instance, original, row, import_validation_errors=None):
+        """Skip completely blank rows (Excel files often have trailing empty rows)."""
+        student_val = row.get('student')
+        if not student_val or str(student_val).strip() in ('', 'None', 'nan'):
+            return True  # Skip — student is blank
+        return super().skip_row(instance, original, row, import_validation_errors)
 
     def before_import_row(self, row, **kwargs):
         """
-        Hook called before importing each row.
-        Used here to create PGStudentProfile if it doesn't exist but UserAccount does.
+        Normalize the 'student' column before import.
+
+        Handles two cases:
+          1. student column is a numeric id (int or float like 1048.0  from Excel)
+             → look up the PGStudentProfile by pk and replace with registration_no
+          2. student column is a registration_no string
+             → auto-create PGStudentProfile if UserAccount exists but profile doesn't
         """
-        registration_no = row.get('student')
-        if not registration_no:
+        student_val = row.get('student')
+        print(f"[DEBUG before_import_row] student raw value: {repr(student_val)} | type: {type(student_val).__name__}")
+        if not student_val:
             return
 
-        # Check if Profile exists
+        # Normalize: Excel often stores numbers as floats (e.g. 1048.0)
+        student_str = str(student_val).strip()
+        if student_str.endswith('.0'):
+            student_str = student_str[:-2]   # '1048.0' → '1048'
+
+        # Case 1: numeric id → look up registration_no and substitute
+        if student_str.isdigit():
+            profile = PGStudentProfile.objects.filter(pk=int(student_str)).first()
+            if profile:
+                row['student'] = profile.registration_no
+            # else: leave as-is; import will fail with a clear FK error
+            return
+
+        # Case 2: registration_no string
+        registration_no = student_str
+        row['student'] = registration_no  # ensure cleaned value is used
+
         if not PGStudentProfile.objects.filter(registration_no=registration_no).exists():
             from accounts.models import UserAccount
             from colleges.models import College
-            
-            # Check if UserAccount exists
+
             user = UserAccount.objects.filter(username=registration_no).first()
             if user:
-                print(f"Creating missing profile for User: {registration_no}")
-                
-                # Resolving Foreign Keys from row data
-                batch_name = row.get('batch')
-                dept_name = row.get('department')
+                batch_name   = row.get('batch')
+                dept_name    = row.get('department')
                 college_code = row.get('college_code')
-                
-                batch_obj = PGBatch.objects.filter(name=batch_name).first() if batch_name else None
-                dept_obj = PGDepartment.objects.filter(name=dept_name).first() if dept_name else None
+
+                dept_obj    = PGDepartment.objects.filter(name=dept_name).first() if dept_name else None
                 college_obj = College.objects.filter(college_code=college_code).first() if college_code else None
-                
-                # Create the Profile
+
                 PGStudentProfile.objects.create(
                     user=user,
                     registration_no=registration_no,
-                    first_name=user.get_full_name(), # Use full name
-                    last_name="", # Leave last name empty
-                    batch=batch_name, # Storing string for now as per model (or is it FK? Model says CharField for batch/roll_no actually? Let's check.)
-                    # Wait, PGStudentProfile.batch is CharField in model lines 205.
-                    # BUT PGStudentProfile.department is ForeignKey.
+                    first_name=user.get_full_name(),
+                    last_name='',
+                    batch=batch_name,
                     department=dept_obj,
                     college=college_obj,
-                    # roll_no might be same as RegNo or empty? Leaving empty.
                     status='Active'
                 )
-            else:
-                 # Logic if User doesn't exist? 
-                 # User said "exist then create profile".
-                 # So if user not exist, we do nothing (it will fail validation later).
-                 pass
+                print(f"[Import] Auto-created PGStudentProfile for: {registration_no}")
 
 @admin.register(PGStudentCourseAssessment)
 class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
