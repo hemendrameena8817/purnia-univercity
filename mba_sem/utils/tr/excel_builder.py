@@ -327,14 +327,14 @@ class MBAResultExcelBuilder:
                 page_fail += 1
 
         # ===== LEFT BLOCK =====
-        ws.cell(row=footer_row, column=2).value = f"No of Candidate : {page_total}"
+        ws.cell(row=footer_row, column=2).value = f"No of Students : {page_total}"
         ws.cell(row=footer_row + 1, column=2).value = f"Pass : {page_pass}"
         ws.cell(row=footer_row + 2, column=2).value = f"Promoted : {page_promoted}"
 
         # ===== CENTER BLOCK =====
         ws.cell(row=footer_row, column=8).value = f"Expelled : {page_expelled}"
         ws.cell(row=footer_row + 1, column=8).value = f"Fail : {page_fail}"
-        ws.cell(row=footer_row + 2, column=8).value = f"Qualified : {page_pass}"
+        ws.cell(row=footer_row + 2, column=8).value = f"Qualified : 00"
 
         # ===== RIGHT BLOCK =====
         ws.cell(row=footer_row + 1 , column=14).value = f"Absent : {page_absent}"
