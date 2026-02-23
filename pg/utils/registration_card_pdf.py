@@ -183,8 +183,7 @@ def generate_pg_registration_card_pdf(student, registration):
             student=student,
             semester=semester_text,
             session=session,
-            exam_type__iexact=exam_type,
-            label__istartswith='ESE',   # Use ESE entries — exist for both REGULAR & BACK students
+            label__istartswith='ESE',   # No exam_type filter — ESE entries may carry REGULAR type even for BACK students
         )
         .select_related('department')
         .order_by('paper_code')
