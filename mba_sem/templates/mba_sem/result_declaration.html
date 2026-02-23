@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MBA Result Declaration</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+
+        .university-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 5px 0;
+            text-transform: uppercase;
+        }
+
+        .exam-name {
+            font-size: 16px;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            border: 1.5px solid #000;
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        th {
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .roll-numbers {
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        .total-row td {
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        {% if university_logo %}
+        <img src="data:image/png;base64,{{ university_logo }}" class="logo">
+        {% endif %}
+        <div class="university-name">PURNEA UNIVERSITY, PURNIA, BIHAR</div>
+        <div class="exam-name">{{ exam_name }}</div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 33%;">RESULT STATUS</th>
+                <th style="width: 34%;">STUDENT ROLL NO</th>
+                <th style="width: 33%;">COUNT</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- PASS SECTION -->
+            {% if pass_roll_nos %}
+            {% for roll in pass_roll_nos %}
+            <tr>
+                {% if forloop.first %}
+                <td rowspan="{{ pass_count }}" style="font-weight: bold;">PASS</td>
+                {% endif %}
+                <td style="font-weight: bold;">{{ roll }}</td>
+                {% if forloop.first %}
+                <td rowspan="{{ pass_count }}" style="font-weight: bold;">{{ pass_count|stringformat:"02d" }}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                <td style="font-weight: bold;">PASS</td>
+                <td>&nbsp;</td>
+                <td style="font-weight: bold;">00</td>
+            </tr>
+            {% endif %}
+
+            <!-- FAIL SECTION -->
+            {% if fail_roll_nos %}
+            {% for roll in fail_roll_nos %}
+            <tr>
+                {% if forloop.first %}
+                <td rowspan="{{ fail_count }}" style="font-weight: bold;">FAIL</td>
+                {% endif %}
+                <td style="font-weight: bold;">{{ roll }}</td>
+                {% if forloop.first %}
+                <td rowspan="{{ fail_count }}" style="font-weight: bold;">{{ fail_count|stringformat:"02d" }}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                <td style="font-weight: bold;">FAIL</td>
+                <td>&nbsp;</td>
+                <td style="font-weight: bold;">00</td>
+            </tr>
+            {% endif %}
+
+            <tr class="total-row">
+                <td colspan="2" style="font-weight: bold; text-align: center;">Total</td>
+                <td style="font-weight: bold;">{{ total_count|stringformat:"02d" }}</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+
+</html>
