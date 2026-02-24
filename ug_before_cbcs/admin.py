@@ -43,7 +43,7 @@ class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
         'student_name',
         'fathers_name'
     )
-    autocomplete_fields = ['user', 'college']
+    raw_id_fields = ['user', 'college']
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
@@ -102,7 +102,8 @@ class UGBeforeCBCSExamAdmin(admin.ModelAdmin):
         'name',
         'batch_code',
         'session_code',
-        'semester_code'
+        'semester_code',
+        'results__registration_no'
     )
     readonly_fields = ('uid', 'created_at', 'updated_at')
     date_hierarchy = 'publication_date'
@@ -171,13 +172,13 @@ class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
     )
     
     search_fields = (
-        'registration_no',  # Search denormalized field directly (Indexed)
+        'registration_no',  
         'student__student_name',
         'paper_code',
         'exam__exam_code'
     )
     
-    autocomplete_fields = ['student', 'exam']
+    raw_id_fields = ['student', 'exam']
     readonly_fields = ('uid', 'created_at', 'updated_at')
     list_editable = ('is_absent',)
     

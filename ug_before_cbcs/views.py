@@ -131,15 +131,19 @@ class UGOldMarksheetPDFView(View):
     """
     def get(self, request):
         registration_no = request.GET.get("registration_no")
+        roll_no = request.GET.get("roll_no")
         part = request.GET.get("part")
         exam_type = request.GET.get("exam_type")
         course_code = request.GET.get("course_code")
         batch_code = request.GET.get("batch_code")
 
-        if not registration_no or not part or not exam_type or not course_code:
-            return HttpResponse("registration_no, part, exam_type, and course_code are required", status=400)
+        if not (registration_no or roll_no) or not part or not exam_type or not course_code:
+            return HttpResponse("registration_no/roll_no, part, exam_type, and course_code are required", status=400)
  
-        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Call the PDF generator utility
         from .utils.pdf_generator import generate_ug_old_ba_hons_marksheet_pdf
@@ -165,18 +169,22 @@ class UGOldMarksheetJSONView(APIView):
     
     def get(self, request):
         registration_no = request.query_params.get("registration_no")
+        roll_no = request.query_params.get("roll_no")
         part = request.query_params.get("part")
         exam_type = request.query_params.get("exam_type")
         course_code = request.query_params.get("course_code")
         batch_code = request.query_params.get("batch_code")
 
-        if not registration_no or not part or not course_code:
+        if not (registration_no or roll_no) or not part or not course_code:
             return Response(
-                {"error": "registration_no, part, and course_code are required"},
+                {"error": "registration_no/roll_no, part, and course_code are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
  
-        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Get marksheet context data
         from .utils.pdf_generator import get_ug_old_ba_hons_marksheet_context
@@ -205,7 +213,12 @@ class UGOldMarksheetJSONView(APIView):
                 'dob': student_obj.dob,
                 'course_code': student_obj.course_code,
                 'discipline_code': student_obj.discipline_code,
+                'college_name': student_obj.college.name if student_obj.college else None,
             }
+        
+        # Add metadata fields
+        context_data['part'] = part
+        context_data['exam_type'] = exam_type
         
         # Remove non-serializable items (base64 images, QR codes)
         context_data.pop('university_logo', None)
