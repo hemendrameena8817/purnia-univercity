@@ -163,6 +163,7 @@ class UGBeforeCBCSStudentResultAdmin(admin.ModelAdmin):
     list_select_related = ('student', 'exam')
     
     list_filter = (
+        'exam__course_code',
         'exam__part',
         'exam_type',
         'is_ex_regular',

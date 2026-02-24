@@ -148,10 +148,21 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
         if sub_name not in subjects_map:
             # Identification Logic: Prioritize paper_type_code
             is_honours = False
-            if result.paper_type_code and result.paper_type_code.upper() == 'HONS':
+            if result.paper_type_code and result.paper_type_code.upper() in ['HONS', 'HONOURS']:
                 is_honours = True
-            elif student_discipline and student_discipline in sub_name:
-                is_honours = True
+            elif student_discipline:
+                # 1. Direct match or startswith
+                if student_discipline in sub_name or sub_name.startswith(student_discipline):
+                    is_honours = True
+                # 2. Acronym match (e.g. AIH match A... I... H...)
+                else:
+                    words = [w for w in sub_name.replace('&', '').split() if w]
+                    acronym = "".join([w[0] for w in words])
+                    if student_discipline in acronym:
+                        is_honours = True
+                    # 3. Common legacy mappings
+                    elif student_discipline == 'AIH' and 'ANCIENT' in sub_name:
+                        is_honours = True
             
             sub_type = 'subsidiary'
             if is_honours:
