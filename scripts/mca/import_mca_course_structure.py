@@ -9,7 +9,7 @@ Command to run:
 1. Run: poetry run python manage.py shell
 2. Paste:
    >>> from scripts.mca.import_mca_course_structure import run_import
-   >>> run_import(r"old_data/MCA Course Structure Google Sheet.xlsx")
+   >>> run_import(r"courses_data/mca_sem/MCA Course Structure Google Sheet.xlsx")
 
 Required Excel Columns:
 - Semester

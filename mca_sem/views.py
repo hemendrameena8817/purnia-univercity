@@ -545,3 +545,114 @@ class MCAAttendanceSheetPDFView(View):
         safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
         response["Content-Disposition"] = f'{disposition}; filename="Attendance_Sheets_{safe_college_name}_SEM_{exam.semester}.pdf"'
         return response
+
+class MCATabularRecordPDFView(View):
+    """
+    Generates and returns MCA Tabular Record (TR) PDF.
+
+    Query params:
+        - college_uid (required)
+        - exam_uid (required)
+        - batch_uid (optional)
+    """
+
+    def get(self, request):
+        from colleges.models import College
+        from .utils.pdf_generator import generate_mca_tr_pdf
+        from .models import (
+            MCAStudentProfile,
+            MCAStudentAssessment,
+            MCAExam,
+            MCAExamRegistration
+        )
+
+        college_uid = request.GET.get("college_uid")
+        exam_uid = request.GET.get("exam_uid")
+        batch_uid = request.GET.get("batch_uid")
+
+        if not college_uid or not exam_uid:
+            return HttpResponse(
+                "college_uid and exam_uid are required",
+                status=400,
+                content_type='text/plain'
+            )
+
+        # 1️⃣ Get objects
+        college = get_object_or_404(College, uid=college_uid)
+        exam = get_object_or_404(MCAExam, uid=exam_uid)
+
+        # 2️⃣ Get ONLY registered students for this exam + college
+        registrations = MCAExamRegistration.objects.filter(
+            exam=exam,
+            student__college=college
+        ).select_related('student')
+
+        if not registrations.exists():
+            return HttpResponse(
+                f"No students registered for {exam.name} in {college.name}",
+                status=404,
+                content_type='text/plain'
+            )
+
+        # 3️⃣ Extract student IDs
+        registered_student_ids = registrations.values_list('student_id', flat=True)
+
+        students_qs = MCAStudentProfile.objects.filter(
+            id__in=registered_student_ids
+        )
+
+        # 4️⃣ Apply batch filtering logic
+        target_batch_uid = batch_uid
+
+        if not target_batch_uid and exam.batch:
+            # If batch not passed, use exam.batch automatically
+            target_batch_uid = str(exam.batch.uid)
+            students_qs = students_qs.filter(batch=exam.batch)
+
+        elif target_batch_uid:
+            students_qs = students_qs.filter(batch__uid=target_batch_uid)
+
+        # 5️⃣ Ensure students have assessment data for this exam AND semester
+        assessment_student_ids = MCAStudentAssessment.objects.filter(
+            exam=exam,
+            semester=str(exam.semester),  # <-- STRICT SEMESTER CHECK
+            student_id__in=students_qs.values_list('id', flat=True)
+        ).values_list('student_id', flat=True).distinct()
+
+        students = students_qs.filter(
+            id__in=assessment_student_ids
+        ).order_by('roll_no')
+
+        if not students.exists():
+            return HttpResponse(
+                f"No assessment data found for {exam.name} in {college.name}",
+                status=404,
+                content_type='text/plain'
+            )
+
+        # 6️⃣ Generate TR PDF
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[TR Generation] Found {students.count()} students for Exam '{exam.name}' and College '{college.name}'. Sending to PDF generator.")
+
+        pdf_content = generate_mca_tr_pdf(
+            students=students,
+            college=college,
+            exam=exam,
+            batch_uid=target_batch_uid
+        )
+
+        if not pdf_content:
+            return HttpResponse(
+                "Failed to generate Tabular Record PDF.",
+                status=500,
+                content_type='text/plain'
+            )
+
+        # 7️⃣ Return PDF
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'inline; filename="MCA_TR_{college.college_code}_SEM_{exam.semester}.pdf"'
+        )
+
+        return response

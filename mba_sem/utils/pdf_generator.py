@@ -1092,7 +1092,7 @@ def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None
     from pup_umis_backend.utils.file_utils import image_to_base64
     from .tr.selectors import fetch_assessments
     from .tr.grading import calculate_numeric_grade, calculate_grade_point
-    from mba_sem.models import MBAStudentProfile, MBACourseStructure
+    from mba_sem.models import MBAStudentProfile, MBACourseStructure, MBACourse
     import os, logging
 
     logger = logging.getLogger(__name__)
@@ -1111,6 +1111,18 @@ def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None
 
     if not students.exists():
         return None
+
+    # Fetch Course Name if available
+    course_name = None
+    if course_uid:
+        course_obj = MBACourse.objects.filter(uid=course_uid).first()
+        if course_obj:
+            course_name = course_obj.name
+    
+    if not course_name and students.exists():
+        first_student = students.first()
+        if first_student.course:
+            course_name = first_student.course.name
 
     # 2. Fetch Assessments & subject info
     all_assessments, subject_master, student_map, subject_codes = fetch_assessments(
@@ -1178,6 +1190,9 @@ def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None
     context = {
         "university_logo": image_to_base64(logo_path) if os.path.exists(logo_path) else None,
         "exam_name": exam.name,
+        "college_name": college.name,
+        "college_code": college.college_code,
+        "course_name": course_name,
         "pass_roll_nos": pass_roll_nos,
         "fail_roll_nos": fail_roll_nos,
         "pass_count": len(pass_roll_nos),

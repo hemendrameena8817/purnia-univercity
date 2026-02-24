@@ -91,6 +91,38 @@ class StudentResultLV(BaseUGLV):
     serializer_class = UGBeforeCBCSStudentResultSerializer
 
 
+class BatchOptionLV(APIView):
+    """
+    Returns a unique list of sessions/batches from UGBeforeCBCSExam.
+    Format: [{"uid": "...", "name": "2022-25"}, ...]
+    """
+    permission_classes = [AllowAny]
+    def get(self, request):
+        course_code = request.query_params.get("course_code")
+        
+        queryset = UGBeforeCBCSExam.objects.all()
+        if course_code:
+            queryset = queryset.filter(course_code__iexact=course_code)
+            
+        # Get unique session codes
+        # We use session_code for the 'name' (e.g., 2022-25)
+        exams = queryset.exclude(session_code__isnull=True).exclude(session_code='').values('uid', 'session_code').order_by('-session_code')
+        
+        # Filter for distinct session names, keeping the first UID found for each
+        seen_sessions = set()
+        unique_batches = []
+        for item in exams:
+            session_name = item['session_code']
+            if session_name not in seen_sessions:
+                unique_batches.append({
+                    "uid": item['uid'],
+                    "name": session_name
+                })
+                seen_sessions.add(session_name)
+                
+        return Response(unique_batches)
+
+
 # Marksheet PDF View 
 @method_decorator(csrf_exempt, name='dispatch')
 class UGOldMarksheetPDFView(View):
@@ -99,17 +131,25 @@ class UGOldMarksheetPDFView(View):
     """
     def get(self, request):
         registration_no = request.GET.get("registration_no")
+        roll_no = request.GET.get("roll_no")
         part = request.GET.get("part")
         exam_type = request.GET.get("exam_type")
+        course_code = request.GET.get("course_code")
+        batch_code = request.GET.get("batch_code")
 
-        if not registration_no or not part or not exam_type:
-            return HttpResponse("registration_no, part, and exam_type are required", status=400)
+        if not (registration_no or roll_no) or not part or not exam_type or not course_code:
+            return HttpResponse("registration_no/roll_no, part, exam_type, and course_code are required", status=400)
  
-        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Call the PDF generator utility
         from .utils.pdf_generator import generate_ug_old_ba_hons_marksheet_pdf
-        pdf_content = generate_ug_old_ba_hons_marksheet_pdf(student, part, exam_type=exam_type)
+        pdf_content = generate_ug_old_ba_hons_marksheet_pdf(
+            student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+        )
         
         if not pdf_content:
              return HttpResponse(f"Marksheet data not found for {student.student_name} ({part}).", status=404, content_type='text/plain')
@@ -129,20 +169,28 @@ class UGOldMarksheetJSONView(APIView):
     
     def get(self, request):
         registration_no = request.query_params.get("registration_no")
+        roll_no = request.query_params.get("roll_no")
         part = request.query_params.get("part")
         exam_type = request.query_params.get("exam_type")
+        course_code = request.query_params.get("course_code")
+        batch_code = request.query_params.get("batch_code")
 
-        if not registration_no or not part:
+        if not (registration_no or roll_no) or not part or not course_code:
             return Response(
-                {"error": "registration_no and part are required"},
+                {"error": "registration_no/roll_no, part, and course_code are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
  
-        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Get marksheet context data
         from .utils.pdf_generator import get_ug_old_ba_hons_marksheet_context
-        context_data = get_ug_old_ba_hons_marksheet_context(student, part, exam_type=exam_type)
+        context_data = get_ug_old_ba_hons_marksheet_context(
+            student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+        )
         
         if not context_data:
             return Response(
@@ -165,7 +213,12 @@ class UGOldMarksheetJSONView(APIView):
                 'dob': student_obj.dob,
                 'course_code': student_obj.course_code,
                 'discipline_code': student_obj.discipline_code,
+                'college_name': student_obj.college.name if student_obj.college else None,
             }
+        
+        # Add metadata fields
+        context_data['part'] = part
+        context_data['exam_type'] = exam_type
         
         # Remove non-serializable items (base64 images, QR codes)
         context_data.pop('university_logo', None)
@@ -210,8 +263,12 @@ class UGOldMarksheetUpdateView(APIView):
         )
         
         exam_type = request.data.get("exam_type")
+        batch_code = request.data.get("batch_code")
+        
         if exam_type:
             results = results.filter(exam_type__iexact=exam_type)
+        if batch_code:
+            results = results.filter(exam__batch_code=batch_code)
             
         first_result = results.select_related('exam').first()
         if not first_result:

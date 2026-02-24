@@ -24,7 +24,7 @@ poetry run python manage.py shell
 
 Then:
 >>> from scripts.mca.import_mca_students import run_import
->>> run_import('old_data/MCA_SEM_STUDENT_PROFILE.xlsx')
+>>> run_import('courses_data/mca_sem/MCA_SEM_STUDENT_PROFILE.xlsx')
 """
 
 import os

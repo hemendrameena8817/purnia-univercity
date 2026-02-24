@@ -60,6 +60,7 @@ class MarksheetStudentSerializer(serializers.Serializer):
     dob = serializers.DateField(allow_null=True)
     course_code = serializers.CharField(allow_null=True)
     discipline_code = serializers.CharField(allow_null=True)
+    college_name = serializers.CharField(allow_null=True)
 
 
 class MarksheetPaperSerializer(serializers.Serializer):
@@ -93,6 +94,8 @@ class MarksheetDataSerializer(serializers.Serializer):
     session_year = serializers.CharField()
     hons_subject = serializers.CharField()
     center_name = serializers.CharField()
+    part = serializers.CharField()
+    exam_type = serializers.CharField()
     
     # Nested subjects data
     subjects = serializers.DictField(child=MarksheetSubjectGroupSerializer())
