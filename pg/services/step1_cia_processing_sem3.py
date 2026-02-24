@@ -131,11 +131,14 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
                     session=self.session
                 ).first()
         
+        dept_name = student.department.name if student.department else "N/A"
+        
         if existing_result:
             # UPDATE existing (for this session)
             if not dry_run:
                 existing_result.cia_pass = cia_passed
                 existing_result.save(update_fields=['cia_pass', 'updated_at'])
+            
             self.stats['exam_results_updated'] += 1
             
         else:
@@ -152,6 +155,7 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
                     sgpa=Decimal('0.00'),
                     is_legacy=False,
                 )
+            
             self.stats['exam_results_created'] += 1
 
     def _create_exam_registration(self, student: PGStudentProfile, dry_run: bool = False):
@@ -166,6 +170,7 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
         """
         # Semester 3 is explicitly handled here
         sem_int = 3
+        dept_name = student.department.name if student.department else "N/A"
 
         # Check if registration already exists — if so, SKIP entirely
         existing = PGExamRegistration.objects.filter(
@@ -173,7 +178,7 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
             sem=sem_int,
             session=self.session,
         ).first()
-
+        
         if existing:
             # Entry already exists — do NOT update, just skip
             self.stats['exam_registrations_skipped'] += 1
@@ -189,7 +194,35 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
                 is_open=True,
                 exam_type='REGULAR' # Default for this script
             )
+        
+        print(f"   [REGISTRATION] CREATE: {student.registration_no:15} | Dept: {dept_name[:30]:30}")
         self.stats['exam_registrations_created'] += 1
+
+    def _print_summary(self):
+        """Print specialized summary for Sem 3"""
+        print("\n" + "="*100)
+        print("📊 PROCESSING COMPLETE - SUMMARY")
+        print("="*100)
+        print(f"\nTotal Students in Batch:     {self.stats['total_students']:,}")
+        print(f"Students with CIA Data:      {self.stats['students_with_cia']:,}")
+        print(f"\n✅ CIA PASS:                  {self.stats['cia_pass']:,} ({self._percentage(self.stats['cia_pass'])}%)")
+        print(f"❌ CIA FAIL:                  {self.stats['cia_fail']:,} ({self._percentage(self.stats['cia_fail'])}%)")
+        
+        # Display failed students if any
+        if self.failed_students:
+            print(f"\n📋 Failed Student Registration Numbers (showing {len(self.failed_students)}):")
+            for idx, reg_no in enumerate(self.failed_students, 1):
+                print(f"   {idx}. {reg_no}")
+        
+        print(f"\nPGExamResult Entries Created:      {self.stats['exam_results_created']:,}")
+        print(f"PGExamResult Entries Updated:      {self.stats['exam_results_updated']:,}")
+        
+        # Only print creates if > 0
+        if self.stats['exam_registrations_created'] > 0:
+            print(f"PGExamRegistrations Created:       {self.stats['exam_registrations_created']:,}")
+            
+        print(f"PGExamRegistrations Skipped:       {self.stats['exam_registrations_skipped']:,}  (already existed — not modified)")
+        print("="*100)
 
 
 def run_cia_processing_sem3(batch: str = None, session: str = None, dry_run: bool = False, include_all_batches: bool = False, registration_no: str = None, ignore_eligibility: bool = True) -> Dict:
