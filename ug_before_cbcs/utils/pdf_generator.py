@@ -49,7 +49,7 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
+def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, course_code=None, batch_code=None):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons marksheet.
     """
@@ -74,6 +74,12 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     
     if exam_type:
         results_query = results_query.filter(exam_type__iexact=exam_type)
+        
+    if course_code:
+        results_query = results_query.filter(exam__course_code__iexact=course_code)
+        
+    if batch_code:
+        results_query = results_query.filter(exam__batch_code=batch_code)
         
     first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
@@ -330,19 +336,19 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
         ),
         
         # Images
-        'university_logo': image_to_base64(os.path.join(settings.MEDIA_ROOT, "media/common/purnea-logo.png")),
-        'watermark_logo': image_to_base64(os.path.join(settings.MEDIA_ROOT, "media/common/purnea-logo.png")),
-        'controller_signature': image_to_base64(os.path.join(settings.MEDIA_ROOT, "media/common/controller-of-examination-signature.png")),
+        'university_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
+        'watermark_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
+        'controller_signature': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/controller-of-examination-signature.png")),
     }
 
     return context
 
-def generate_ug_old_ba_hons_marksheet_pdf(student, exam_part, exam_type=None):
+def generate_ug_old_ba_hons_marksheet_pdf(student, exam_part, exam_type=None, course_code=None, batch_code=None):
     """
     Generate marksheet PDF for UG Before CBCS student using simplified models.
     """
     from weasyprint import HTML
-    context = get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type)
+    context = get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type, course_code, batch_code)
 
     if not context:
         return None
