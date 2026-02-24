@@ -97,19 +97,68 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
             if len(self.failed_students) < 10:
                 self.failed_students.append(student.registration_no)
         
-        # 4. SAVE TO DATABASE
-        if not dry_run:
-            # Update/Create 3rd Sem Result (Always update status)
-            self._create_or_update_exam_result(student, cia_passed)
-            
-            # If 3rd Sem CIA passed, handle registration (Skip if exists, Create if not)
-            if cia_passed:
-                self._create_exam_registration(student)
+        # 4. SAVE TO DATABASE (Simulation in Dry Run)
+        # We call these methods even in dry_run to update the statistics/stats
+        # but the methods themselves will skip the actual DB save if dry_run=True
+        
+        # Update/Create 3rd Sem Result (Always update status)
+        self._create_or_update_exam_result(student, cia_passed, dry_run=dry_run)
+        
+        # If 3rd Sem CIA passed, handle registration (Skip if exists, Create if not)
+        if cia_passed:
+            self._create_exam_registration(student, dry_run=dry_run)
 
-    def _create_exam_registration(self, student: PGStudentProfile):
+    def _create_or_update_exam_result(self, student: PGStudentProfile, cia_passed: bool, dry_run: bool = False):
+        """
+        Create or update PGExamResult entry - IDEMPOTENT VERSION (Per Session)
+        Modified to support dry_run simulation stats.
+        """
+        # 1. Try to find EXISTING record for this student & semester & SESSION
+        existing_result = PGExamResult.objects.filter(
+            student=student,
+            semester=self.semester,
+            session=self.session
+        ).first()
+        
+        # 2. If not found, try normalized semester (e.g. '1' vs '1ST') but SAME SESSION
+        if not existing_result:
+            sem_map = {'1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4'}
+            normalized_sem = sem_map.get(self.semester.upper())
+            if normalized_sem:
+                 existing_result = PGExamResult.objects.filter(
+                    student=student,
+                    semester=normalized_sem,
+                    session=self.session
+                ).first()
+        
+        if existing_result:
+            # UPDATE existing (for this session)
+            if not dry_run:
+                existing_result.cia_pass = cia_passed
+                existing_result.save(update_fields=['cia_pass', 'updated_at'])
+            self.stats['exam_results_updated'] += 1
+            
+        else:
+            # CREATE new (for this session)
+            if not dry_run:
+                PGExamResult.objects.create(
+                    student=student,
+                    semester=self.semester,
+                    session=self.session,
+                    cia_pass=cia_passed,
+                    semester_result='PENDING',
+                    semester_max_credit=0,
+                    semester_credit_earned=0,
+                    sgpa=Decimal('0.00'),
+                    is_legacy=False,
+                )
+            self.stats['exam_results_created'] += 1
+
+    def _create_exam_registration(self, student: PGStudentProfile, dry_run: bool = False):
         """
         Create exam registration (form fillup) for Semester 3 ESE.
         Only for students who passed CIA.
+        Modified to support dry_run simulation stats.
 
         Policy:
           - If a PGExamRegistration entry already EXISTS  → SKIP (do not update)
@@ -130,15 +179,16 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
             self.stats['exam_registrations_skipped'] += 1
             return
 
-        # No existing entry — CREATE a new one
-        PGExamRegistration.objects.create(
-            student=student,
-            sem=sem_int,
-            session=self.session,
-            status='PENDING',
-            is_open=True,
-            exam_type='REGULAR' # Default for this script
-        )
+        # No existing entry — CREATE a new one (Skip in dry run)
+        if not dry_run:
+            PGExamRegistration.objects.create(
+                student=student,
+                sem=sem_int,
+                session=self.session,
+                status='PENDING',
+                is_open=True,
+                exam_type='REGULAR' # Default for this script
+            )
         self.stats['exam_registrations_created'] += 1
 
 
