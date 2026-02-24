@@ -5,7 +5,7 @@ This script imports student exam registrations (Back Papers) from an Excel file.
 It follows a strict validation-first approach.
 
 Command to run:
-poetry run python -m scripts.mca.import_mca_exam_registration old_data/mca_sem/MCA_STUDENT_EXAM_REGISTRATION.xlsx
+poetry run python -m scripts.mca.import_mca_exam_registration courses_data/mca_sem/MCA_STUDENT_EXAM_REGISTRATION.xlsx
 """
 
 import os
