@@ -8,6 +8,10 @@ from ug.api.semester_registration import (
     SubmitRegistrationView,
     RegistrationCardView
 )
+from ug.api.cia_marks import (
+    CIAStudentListView,
+    CIAMarksSaveView,
+)
 
 app_name = 'ug'
 
@@ -32,5 +36,17 @@ urlpatterns = [
         'semester-registration/card/',
         RegistrationCardView.as_view(),
         name='registration-card'
+    ),
+
+    # CIA Marks Entry APIs (College)
+    path(
+        'cia/students/',
+        CIAStudentListView.as_view(),
+        name='cia-students'
+    ),
+    path(
+        'cia/marks/',
+        CIAMarksSaveView.as_view(),
+        name='cia-marks-save'
     ),
 ]
