@@ -30,6 +30,7 @@ class MCAStudentProfileAdmin(admin.ModelAdmin):
     list_display = ('uid', 'roll_no', 'registration_no', 'first_name', 'last_name', 'college', 'batch')
     readonly_fields = ('uid',)
     search_fields = ('roll_no', 'registration_no', 'first_name', 'last_name', 'user__username')
+    raw_id_fields = ('user', 'college', 'batch')
     list_filter = ('college', 'batch', 'status')
 
 @admin.register(MCACourseStructure)
