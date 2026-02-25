@@ -26,6 +26,7 @@ MJC_COURSE_MAP = {
     "Algebra": "MATH",
     "Descriptive Statistics": "STAT",
     "Introductory Microeconomics": "ECO",
+    "Principles of Economics": "ECO",
     "Introduction to Sociology - I": "SOC",
     "The Idea of Bharat": "HIST",
     "Understanding Political Theory": "POL",

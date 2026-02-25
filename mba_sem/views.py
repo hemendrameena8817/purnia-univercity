@@ -656,6 +656,8 @@ class MBAAttendanceSheetPDFView(View):
         )
         return response
 
+from .utils.tr import *
+from mba_sem.utils.tr.result_generator import MBAResultGenerator
 class MBAResultSheetPDFView(View):
     def get(self, request):
         print("pppp")
@@ -664,10 +666,13 @@ class MBAResultSheetPDFView(View):
         college_uid = request.GET.get("college_uid")
         semester = request.GET.get("semester")
         batch_uid = request.GET.get("batch_uid")
+        exam_uid = request.GET.get("exam_uid")
+        course_uid = request.GET.get("course_uid")
+        course_type = request.GET.get("course_type")
 
-        if not college_uid:
+        if not college_uid or not exam_uid:
             return HttpResponse(
-                "PDF generation failed, College UID is required!",
+                "PDF generation failed, College UID and Exam UID are required!",
                 status=400
             )
 
@@ -678,15 +683,36 @@ class MBAResultSheetPDFView(View):
                 "PDF generation failed, Invalid College UID!",
                 status=400
             )
-        
-        students = MBAStudentProfile.objects.filter(mba_student_course_assessment__semester=semester).distinct().order_by("roll_no")
+
+        exam = MBAExam.objects.filter(uid=exam_uid).last()
+        exam_name = exam.name if exam else None
+
+        # Use exam.semester as fallback when ?semester= not in URL
+        if not semester and exam:
+            semester = str(exam.semester)
+
+        # Filter students who are registered for this specific exam
+        students = MBAStudentProfile.objects.filter(
+            exam_registrations__exam__uid=exam_uid,
+            college=college
+        ).distinct().order_by("roll_no")
+
         if batch_uid:
             students = students.filter(
                 batch__uid=batch_uid
             )
-
-        print(f"{students = }")
-        pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
+        if course_uid:
+            students = students.filter(
+                course__uid=course_uid
+            )
+        print(f"{students = } | semester={semester}")
+        generator = MBAResultGenerator(
+            students, college, semester, batch_uid,
+            exam_name=exam_name, course_type=course_type,
+            exam_month_year=exam.exam_month_year if exam else None
+        )
+        print(f"{generator = }")
+        pdf_content = generator.generate()
 
         if not pdf_content:
             return HttpResponse("PDF generation failed", status=500)
@@ -694,8 +720,62 @@ class MBAResultSheetPDFView(View):
         download = request.GET.get('download', 'true').lower() == 'true'
         disposition = 'attachment' if download else 'inline'
 
+        # Create a dynamic filename
+        safe_exam_name = "".join(c if c.isalnum() else "_" for c in str(exam_name)) if exam_name else "Result"
+        filename = f"MBA_Result_Sheet_{college.college_code}_{safe_exam_name}.pdf"
+
         response = HttpResponse(pdf_content, content_type="application/pdf")
-        response["Content-Disposition"] = f'{disposition}; filename="MBA_Result_Sheet.pdf"'
+        response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
+        return response
+
+
+class MBAResultDeclarationPDFView(View):
+    """
+    Generates a result declaration PDF showing roll numbers of pass/fail students.
+    Query params: college_uid, exam_uid (or exam_name), semester
+    """
+    def get(self, request):
+        from .utils.pdf_generator import generate_mba_result_declaration_pdf
+        from colleges.models import College
+        from .models import MBAExam
+
+        college_uid = request.GET.get("college_uid")
+        exam_uid = request.GET.get("exam_uid")
+        exam_name_query = request.GET.get("exam_name")
+        semester = request.GET.get("semester")
+        course_uid = request.GET.get("course_uid")
+
+        if not college_uid or (not exam_uid and not exam_name_query) or not semester:
+            return HttpResponse(
+                "College UID, Exam (UID or Name), and Semester are required!",
+                status=400
+            )
+
+        college = College.objects.filter(uid=college_uid).last()
+        if not college:
+            return HttpResponse("Invalid College UID!", status=400)
+
+        if exam_uid:
+            exam = MBAExam.objects.filter(uid=exam_uid).last()
+        else:
+            exam = MBAExam.objects.filter(name__icontains=exam_name_query).last()
+
+        if not exam:
+            return HttpResponse("Examination not found!", status=404)
+
+        pdf_content = generate_mba_result_declaration_pdf(exam, college, semester, course_uid=course_uid)
+
+        if not pdf_content:
+            return HttpResponse("PDF generation failed or no data found", status=500)
+
+        download = request.GET.get('download', 'true').lower() == 'true'
+        disposition = 'attachment' if download else 'inline'
+
+        safe_exam_name = "".join(c if c.isalnum() else "_" for c in str(exam.name))
+        filename = f"MBA_Result_Declaration_{college.college_code}_{safe_exam_name}.pdf"
+
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
         return response
 
 

@@ -544,41 +544,29 @@ def calculate_numeric_grade(total):
         return 0
 
 def calculate_credit_obtained(ese, cia):
-    """
-    Returns:
-    credit_obtained (int/float)
-    """
 
     def safe(obj, field):
         if obj and hasattr(obj, field):
             val = getattr(obj, field)
-            return val if val is not None else 0
+            return float(val) if val is not None else 0
         return 0
 
-    # Fetch marks
     ese_marks = safe(ese, "ind_marks_obtained")
+    ese_pass  = safe(ese, "ind_pass_marks")
+
+    # 🔥 Viva / No CIA case
+    if not cia:
+        if ese_marks >= ese_pass:
+            return 4
+        return 0
+
+    # 🔥 Normal subject (ESE + CIA)
     cia_marks = safe(cia, "ind_marks_obtained")
+    cia_pass  = safe(cia, "ind_pass_marks")
 
-    # Fetch pass marks
-    ese_pass = safe(ese, "ind_pass_marks")
-    cia_pass = safe(cia, "ind_pass_marks")
-
-    # Fetch max credit
-    max_credit = safe(ese or cia, "course_max_credits")
-
-    try:
-        ese_marks = float(ese_marks)
-        cia_marks = float(cia_marks)
-        ese_pass = float(ese_pass)
-        cia_pass = float(cia_pass)
-    except:
-        return 0
-
-    # BOTH PAPER PASS CONDITION
     if ese_marks >= ese_pass and cia_marks >= cia_pass:
-        return max_credit
-    else:
-        return 0
+        return 4
+    return 0
 
 def calculate_grade_point(numeric_grade, credit_obtained):
     """
@@ -641,6 +629,68 @@ def write_grade_table(ws, start_row=5, start_col=53):
         ws.cell(row=start_row + 1 + i, column=start_col + 2).value = rule["letter"]
         ws.cell(row=start_row + 1 + i, column=start_col + 3).value = rule["desc"]
 
+def write_college_header(ws, college):
+    """
+    Only updates Dept./College line dynamically
+    """
+    ws["AP4"] = f"Dept./College : {college.name}"
+
+def write_subject_header(ws, students):
+    """
+    Dynamically writes Subject line
+    based on student's course name
+    """
+
+    if not students:
+        return
+
+    # First student ka course le rahe hain
+    first_student = students[0]
+
+    course_name = None
+
+    if first_student.course:
+        course_name = first_student.course.name
+
+    if not course_name:
+        course_name = "Master of Business Administration"
+
+    ws["AP2"] = f"Subject : {course_name}"
+
+def write_exam_header(ws, all_assessments):
+    """
+    Dynamically writes:
+    MBA Semester-II June-2024
+    based on mba_exam.name
+    """
+
+    exam_name = None
+
+    for obj in all_assessments:
+        if obj.mba_exam and obj.mba_exam.name:
+            exam_name = obj.mba_exam.name
+            break
+
+    if not exam_name:
+        exam_name = "MBA Examination"
+
+    ws["AP1"] = exam_name
+
+def write_full_exam_line(ws, all_assessments):
+
+    if not all_assessments:
+        return
+
+    exam = all_assessments[0].mba_exam
+
+    if not exam:
+        return
+
+    ws["A4"] = (
+        f"{exam.name}, "
+        f"Examination held in the month of {exam.exam_month_year}"
+    )
+
 def generate_mba_result_pdf(students, college, semester, batch_uid=None):
 
     import os
@@ -659,7 +709,15 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
     STUDENTS_PER_PAGE = 5
 
     def normalize(code):
+        # return code
         return (code or "").replace("-", "").replace(" ", "").upper().strip()
+    
+
+    def safe(obj, field):
+        if obj and hasattr(obj, field):
+            val = getattr(obj, field)
+            return val if val is not None else 0
+        return 0
 
     # ===== TEMPLATE LOAD =====
     template_path = os.path.join(
@@ -720,6 +778,11 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         ws = wb.copy_worksheet(master_sheet)
         ws.title = f"Page_{page_index + 1}"
 
+        write_college_header(ws, college)
+        write_subject_header(ws, student_chunk)
+        write_exam_header(ws, all_assessments)
+        write_full_exam_line(ws, all_assessments)
+
         # ===== ADD UNIVERSITY LOGO (FIXED) =====
         logo_path = os.path.join(
             settings.MEDIA_ROOT,
@@ -749,31 +812,61 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         for code in SUBJECT_CODES:
 
             ws.merge_cells(start_row=5, start_column=col_pointer,
-                           end_row=5, end_column=col_pointer + SUBJECT_WIDTH - 1)
+                        end_row=5, end_column=col_pointer + SUBJECT_WIDTH - 1)
             ws.cell(row=5, column=col_pointer).value = subject_master[code]
 
             ws.merge_cells(start_row=6, start_column=col_pointer,
-                           end_row=6, end_column=col_pointer + SUBJECT_WIDTH - 1)
+                        end_row=6, end_column=col_pointer + SUBJECT_WIDTH - 1)
             ws.cell(row=6, column=col_pointer).value = code
 
             headers = ["End Semester Exam(ESE)", "Continious Internal Assessment(CIA)", "Total",
-                       "Credit Alloted", "Numerical Of Letter Grade",
-                       "Credit Earned", "GP = C.E. X N.G."]
+                    "Credit Alloted", "Numerical Of Letter Grade",
+                    "Credit Earned", "GP = C.E. X N.G."]
 
             for i, title in enumerate(headers):
                 ws.cell(row=7, column=col_pointer + i).value = title
 
-            # Static full/pass marks
-            ws.cell(row=14, column=col_pointer).value = 70
-            ws.cell(row=14, column=col_pointer + 1).value = 30
-            ws.cell(row=14, column=col_pointer + 2).value = 100
+            # 🔥 Get first record of this subject
+            first_record = None
+            for obj in all_assessments:
+                if normalize(obj.paper_code) == code:
+                    first_record = obj
+                    break
+
+            if first_record:
+                ese_full = first_record.ind_max_marks or ""
+                ese_pass = first_record.ind_pass_marks or ""
+            else:
+                ese_full = ""
+                ese_pass = ""
+
+            # 🔥 Check if CIA exists for this subject
+            cia_record = None
+            for obj in all_assessments:
+                if normalize(obj.paper_code) == code and "CIA" in (obj.label or "").upper():
+                    cia_record = obj
+                    break
+
+            if cia_record:
+                cia_full = cia_record.ind_max_marks or ""
+                cia_pass = cia_record.ind_pass_marks or ""
+                total_full = (ese_full or 0) + (cia_full or 0)
+            else:
+                cia_full = ""
+                cia_pass = ""
+                total_full = ese_full
+
+            # 🔥 Write Full Marks
+            ws.cell(row=14, column=col_pointer).value = ese_full
+            ws.cell(row=14, column=col_pointer + 1).value = cia_full
+            ws.cell(row=14, column=col_pointer + 2).value = total_full
             ws.cell(row=14, column=col_pointer + 3).value = 4
 
-            ws.cell(row=15, column=col_pointer).value = 31.5
-            ws.cell(row=15, column=col_pointer + 1).value = 13.5
+            # 🔥 Write Pass Marks
+            ws.cell(row=15, column=col_pointer).value = ese_pass
+            ws.cell(row=15, column=col_pointer + 1).value = cia_pass
 
             col_pointer += SUBJECT_WIDTH
-
         # ===== GRADE TABLE =====
         # grade_table_start_col = col_pointer + 3
         # write_grade_table(ws, start_row=5, start_col=grade_table_start_col)
@@ -791,6 +884,10 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         row_pointer = DATA_START_ROW
 
         for student in student_chunk:
+            print("STUDENT:", student.roll_no)
+
+            for rec in student_map.get(student.id, []):
+                print("DB CODE:", rec.paper_code, "LABEL:", rec.label, "MARKS:", rec.ind_marks_obtained)
 
             ws.cell(row=row_pointer, column=1).value = student.roll_no
             ws.cell(row=row_pointer, column=2).value = student.get_full_name()
@@ -814,17 +911,26 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
                         if "CIA" in (rec.label or "").upper():
                             cia = rec
 
-                def safe(obj, field):
-                    if obj and hasattr(obj, field):
-                        val = getattr(obj, field)
-                        return val if val is not None else 0
-                    return 0
+                # def safe(obj, field):
+                #     if obj and hasattr(obj, field):
+                #         val = getattr(obj, field)
+                #         return val if val is not None else 0
+                #     return 0
 
                 ese_marks = safe(ese, "ind_marks_obtained")
-                cia_marks = safe(cia, "ind_marks_obtained")
+                
+                if cia:
+                    cia_marks = safe(cia, "ind_marks_obtained")
+                else:
+                    cia_marks = ""
+
                 max_credit = safe(ese or cia, "course_max_credits")
 
-                total = float(ese_marks) + float(cia_marks)
+                if cia:
+                    total = float(ese_marks) + float(cia_marks)
+                else:
+                    total = float(ese_marks)
+                    
                 numeric = calculate_numeric_grade(total)
                 credit = calculate_credit_obtained(ese, cia)
                 gp = calculate_grade_point(numeric, credit)
@@ -840,7 +946,7 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
                     ese_marks,
                     cia_marks,
                     total,
-                    max_credit,
+                    4,
                     numeric,
                     credit,
                     gp
@@ -871,14 +977,14 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
                 page_fail += 1
 
 
-            ws.cell(row=row_pointer, column=47).value = total_credit_allotted
-            ws.cell(row=row_pointer, column=48).value = total_credit_earned
-            ws.cell(row=row_pointer, column=49).value = gpa
-            ws.cell(row=row_pointer, column=50).value = letter
-            ws.cell(row=row_pointer, column=51).value = desc
-            ws.cell(row=row_pointer, column=52).value = result_status
+            summary_col = col_pointer   # after subject loop
 
-            row_pointer += 1
+            ws.cell(row=row_pointer, column=summary_col).value = total_credit_allotted
+            ws.cell(row=row_pointer, column=summary_col + 1).value = total_credit_earned
+            ws.cell(row=row_pointer, column=summary_col + 2).value = gpa
+            ws.cell(row=row_pointer, column=summary_col + 3).value = letter
+            ws.cell(row=row_pointer, column=summary_col + 4).value = desc
+            ws.cell(row=row_pointer, column=summary_col + 5).value = result_status
         
         footer_row = row_pointer + 7
 
@@ -897,7 +1003,7 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
         ws.cell(row=footer_row + 2, column=12).value = f"Result Pending : {page_pending}"
 
         # ===== SIGN AREA =====
-        sign_row = footer_row + 2
+        sign_row = footer_row + 2   
 
         ws.cell(row=sign_row, column=22).value = "Compared By Address"
         ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
@@ -931,3 +1037,174 @@ def generate_mba_result_pdf(students, college, semester, batch_uid=None):
 
     return pdf_bytes
 
+    def _build_footer(self, ws, student_chunk):
+
+        footer_row = self.DATA_START_ROW + len(student_chunk) + 2
+
+        # ---- Page Counters ----
+        page_total = len(student_chunk)
+        page_pass = 0
+        page_fail = 0
+        page_absent = 0
+        page_pending = 0
+        page_expelled = 0
+        page_promoted = 0
+
+        # Result status column index
+        summary_col = 55
+        result_status_col = summary_col + 5
+
+        # Count from sheet (already calculated result)
+        for i in range(len(student_chunk)):
+            row = self.DATA_START_ROW + i
+            status = ws.cell(row=row, column=result_status_col).value
+
+            if status == "Pass":
+                page_pass += 1
+            elif status == "Fail":
+                page_fail += 1
+
+        # ===== LEFT BLOCK =====
+        ws.cell(row=footer_row, column=2).value = f"No of Candidate : {page_total}"
+        ws.cell(row=footer_row + 1, column=2).value = f"Pass : {page_pass}"
+        ws.cell(row=footer_row + 2, column=2).value = f"Promoted : {page_promoted}"
+
+        # ===== CENTER BLOCK =====
+        ws.cell(row=footer_row, column=5).value = f"Expelled : {page_expelled}"
+        ws.cell(row=footer_row + 1, column=5).value = f"Fail : {page_fail}"
+        ws.cell(row=footer_row + 2, column=5).value = f"Qualified : {page_pass}"
+
+        # ===== RIGHT BLOCK =====
+        ws.cell(row=footer_row + 1, column=12).value = f"Absent : {page_absent}"
+        ws.cell(row=footer_row + 2, column=12).value = f"Result Pending : {page_pending}"
+
+        # ===== SIGN AREA =====
+        sign_row = footer_row + 4
+
+        ws.cell(row=sign_row, column=22).value = "Compared By Address"
+        ws.cell(row=sign_row, column=35).value = "Full Signature of Tabulator-cum-scrutinizer with date"
+        ws.cell(row=sign_row, column=50).value = "Controller of Examination"
+
+def generate_mba_result_declaration_pdf(exam, college, semester, course_uid=None):
+    from weasyprint import HTML
+    from django.conf import settings
+    from django.template.loader import get_template
+    from pup_umis_backend.utils.file_utils import image_to_base64
+    from .tr.selectors import fetch_assessments
+    from .tr.grading import calculate_numeric_grade, calculate_grade_point
+    from mba_sem.models import MBAStudentProfile, MBACourseStructure, MBACourse
+    import os, logging
+
+    logger = logging.getLogger(__name__)
+
+    # 1. Fetch Students
+    student_filters = {
+        "exam_registrations__exam": exam,
+        "college": college
+    }
+    if course_uid:
+        student_filters["course__uid"] = course_uid
+
+    students = MBAStudentProfile.objects.filter(
+        **student_filters
+    ).distinct().order_by("roll_no")
+
+    if not students.exists():
+        return None
+
+    # Fetch Course Name if available
+    course_name = None
+    if course_uid:
+        course_obj = MBACourse.objects.filter(uid=course_uid).first()
+        if course_obj:
+            course_name = course_obj.name
+    
+    if not course_name and students.exists():
+        first_student = students.first()
+        if first_student.course:
+            course_name = first_student.course.name
+
+    # 2. Fetch Assessments & subject info
+    all_assessments, subject_master, student_map, subject_codes = fetch_assessments(
+        students, college, semester
+    )
+
+    # 3. Subject Structure for calculating pass/fail
+    subject_structure = {}
+    for code in subject_codes:
+        structures = MBACourseStructure.objects.filter(
+            course_code=code,
+            semester=str(semester)
+        )
+        credit = 0
+        for obj in structures:
+            credit = float(obj.credit or 0)
+            break
+        subject_structure[code] = {"credit": credit}
+
+    # 4. Process Status
+    pass_roll_nos = []
+    fail_roll_nos = []
+
+    for student in students:
+        failed = False
+        has_data = False
+        
+        student_recs = student_map.get(student.id, [])
+        if student_recs:
+            has_data = True
+
+        for code, meta in subject_structure.items():
+            credit_allotted = float(meta.get("credit", 0))
+            ese_marks = 0
+            cia_marks = 0
+            
+            for rec in student_recs:
+                if rec.paper_code == code:
+                    label = str(rec.label or "").upper()
+                    marks = float(
+                        rec.ind_final_marks_obtained
+                        if rec.ind_final_marks_obtained is not None
+                        else (rec.ind_marks_obtained or 0)
+                    )
+                    if label.startswith("ESE"):
+                        ese_marks = marks
+                    if label.startswith("CIA"):
+                        cia_marks = marks
+
+            total = ese_marks + cia_marks
+            numeric = calculate_numeric_grade(total)
+            
+            # numeric < 5 is the Fail grade (below 45 marks)
+            if numeric < 5:
+                failed = True
+                break
+        
+        if failed or not has_data:
+            fail_roll_nos.append(student.roll_no or str(student.uid))
+        else:
+            pass_roll_nos.append(student.roll_no or str(student.uid))
+
+    # 5. Template Context
+    logo_path = os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")
+    context = {
+        "university_logo": image_to_base64(logo_path) if os.path.exists(logo_path) else None,
+        "exam_name": exam.name,
+        "college_name": college.name,
+        "college_code": college.college_code,
+        "course_name": course_name,
+        "pass_roll_nos": pass_roll_nos,
+        "fail_roll_nos": fail_roll_nos,
+        "pass_count": len(pass_roll_nos),
+        "fail_count": len(fail_roll_nos),
+        "total_count": len(pass_roll_nos) + len(fail_roll_nos),
+    }
+
+    # 6. Render & Generate
+    html_string = get_template("mba_sem/result_declaration.html").render(context)
+    try:
+        pdf_file = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
+        return pdf_file
+    except Exception as e:
+        logger.error(f"Failed to generate Result Declaration PDF: {e}")
+        return None

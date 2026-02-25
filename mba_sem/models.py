@@ -125,6 +125,16 @@ class MBAStudentProfile(models.Model):
 
     profile_image = models.ImageField(upload_to='mba_students/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='mba_students/signatures/', null=True, blank=True)
+
+    sem_1_gpa = models.CharField(max_length=50, null=True, blank=True)
+    sem_1_credit_earned = models.CharField(max_length=50, null=True, blank=True)
+    sem_2_gpa = models.CharField(max_length=50, null=True, blank=True)
+    sem_2_credit_earned = models.CharField(max_length=50, null=True, blank=True)
+    sem_3_gpa = models.CharField(max_length=50, null=True, blank=True)
+    sem_3_credit_earned = models.CharField(max_length=50, null=True, blank=True)
+    sem_4_gpa = models.CharField(max_length=50, null=True, blank=True)
+    sem_4_credit_earned = models.CharField(max_length=50, null=True, blank=True)
+
     is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

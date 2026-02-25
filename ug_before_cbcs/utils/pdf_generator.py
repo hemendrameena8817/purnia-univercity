@@ -49,7 +49,7 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
+def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, course_code=None, batch_code=None):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons marksheet.
     """
@@ -74,6 +74,12 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
     
     if exam_type:
         results_query = results_query.filter(exam_type__iexact=exam_type)
+        
+    if course_code:
+        results_query = results_query.filter(exam__course_code__iexact=course_code)
+        
+    if batch_code:
+        results_query = results_query.filter(exam__batch_code=batch_code)
         
     first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
@@ -142,10 +148,21 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
         if sub_name not in subjects_map:
             # Identification Logic: Prioritize paper_type_code
             is_honours = False
-            if result.paper_type_code and result.paper_type_code.upper() == 'HONS':
+            if result.paper_type_code and result.paper_type_code.upper() in ['HONS', 'HONOURS']:
                 is_honours = True
-            elif student_discipline and student_discipline in sub_name:
-                is_honours = True
+            elif student_discipline:
+                # 1. Direct match or startswith
+                if student_discipline in sub_name or sub_name.startswith(student_discipline):
+                    is_honours = True
+                # 2. Acronym match (e.g. AIH match A... I... H...)
+                else:
+                    words = [w for w in sub_name.replace('&', '').split() if w]
+                    acronym = "".join([w[0] for w in words])
+                    if student_discipline in acronym:
+                        is_honours = True
+                    # 3. Common legacy mappings
+                    elif student_discipline == 'AIH' and 'ANCIENT' in sub_name:
+                        is_honours = True
             
             sub_type = 'subsidiary'
             if is_honours:
@@ -330,19 +347,19 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None):
         ),
         
         # Images
-        'university_logo': image_to_base64(os.path.join(settings.MEDIA_ROOT, "media/common/purnea-logo.png")),
-        'watermark_logo': image_to_base64(os.path.join(settings.MEDIA_ROOT, "media/common/purnea-logo.png")),
-        'controller_signature': image_to_base64(os.path.join(settings.MEDIA_ROOT, "media/common/controller-of-examination-signature.png")),
+        'university_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
+        'watermark_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
+        'controller_signature': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/controller-of-examination-signature.png")),
     }
 
     return context
 
-def generate_ug_old_ba_hons_marksheet_pdf(student, exam_part, exam_type=None):
+def generate_ug_old_ba_hons_marksheet_pdf(student, exam_part, exam_type=None, course_code=None, batch_code=None):
     """
     Generate marksheet PDF for UG Before CBCS student using simplified models.
     """
     from weasyprint import HTML
-    context = get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type)
+    context = get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type, course_code, batch_code)
 
     if not context:
         return None
