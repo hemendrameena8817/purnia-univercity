@@ -477,120 +477,6 @@ class PGStudentFilterView(APIView):
 
 
 
-# class PGFillDataView(APIView):
-#     """
-#     API View to get 'fill data' (json_data) for a specific assessment.
-    
-#     URL: /api/pg/fill-data/<uid>/
-#     Method: GET
-#     """
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self, request, uid):
-#         # 1. Fetch the assessment
-#         try:
-#             assessment = PGStudentCourseAssessment.objects.get(uid=uid)
-#         except PGStudentCourseAssessment.DoesNotExist:
-#             return Response({
-#                 "error": "Assessment not found."
-#             }, status=status.HTTP_404_NOT_FOUND)
-
-#         # 2. Check permissions (Optional but recommended)
-#         # If the user is a college user, ensure the student belongs to their college
-#         if request.user.user_type == 'college_user':
-#             try:
-#                 college_profile = request.user.college_profile
-#                 user_college = college_profile.college
-#                 if assessment.student.college != user_college:
-#                      return Response({
-#                         "error": "Access denied. Student does not belong to your college."
-#                     }, status=status.HTTP_403_FORBIDDEN)
-#             except AttributeError:
-#                  return Response({
-#                     "error": "College profile not found."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-        
-#         # 3. Return the json_data
-#         return Response({
-#             "uid": assessment.uid,
-#             "json_data": assessment.json_data
-#         }, status=status.HTTP_200_OK)
-
-# class PGFillDataLookupView(APIView):
-#     """
-#     API View to get 'fill data' (json_data) by Student UID and Subject UID.
-    
-#     URL: /api/pg/fill-data/lookup/?student=<uid>&subject=<uid>
-#     Method: GET
-#     """
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self, request):
-#         student_uid = request.query_params.get('student')
-#         subject_uid = request.query_params.get('subject')
-
-#         if not student_uid or not subject_uid:
-#             return Response({
-#                 "error": "Both 'student' and 'subject' query parameters are required."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # 1. Fetch Subject to get the paper code
-#         from .models import PGCourseStructure
-#         try:
-#             subject = PGCourseStructure.objects.get(uid=subject_uid)
-#             target_code = subject.code
-#             if not target_code:
-#                  return Response({
-#                     "error": "The selected subject does not have a valid code."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-#         except PGCourseStructure.DoesNotExist:
-#             return Response({
-#                 "error": "Subject not found."
-#             }, status=status.HTTP_404_NOT_FOUND)
-
-#         # 2. Fetch Assessment matching Student and Subject Code
-#         try:
-#             # We filter by student and paper_code (or course_code which seems to be used interchangeably)
-#             # Taking the most recent one if multiple exist (though ideally unique per semester/session)
-#             assessment = PGStudentCourseAssessment.objects.filter(
-#                 student__uid=student_uid,
-#                 paper_code=target_code,
-#                 semester=subject.semester # Ensure semester matches
-#             ).order_by('-created_at').first()
-
-#             if not assessment:
-#                  return Response({
-#                     "error": "No assessment found for this student and subject."
-#                 }, status=status.HTTP_404_NOT_FOUND)
-        
-#         except Exception as e:
-#              return Response({
-#                 "error": f"Error finding assessment: {str(e)}"
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-#         # 3. Check permissions
-#         if request.user.user_type == 'college_user':
-#             try:
-#                 college_profile = request.user.college_profile
-#                 user_college = college_profile.college
-#                 if assessment.student.college != user_college:
-#                      return Response({
-#                         "error": "Access denied. Student does not belong to your college."
-#                     }, status=status.HTTP_403_FORBIDDEN)
-#             except AttributeError:
-#                  return Response({
-#                     "error": "College profile not found."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # 4. Return Data
-#         return Response({
-#             "uid": assessment.uid,
-#             "json_data": assessment.json_data
-#         }, status=status.HTTP_200_OK)
-
-
 class PGExamRegistrationDetailView(APIView):
     """
     API View to get Exam Registration details including student profile and assessments.
@@ -731,28 +617,10 @@ class PGAdmitCardPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from .models import PGStudentProfile, PGExam
-        from django.shortcuts import get_object_or_404
+        from .models import PGStudentProfile, PGExamSchedule, PGExamRegistration
         from .utils.pdf_generator import generate_pg_admit_card_pdf
-
-        # ── Resolve student from request.user ──────────────────────────────────
-        try:
-            # Need strict match? Or allow college user to view admit card? 
-            # Original code implies logged-in student.
-            # Assuming 'student' user_type for now.
-            if hasattr(request.user, 'pg_student_profile'):
-                 student = request.user.pg_student_profile
-            else:
-                 return Response({'error': 'PG Student profile not found'}, status=404)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
-            
-        # ... rest of admit card logic ... (I am overwriting the start of PGAdmitCard? No I should define *before* or *after*).
-        # Ah, replace_file_content replaces a block. I should append the new class *after* PGAdmitCardPDFView logic.
-        
-        from .models import PGStudentProfile, PGExam
-        from django.shortcuts import get_object_or_404
-        from .utils.pdf_generator import generate_pg_admit_card_pdf
+        from django.utils import timezone as tz
+        from datetime import timedelta
 
         # ── Resolve student from request.user ──────────────────────────────────
         try:
@@ -765,11 +633,19 @@ class PGAdmitCardPDFView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # ── Auto-resolve exam via PGExamSchedule ──────────────────────────────
-        from .models import PGExamSchedule
-        from django.utils import timezone as tz
-        from datetime import timedelta
+        # ── Check Registration Status ──────────────────────────────────────────
+        registration = PGExamRegistration.objects.filter(
+            student=student,
+            status='REGISTERED'
+        ).order_by('-created_at').first()
 
+        if not registration:
+            return Response(
+                {'error': 'Admit card is only available after successful exam registration. Please complete your registration first.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # ── Auto-resolve exam via PGExamSchedule ──────────────────────────────
         # Include exams from last 30 days so recently-started exams still work
         cutoff_date = tz.now().date() - timedelta(days=30)
 
@@ -798,7 +674,6 @@ class PGAdmitCardPDFView(APIView):
         download = request.GET.get("download", "false").lower() == "true"
         disposition = "attachment" if download else "inline"
         safe_reg = "".join(c if c.isalnum() else "_" for c in student.registration_no)
-
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
         response["Content-Disposition"] = (
