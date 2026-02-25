@@ -7,17 +7,18 @@ from openpyxl import load_workbook
 from .selectors import fetch_assessments
 from .excel_builder import MBAResultExcelBuilder
 from .pdf_converter import convert_excel_to_pdf
+from .mba_4th_sem import MBA4thSemResultGenerator
 
 
 class MBAResultGenerator:
 
     TEMPLATE_PATH = os.path.join(
         settings.BASE_DIR,
-        "courses_data/mba/MBA_Result_final.xlsx"
+        "mba_sem/static/tr/MBA_Result_final_1.xlsx"
     )
 
     def __init__(self, students, college, semester, batch_uid=None, exam_name=None):
-        print("RESULT GENETOR.PY")
+        print("RESULT GENETOR.PY | semester =", semester)
         self.students = list(students)
         self.college = college
         self.semester = str(semester)
@@ -29,6 +30,18 @@ class MBAResultGenerator:
         if not self.students:
             return None
 
+        # Route 4th semester to the dedicated static-subject builder
+        if self.semester == "4":
+            print("[MBAResultGenerator] Routing to MBA4thSemResultGenerator")
+            gen = MBA4thSemResultGenerator(
+                students=self.students,
+                college=self.college,
+                batch_uid=self.batch_uid,
+                exam_name=self.exam_name,
+            )
+            return gen.generate()
+
+        # All other semesters → dynamic subject builder
         temp_excel = os.path.join(
             "/tmp", f"mba_result_{uuid.uuid4().hex}.xlsx"
         )
