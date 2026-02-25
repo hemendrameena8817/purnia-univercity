@@ -88,16 +88,23 @@ def generate_pg_admit_card_pdf(student, exam):
             student=student,
             label__icontains='ESE',
             exam_type__iexact=exam_type,
-            paper_code__in=schedule_codes,   # only codes that are actually in the schedule
-        ).values('paper_code', 'course_name')
+            paper_code__in=schedule_codes,
+        )
+        
+        # If registration exists, we can be more specific about session/semester
+        if registration:
+            # Note: registration.sem is int, assessment.semester is typically '1ST', '2ND' etc.
+            # We already have semester_text or similar from registration logic if needed, 
+            # but usually paper_code + exam_type + student is enough.
+            assess_qs = assess_qs.filter(session=registration.session)
 
-        for a in assess_qs:
+        for a in assess_qs.values('paper_code', 'course_name'):
             if a['paper_code'] and a['paper_code'] not in assessment_map:
                 assessment_map[a['paper_code']] = a['course_name'] or a['paper_code']
 
     # Step 3: For BACK/IMPROVEMENT, further filter schedules to only the
     # student's specific back papers (codes found in their assessments)
-    if exam_type in ['BACK', 'IMPROVEMENT'] and assessment_map:
+    if exam_type in ['BACK', 'IMPROVEMENT']:
         schedules_query = schedules_query.filter(
             common_course_structure__course_code__in=assessment_map.keys()
         )
