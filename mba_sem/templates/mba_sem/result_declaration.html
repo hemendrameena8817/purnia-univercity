@@ -41,6 +41,20 @@
             margin: 5px 0;
         }
 
+        .college-info {
+            font-size: 15px;
+            font-weight: bold;
+            margin: 5px 0;
+            text-transform: uppercase;
+        }
+
+        .course-name {
+            font-size: 15px;
+            font-weight: bold;
+            margin: 5px 0;
+            text-transform: uppercase;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -78,6 +92,8 @@
         {% endif %}
         <div class="university-name">PURNEA UNIVERSITY, PURNIA, BIHAR</div>
         <div class="exam-name">{{ exam_name }}</div>
+        <div class="college-info">{{ college_name }} - {{ college_code }}</div>
+        <div class="course-name">{{ course_name }}</div>
     </div>
 
     <table>
