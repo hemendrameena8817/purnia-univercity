@@ -272,7 +272,7 @@
     <!-- WATERMARK -->
     {% if watermark_logo %}
     <div class="watermark">
-        <img src="data:image/png;base64,{{ watermark_logo }}" alt="Watermark" />
+        <img src="{{ watermark_logo }}" alt="Watermark" />
     </div>
     {% endif %}
 
@@ -282,8 +282,7 @@
             <tr>
                 <td style="width: 70px">
                     {% if university_logo %}
-                    <img src="data:image/png;base64,{{ university_logo }}" class="university-logo-img"
-                        alt="University Logo" />
+                    <img src="{{ university_logo }}" class="university-logo-img" alt="University Logo" />
                     {% endif %}
                 </td>
                 <td class="header-text">
@@ -359,14 +358,14 @@
                 <td class="photo-signature-wrapper">
                     <div class="photo-box">
                         {% if student_photo %}
-                        <img src="data:image/png;base64,{{ student_photo }}" class="photo-img" alt="Student Photo" />
+                        <img src="{{ student_photo }}" class="photo-img" alt="Student Photo" />
                         {% else %}
                         <span style="font-size: 9pt">PHOTO</span>
                         {% endif %}
                     </div>
                     <div class="sig-box">
                         {% if student_sig %}
-                        <img src="data:image/png;base64,{{ student_sig }}" class="sig-img" alt="Student Signature" />
+                        <img src="{{ student_sig }}" class="sig-img" alt="Student Signature" />
                         {% else %}
                         <span style="font-size: 8pt">SIGNATURE</span>
                         {% endif %}
@@ -416,7 +415,7 @@
                 </td>
                 <td class="sig-right">
                     {% if controller_signature %}
-                    <img src="data:image/png;base64,{{ controller_signature }}" alt="Controller Signature" style="
+                    <img src="{{ controller_signature }}" alt="Controller Signature" style="
                 max-width: 150px;
                 max-height: 50px;
                 display: block;
