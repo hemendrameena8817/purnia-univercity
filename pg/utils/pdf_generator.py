@@ -105,12 +105,17 @@ def generate_pg_admit_card_pdf(student, exam):
             return None
 
     def _load_static_image(relative_path):
-        # 1. Try common static path
+        # 1. Try common static path (local dev)
         common_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', relative_path)
         if os.path.exists(common_path):
             return _get_base64_image(common_path)
 
-        # 2. Try UG static (for shared signatures)
+        # 2. Try static/images/ directly (live server often serves from here)
+        direct_path = os.path.join(settings.BASE_DIR, 'static', 'images', relative_path)
+        if os.path.exists(direct_path):
+            return _get_base64_image(direct_path)
+
+        # 3. Try UG static (for shared signatures)
         ug_path = os.path.join(settings.BASE_DIR, 'ug', 'static', 'ug', 'images', relative_path)
         if os.path.exists(ug_path):
             return _get_base64_image(ug_path)
