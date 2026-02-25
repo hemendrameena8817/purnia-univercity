@@ -462,17 +462,27 @@ class MBA4thSemResultGenerator:
         pdf_bytes = gen.generate()
     """
 
-    TEMPLATE_PATH = os.path.join(
-        settings.BASE_DIR,
-        "mba_sem/static/tr/MBA_Result_final_1.xlsx"
-    )
     SEMESTER = "4"
 
-    def __init__(self, students, college, batch_uid=None, exam_name=None):
-        self.students  = list(students)
-        self.college   = college
-        self.batch_uid = batch_uid
-        self.exam_name = exam_name
+    def __init__(self, students, college, batch_uid=None, exam_name=None, course_type=None):
+        self.students    = list(students)
+        self.college     = college
+        self.batch_uid   = batch_uid
+        self.exam_name   = exam_name
+        self.course_type = str(course_type or "").strip().upper()
+
+    def _get_template_path(self):
+        """Map course_type to specific template file, fallback to default."""
+        templates = {
+            "MARKETING": "MBA_MARKETING_TR_4_SEM.xlsx",
+            "HR":        "MBA_HR_TR_4_SEM.xlsx",
+            "FINANCE":   "MBA_FINANCE_TR_4_SEM.xlsx",
+        }
+        filename = templates.get(self.course_type, "MBA_HR_TR_4_SEM.xlsx")
+        path = os.path.join(settings.BASE_DIR, "mba_sem/static/tr/", filename)
+        
+        print(f"[MBA4] course_type='{self.course_type}' | Using template: {filename}")
+        return path
 
     def _build_student_map(self):
         """Single DB query → student_id → list of assessment records."""
@@ -500,7 +510,7 @@ class MBA4thSemResultGenerator:
             return None
 
         temp_excel = os.path.join("/tmp", f"mba4_{uuid.uuid4().hex}.xlsx")
-        shutil.copy(self.TEMPLATE_PATH, temp_excel)
+        shutil.copy(self._get_template_path(), temp_excel)
 
         wb          = load_workbook(temp_excel)
         master      = wb.active
