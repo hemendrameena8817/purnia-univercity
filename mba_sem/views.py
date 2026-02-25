@@ -668,6 +668,7 @@ class MBAResultSheetPDFView(View):
         batch_uid = request.GET.get("batch_uid")
         exam_uid = request.GET.get("exam_uid")
         course_uid = request.GET.get("course_uid")
+        course_type = request.GET.get("course_type")
 
         if not college_uid or not exam_uid:
             return HttpResponse(
@@ -686,6 +687,10 @@ class MBAResultSheetPDFView(View):
         exam = MBAExam.objects.filter(uid=exam_uid).last()
         exam_name = exam.name if exam else None
 
+        # Use exam.semester as fallback when ?semester= not in URL
+        if not semester and exam:
+            semester = str(exam.semester)
+
         # Filter students who are registered for this specific exam
         students = MBAStudentProfile.objects.filter(
             exam_registrations__exam__uid=exam_uid,
@@ -700,9 +705,12 @@ class MBAResultSheetPDFView(View):
             students = students.filter(
                 course__uid=course_uid
             )
-        print(f"{students = }")
-        # pdf_content = generate_mba_result_pdf(students,college, semester, batch_uid)
-        generator = MBAResultGenerator(students, college, semester, batch_uid, exam_name=exam_name)
+        print(f"{students = } | semester={semester}")
+        generator = MBAResultGenerator(
+            students, college, semester, batch_uid,
+            exam_name=exam_name, course_type=course_type,
+            exam_month_year=exam.exam_month_year if exam else None
+        )
         print(f"{generator = }")
         pdf_content = generator.generate()
 

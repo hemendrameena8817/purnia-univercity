@@ -9,10 +9,13 @@ from mba_sem.utils.tr.grading import (
     get_letter_and_description,
 )
 from openpyxl.styles import Font
+from openpyxl.utils import get_column_letter
+
+
 
 class MBAResultExcelBuilder:
 
-    COL_START = 14
+    COL_START = 13
     DATA_START_ROW = 17
     STUDENTS_PER_PAGE = 5
 
@@ -94,10 +97,11 @@ class MBAResultExcelBuilder:
 
     def _build_header(self, ws, student_chunk):
         ws["A4"] = self.exam_name or ""
-        ws["AP4"] = f"Dept./College : {self.college.name}"
+        ws["BC4"] = f"Dept./College : {self.college.name}"
 
         if student_chunk and student_chunk[0].course:
-            ws["AP2"] = f"Subject : {student_chunk[0].course.name}"
+            ws["BC2"] = f"Subject : {student_chunk[0].course.name}"
+            ws["BB2"].font = Font(size=11)
 
     # ======================================================
     # SUBJECT HEADER
@@ -112,8 +116,9 @@ class MBAResultExcelBuilder:
             structures = MBACourseStructure.objects.filter(
                 course_code=code,
                 semester=self.semester
-            )
+            )  
 
+            
             has_ese = False
             has_cia = False
             ese_max = cia_max = 0
@@ -134,9 +139,6 @@ class MBAResultExcelBuilder:
                     cia_max += float(obj.max_marks or 0)
                     cia_pass += float(obj.min_marks or 0)
 
-            if not has_ese and not has_cia:
-                continue
-
             headers = []
             if has_ese:
                 headers.append("ESE")
@@ -150,6 +152,20 @@ class MBAResultExcelBuilder:
                 "Credit Earned",
                 "GP"
             ]
+            for i, header in enumerate(headers):
+                ws.cell(row=7, column=col_pointer + i).value = header
+
+            # 🔥 DEBUG PRINT YAHAN LAGANA HAI
+            print("------ HEADER COLUMN DEBUG ------")
+            print("SUBJECT:", code)
+
+            for i, header in enumerate(headers):
+                print(f"{header} -> Column {col_pointer + i}")
+
+            print("---------------------------------")
+            for s in structures:
+                print("LABEL:", s.label, "| MAX:", s.max_marks, "| MIN:", s.min_marks)
+
 
             self.subject_structure[code] = {
                 "headers": headers,
@@ -191,21 +207,90 @@ class MBAResultExcelBuilder:
             ws.cell(row=14, column=col_offset + 1).value = credit
 
             col_pointer += width
-
         self.gpa_start_col = col_pointer
 
     # ======================================================
-    # STUDENTS
+    # HELPER FUNCTIONS
     # ======================================================
+
+    def _get_student_marks(self, student_id, code):
+        """Helper to fetch ESE and CIA marks for a specific student and paper."""
+        res = {
+            "ese": 0.0, "cia": 0.0, 
+            "ese_found": False, "cia_found": False,
+            "ese_absent": False, "cia_absent": False
+        }
+        for rec in self.student_map.get(student_id, []):
+            if rec.paper_code == code:
+                label = str(rec.label or "").upper()
+                is_absent = bool(rec.ind_is_absent)
+                marks = float(
+                    rec.ind_final_marks_obtained
+                    if rec.ind_final_marks_obtained is not None
+                    else (rec.ind_marks_obtained or 0)
+                )
+                if label.startswith("ESE"):
+                    res["ese"] = marks
+                    res["ese_found"] = True
+                    res["ese_absent"] = is_absent
+                elif label.startswith("CIA"):
+                    res["cia"] = marks
+                    res["cia_found"] = True
+                    res["cia_absent"] = is_absent
+        return res
+
+    def _determine_subject_result(self, marks_data, meta):
+        """Helper to determine total, numeric, credit earned, and pass/fail for a subject."""
+        ese_passed = True
+        cia_passed = True
+        
+        if meta["has_ese"]:
+            ese_passed = (marks_data["ese"] >= meta["ese_pass"]) if (marks_data["ese_found"] and not marks_data["ese_absent"]) else (meta["ese_pass"] <= 0)
+        
+        if meta["has_cia"]:
+            cia_passed = (marks_data["cia"] >= meta["cia_pass"]) if (marks_data["cia_found"] and not marks_data["cia_absent"]) else (meta["cia_pass"] <= 0)
+
+        total = marks_data["ese"] + marks_data["cia"]
+        numeric = calculate_numeric_grade(total) if not (marks_data["ese_absent"] and marks_data["cia_absent"]) else 0
+        
+        appeared = (marks_data["ese_found"] and not marks_data["ese_absent"]) or (marks_data["cia_found"] and not marks_data["cia_absent"])
+        
+        # Credit logic: Must pass both ESE and CIA, and have numeric grade >= 5
+        if ese_passed and cia_passed and numeric >= 5 and appeared:
+            credit_earned = float(meta["credit"])
+            failed = False
+        else:
+            credit_earned = 0.0
+            failed = True
+            
+        return total, numeric, credit_earned, failed, appeared
+
+    def _calculate_cgpa(self, student, current_gpa, result_status):
+        """Helper to calculate CGPA based on previous semesters and current status."""
+        if result_status in ["Fail", "Absent"]:
+            return 0.00
+            
+        def to_float(val):
+            try:
+                clean_val = str(val or "0").strip()
+                return float(clean_val) if clean_val else 0.0
+            except:
+                return 0.0
+
+        s1 = to_float(student.sem_1_gpa)
+        s2 = to_float(student.sem_2_gpa)
+        s3 = to_float(student.sem_3_gpa)
+        
+        return round((s1 + s2 + s3 + current_gpa) / 4, 2)
 
     def _build_students(self, ws, student_chunk):
 
         row_pointer = self.DATA_START_ROW
 
         # SEM blocks start column (E = 5)
-        sem1_col = 5
-        sem2_col = 8
-        sem3_col = 11
+        sem1_col = 4
+        sem2_col = 7
+        sem3_col = 10
 
         for student in student_chunk:
 
@@ -213,138 +298,95 @@ class MBAResultExcelBuilder:
             ws.cell(row=row_pointer, column=2).value = student.get_full_name()
             ws.cell(row=row_pointer, column=3).value = student.registration_no
 
-            # ===== SEM 1 =====
+            # Write SEM headers/GPAs
             ws.cell(row=row_pointer, column=sem1_col).value = student.roll_no
             ws.cell(row=row_pointer, column=sem1_col + 1).value = student.sem_1_gpa
             ws.cell(row=row_pointer, column=sem1_col + 2).value = student.sem_1_credit_earned
 
-            # ===== SEM 2 =====
             ws.cell(row=row_pointer, column=sem2_col).value = student.roll_no
             ws.cell(row=row_pointer, column=sem2_col + 1).value = student.sem_2_gpa
             ws.cell(row=row_pointer, column=sem2_col + 2).value = student.sem_2_credit_earned
 
-            # ===== SEM 3 =====
             ws.cell(row=row_pointer, column=sem3_col).value = student.roll_no
             ws.cell(row=row_pointer, column=sem3_col + 1).value = student.sem_3_gpa
             ws.cell(row=row_pointer, column=sem3_col + 2).value = student.sem_3_credit_earned
 
-
             col_pointer = self.COL_START
-
             total_credit_allotted = 0
             total_credit_earned = 0
             total_grade_points = 0
-            failed = False
-            student_appeared = False
+            total_marks_obtained = 0
+            any_subject_failed = False
+            student_appeared_at_all = False
 
             for code, meta in self.subject_structure.items():
 
-                headers = meta["headers"]
-                credit_alloted = float(meta.get("credit", 0))
-                has_ese = meta.get("has_ese", False)
-                has_cia = meta.get("has_cia", False)
-                ese_pass_req = float(meta.get("ese_pass", 0))
-                cia_pass_req = float(meta.get("cia_pass", 0))
-
-                ese_marks = 0
-                cia_marks = 0
-                ese_passed = True
-                cia_passed = True
-                ese_absent = False
-                cia_absent = False
-
-                ese_found = False
-                cia_found = False
-
-                for rec in self.student_map.get(student.id, []):
-                    if rec.paper_code == code:
-                        label = str(rec.label or "").upper()
-                        is_absent = bool(rec.ind_is_absent)
-                        marks = float(
-                            rec.ind_final_marks_obtained
-                            if rec.ind_final_marks_obtained is not None
-                            else (rec.ind_marks_obtained or 0)
-                        )
-                        if label.startswith("ESE"):
-                            ese_marks = marks
-                            ese_found = True
-                            ese_absent = is_absent
-                        elif label.startswith("CIA"):
-                            cia_marks = marks
-                            cia_found = True
-                            cia_absent = is_absent
-
-                # Determine if passed both parts
-                if has_ese:
-                    ese_passed = (ese_marks >= ese_pass_req) if (ese_found and not ese_absent) else (ese_pass_req <= 0)
-                if has_cia:
-                    cia_passed = (cia_marks >= cia_pass_req) if (cia_found and not cia_absent) else (cia_pass_req <= 0)
-
-                total = ese_marks + cia_marks
-                numeric = calculate_numeric_grade(total) if not (ese_absent and cia_absent) else 0
-
-                # Track if student appeared for AT LEAST ONE component
-                if ese_found and not ese_absent: student_appeared = True
-                if cia_found and not cia_absent: student_appeared = True
-
-                # CREDIT LOGIC
-                if ese_passed and cia_passed and numeric >= 5 and not (ese_absent or cia_absent):
-                    credit_earned = credit_alloted
-                else:
-                    credit_earned = 0
-                    failed = True
-
+                marks_data = self._get_student_marks(student.id, code)
+                total, numeric, credit_earned, subj_failed, appeared = self._determine_subject_result(marks_data, meta)
+                
+                if appeared: student_appeared_at_all = True
+                if subj_failed: any_subject_failed = True
+                
                 gp = calculate_grade_point(numeric, credit_earned)
-
-                total_credit_allotted += credit_alloted
+                
+                total_credit_allotted += float(meta["credit"])
                 total_credit_earned += credit_earned
                 total_grade_points += gp
+                total_marks_obtained += total
 
                 values = {
-                    "ESE": "AB" if ese_absent else ese_marks,
-                    "CIA": "AB" if cia_absent else cia_marks,
-                    "Total": "AB" if (ese_absent and cia_absent) else total,
-                    "Credit Alloted": credit_alloted,
-                    "Numeric Grade": numeric if not (ese_absent and cia_absent) else 0,
+                    "ESE": "AB" if marks_data["ese_absent"] else marks_data["ese"],
+                    "CIA": "AB" if marks_data["cia_absent"] else marks_data["cia"],
+                    "Total": "AB" if (marks_data["ese_absent"] and marks_data["cia_absent"]) else total,
+                    "Credit Alloted": float(meta["credit"]),
+                    "Numeric Grade": numeric if appeared else 0,
                     "Credit Earned": credit_earned,
                     "GP": gp
                 }
 
+                total, numeric, credit_earned, subj_failed, appeared = self._determine_subject_result(marks_data, meta)
+                print("\n==============================")
+                print("STUDENT:", student.roll_no, "-", student.get_full_name())
+                print("SUBJECT:", code)
+
+                print(f"CIA  : {marks_data['cia']}  | Absent: {marks_data['cia_absent']}")
+                print(f"ESE  : {marks_data['ese']}  | Absent: {marks_data['ese_absent']}")
+                print(f"TOTAL: {total}")
+                print(f"NUMERIC GRADE: {numeric}")
+                print(f"CREDIT EARNED: {credit_earned}")
+                print(f"FAILED?: {subj_failed}")
+                print("==============================")
+
+                headers = meta["headers"]
                 for i, header in enumerate(headers):
-                    ws.cell(
-                        row=row_pointer,
-                        column=col_pointer + i
-                    ).value = values.get(header, "")
+                    ws.cell(row=row_pointer, column=col_pointer + i).value = values.get(header, "")
 
                 col_pointer += len(headers)
 
-            # ===== GPA & OVERALL RESULT =====
-            if not student_appeared:
-                # Student did not appear for ANY component
+            # Determine Final Status
+            if not student_appeared_at_all:
+                res_status = "Absent"
                 gpa = 0.00
-                letter, desc = "AB", "Absent"
-                result_status = "Absent"
-            elif failed:
-                # If any subject is failed (credit_earned=0), the overall result is Fail
+            elif any_subject_failed:
+                res_status = "Fail"
                 gpa = 0.00
-                letter, desc = "F", "Fail"
-                result_status = "Fail"
             else:
-                # If all subjects passed, calculate weighted GPA
-                gpa = round(
-                    total_grade_points / total_credit_earned, 2
-                ) if total_credit_earned > 0 else 0
-                letter, desc = get_letter_and_description(gpa)
-                result_status = "Pass"
+                res_status = "Pass"
+                gpa = round(total_grade_points / total_credit_allotted, 2) if total_credit_allotted > 0 else 0
 
-            summary_col = 55
+            letter, desc = get_letter_and_description(gpa) if res_status == "Pass" else ("F", "Fail" if res_status == "Fail" else "Absent")
+            cgpa = self._calculate_cgpa(student, gpa, res_status)
 
-            ws.cell(row=row_pointer, column=summary_col).value = total_credit_allotted
-            ws.cell(row=row_pointer, column=summary_col + 1).value = total_credit_earned
-            ws.cell(row=row_pointer, column=summary_col + 2).value = gpa
-            ws.cell(row=row_pointer, column=summary_col + 3).value = letter
-            ws.cell(row=row_pointer, column=summary_col + 4).value = desc
-            ws.cell(row=row_pointer, column=summary_col + 5).value = result_status
+            # Write Summary
+            ws.cell(row=row_pointer, column=54).value = total_marks_obtained   # BB
+            ws.cell(row=row_pointer, column=55).value = total_credit_allotted # BC
+            ws.cell(row=row_pointer, column=56).value = total_credit_earned   # BD
+            ws.cell(row=row_pointer, column=57).value = gpa                  # BE
+            ws.cell(row=row_pointer, column=58).value = cgpa                 # BF
+            ws.cell(row=row_pointer, column=59).value = gpa                  # BG
+            ws.cell(row=row_pointer, column=60).value = letter               # BH
+            ws.cell(row=row_pointer, column=61).value = desc                 # BI
+            ws.cell(row=row_pointer, column=62).value = res_status           # BJ
 
             row_pointer += 1
 
@@ -362,7 +404,7 @@ class MBAResultExcelBuilder:
         page_promoted = 0
 
         summary_col = 55
-        result_status_col = summary_col + 5
+        result_status_col = 62 # BJ
 
         for i in range(len(student_chunk)):
             row = self.DATA_START_ROW + i
@@ -396,4 +438,4 @@ class MBAResultExcelBuilder:
         ws.cell(row=sign_row, column=22).value = "Compared By Address"
         ws.cell(row=sign_row, column=38).value = "Full Signature of Tabulator-cum-scrutinizer with date"
         ws.cell(row=sign_row, column=58).value = "Controller of Examination"
-        
+     

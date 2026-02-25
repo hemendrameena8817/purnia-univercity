@@ -89,7 +89,6 @@ class MBAExamResultAdmin(admin.ModelAdmin):
     list_filter = ('semester', 'session', 'semester_result')
     search_fields = ('student__roll_no',)
 
-
 @admin.register(MBAStudentCourseAssessment)
 class StudentCourseAssessmentAdmin(admin.ModelAdmin):
     list_display = (
@@ -107,6 +106,13 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
         "created_at",
     )
 
+    # list_editable = (
+    #     "ind_marks_obtained",
+    #     "ind_is_absent",
+    #     "ind_is_pass",
+    #     "sgpa",
+    # )
+
     list_filter = (
         "semester",
         "label",
@@ -122,16 +128,8 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
         "course_name",
     )
 
+    def get_roll_no(self, obj): return obj.student.roll_no if obj.student else ""
+
     raw_id_fields = ("student", "batch", "mba_exam")
 
-    def get_roll_no(self, obj):
-        return obj.student.roll_no if obj.student else ""
-
-    # autocomplete_fields = ("student", "batch")
-
-    # list_select_related = ("student", "batch")
-
     ordering = ("-created_at",)
-
-    # list_per_page = 50
-

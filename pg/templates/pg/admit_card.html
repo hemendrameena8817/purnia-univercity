@@ -393,7 +393,7 @@
                     <td>{{ forloop.counter }}</td>
                     <td>{{ s.common_course_structure.course_code|default:"-" }}</td>
                     <td class="subject-col">
-                        {{ s.common_course_structure.course_name|default:"-" }}
+                        {{ s.assessment_course_name|default:s.common_course_structure.course_name|default:"-" }}
                     </td>
                     <td>{{ s.exam_time|default:"-" }}</td>
                     <td>

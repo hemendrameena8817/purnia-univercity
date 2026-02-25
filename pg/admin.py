@@ -235,7 +235,11 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
 
     class Meta:
         model = PGStudentCourseAssessment
-        exclude = ('uid',)
+        exclude = ('uid', 'json_data')
+
+    def get_queryset(self):
+        """Optimize queryset for export with select_related"""
+        return super().get_queryset().select_related('student', 'department', 'batch')
 
     def skip_row(self, instance, original, row, import_validation_errors=None):
         """Skip completely blank rows (Excel files often have trailing empty rows)."""
@@ -344,6 +348,85 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # No default ordering → avoids full-table sort on 400K rows
     # Use search / filters to narrow first, then sort
     ordering = []
+
+    actions = ['export_assessments_to_excel']
+
+    def export_assessments_to_excel(self, request, queryset):
+        """
+        Fast Excel export for PG Student Course Assessments.
+        Uses openpyxl directly for better performance on large datasets.
+        Respects current filters and selection.
+        """
+        from openpyxl import Workbook
+        from django.http import HttpResponse
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        # Create workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Assessments"
+        
+        # Define headers
+        headers = [
+            'Registration No', 'Roll No', 'Name', 'Department', 'College', 
+            'Batch', 'Semester', 'Session', 'Paper Code', 'Label', 
+            'Exam Type', 'Max Marks', 'Pass Marks', 'Marks Obtained', 
+            'Is Absent', 'Is Pass', 'Result', 'ESE Fill'
+        ]
+        
+        # Style header
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        for col, head in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=head)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # Optimize queryset
+        queryset = queryset.select_related('student', 'student__college', 'department', 'batch').only(
+            'student__registration_no', 'student__roll_no', 'student__first_name', 'student__last_name',
+            'student__college__college_code', 'department__name', 'batch__name',
+            'semester', 'session', 'paper_code', 'label', 'exam_type',
+            'ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained',
+            'ind_is_absent', 'ind_is_pass', 'sem_result', 'is_ese_fill'
+        )
+        
+        # Write data
+        for row_idx, obj in enumerate(queryset.iterator(), 2):
+            student_name = f"{obj.student.first_name} {obj.student.last_name or ''}".strip() if obj.student else "-"
+            college = obj.student.college.college_code if obj.student and obj.student.college else obj.college_code or "-"
+            
+            row = [
+                obj.student.registration_no if obj.student else "-",
+                obj.student.roll_no if obj.student else "-",
+                student_name,
+                obj.department.name if obj.department else "-",
+                college,
+                obj.batch.name if obj.batch else "-",
+                obj.semester,
+                obj.session,
+                obj.paper_code,
+                obj.label,
+                obj.exam_type,
+                obj.ind_max_marks,
+                float(obj.ind_pass_marks) if obj.ind_pass_marks else 0,
+                float(obj.ind_marks_obtained) if obj.ind_marks_obtained is not None else 0,
+                "YES" if obj.ind_is_absent else "NO",
+                "PASS" if obj.ind_is_pass else "FAIL" if obj.ind_is_pass is False else "PENDING",
+                obj.sem_result,
+                "YES" if obj.is_ese_fill else "NO"
+            ]
+            for col_idx, value in enumerate(row, 1):
+                ws.cell(row=row_idx, column=col_idx, value=value)
+        
+        # Response
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="pg_assessments_export.xlsx"'
+        wb.save(response)
+        return response
+
+    export_assessments_to_excel.short_description = "🚀 Fast Excel Export (Optimized)"
 
     readonly_fields = (
         'uid', 'created_at', 'updated_at',
