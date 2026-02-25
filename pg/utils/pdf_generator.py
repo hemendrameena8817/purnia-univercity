@@ -98,7 +98,7 @@ def generate_pg_admit_card_pdf(student, exam):
         "university_logo": image_to_base64(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
         "watermark_logo": image_to_base64(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
         "student_photo": image_to_base64(student.profile_image.path if student.profile_image else None),
-        "student_sig": image_to_base64(student.signature.path if student.signature else None),
+        "student_sig": image_to_base64(student.signature or None),
         "controller_signature": image_to_base64(os.path.join(settings.BASE_DIR, "static", "images", "controller-of-examination-signature.png")),
     }
 
