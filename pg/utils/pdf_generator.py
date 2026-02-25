@@ -151,57 +151,70 @@ def generate_pg_admit_card_pdf(student, exam):
     exam_type = registration.exam_type if registration else "REGULAR"
 
     # ── Exam Schedules ─────────────────────────────────────────────────────────
+    # Schedules hold ONE generic row per group (e.g. CC-X for all CC papers).
+    # They give us date/time/sitting only; actual subjects come from assessments.
     schedules_query = PGExamSchedule.objects.filter(
         exam=exam
     ).select_related('common_course_structure', 'group').order_by('exam_date', 'exam_time')
 
-    # Filter by student's department group
+    # Filter by student's department group if possible
     if student.department:
         dept_schedules = schedules_query.filter(group__department=student.department)
         if dept_schedules.exists():
             schedules_query = dept_schedules
 
-    # ── Get course codes from the schedule, then look up names from assessments ─
-    # Step 1: get all course codes offered in this exam for the student's dept
-    schedule_codes = list(
-        schedules_query.values_list('common_course_structure__course_code', flat=True).distinct()
+    # Build a lookup: course_code_prefix → schedule entry (for date/time attaching)
+    # e.g. 'CC' → schedule_entry for CC-X, 'AECC' → schedule_entry for AECC-II
+    schedule_by_prefix = {}
+    schedule_default = schedules_query.first()  # fallback
+    for s in schedules_query:
+        if s.common_course_structure and s.common_course_structure.course_code:
+            prefix = s.common_course_structure.course_code.split('-')[0].upper()
+            schedule_by_prefix[prefix] = s
+
+    # ── Get subjects from student's ESE assessments ────────────────────────────
+    # Convert registration semester (int) to text like '3RD'
+    _SUFFIXES = {1: 'ST', 2: 'ND', 3: 'RD'}
+    sem_text = None
+    if registration and registration.sem:
+        sv = registration.sem
+        sem_text = f"{sv}{_SUFFIXES.get(sv, 'TH')}" if isinstance(sv, int) else str(sv).upper()
+
+    assessment_filter = dict(
+        student=student,
+        label__icontains='ESE',
+        session=registration.session if registration else exam.session,
     )
-
-    # Step 2: find the student's assessment entries for those codes (single query)
-    assessment_map = {}   # { paper_code: course_name }
-    if schedule_codes:
-        assess_qs = PGStudentCourseAssessment.objects.filter(
-            student=student,
-            label__icontains='ESE',
-            exam_type__iexact=exam_type,
-            paper_code__in=schedule_codes,
-        )
-        
-        # If registration exists, we can be more specific about session/semester
-        if registration:
-            # Note: registration.sem is int, assessment.semester is typically '1ST', '2ND' etc.
-            # We already have semester_text or similar from registration logic if needed, 
-            # but usually paper_code + exam_type + student is enough.
-            assess_qs = assess_qs.filter(session=registration.session)
-
-        for a in assess_qs.values('paper_code', 'course_name'):
-            if a['paper_code'] and a['paper_code'] not in assessment_map:
-                assessment_map[a['paper_code']] = a['course_name'] or a['paper_code']
-
-    # Step 3: For BACK/IMPROVEMENT, further filter schedules to only the
-    # student's specific back papers (codes found in their assessments)
+    if sem_text:
+        assessment_filter['semester'] = sem_text
     if exam_type in ['BACK', 'IMPROVEMENT']:
-        schedules_query = schedules_query.filter(
-            common_course_structure__course_code__in=assessment_map.keys()
-        )
+        assessment_filter['exam_type__iexact'] = exam_type
 
-    schedules = list(schedules_query)
+    # Build subject rows (deduplicated by paper_code)
+    from types import SimpleNamespace
+    seen_papers = set()
+    schedules = []
+    for a in PGStudentCourseAssessment.objects.filter(**assessment_filter).order_by('paper_code'):
+        key = a.paper_code or a.course_code or ''
+        if not key or key in seen_papers:
+            continue
+        seen_papers.add(key)
 
-    # ── Attach subject name from assessment to each schedule ───────────────────
-    for s in schedules:
-        if s.common_course_structure:
-            code = s.common_course_structure.course_code
-            s.assessment_course_name = assessment_map.get(code)
+        # Find the schedule entry for this course prefix to get date/time
+        prefix = (a.course_code or '').split('-')[0].upper()
+        sched = schedule_by_prefix.get(prefix, schedule_default)
+
+        schedules.append(SimpleNamespace(
+            common_course_structure=SimpleNamespace(
+                course_code=a.paper_code or a.course_code or '-',
+                course_name=a.course_name or '-',
+            ),
+            assessment_course_name=a.course_name or '-',
+            exam_date=sched.exam_date if sched else None,
+            exam_time=sched.exam_time if sched else '-',
+            sitting=sched.sitting if sched else '-',
+        ))
+
 
     # ── Context ────────────────────────────────────────────────────────────────
     context = {
