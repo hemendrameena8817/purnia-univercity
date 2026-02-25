@@ -708,7 +708,8 @@ class MBAResultSheetPDFView(View):
         print(f"{students = } | semester={semester}")
         generator = MBAResultGenerator(
             students, college, semester, batch_uid,
-            exam_name=exam_name, course_type=course_type
+            exam_name=exam_name, course_type=course_type,
+            exam_month_year=exam.exam_month_year if exam else None
         )
         print(f"{generator = }")
         pdf_content = generator.generate()

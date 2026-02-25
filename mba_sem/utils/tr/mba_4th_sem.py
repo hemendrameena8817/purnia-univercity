@@ -406,9 +406,14 @@ def _add_logo(ws):
     ws.add_image(img)
 
 
-def fill_header(ws, exam_name, college, students):
+def fill_header(ws, exam_name, college, students, exam_month_year=None):
     """Fill the top header with exam name, college name, and subject name."""
-    ws["A4"] = exam_name or ""
+    header_val = exam_name or ""
+    if exam_month_year:
+        header_val = f"{header_val}, Examination held in the month of {exam_month_year}"
+
+    ws["A4"] = header_val
+    ws["BC1"] = exam_name or ""
     ws["BC4"] = f"Dept./College : {college.name}"
 
     if students and students[0].course:
@@ -464,12 +469,13 @@ class MBA4thSemResultGenerator:
 
     SEMESTER = "4"
 
-    def __init__(self, students, college, batch_uid=None, exam_name=None, course_type=None):
-        self.students    = list(students)
-        self.college     = college
-        self.batch_uid   = batch_uid
-        self.exam_name   = exam_name
-        self.course_type = str(course_type or "").strip().upper()
+    def __init__(self, students, college, batch_uid=None, exam_name=None, course_type=None, exam_month_year=None):
+        self.students        = list(students)
+        self.college         = college
+        self.batch_uid       = batch_uid
+        self.exam_name       = exam_name
+        self.exam_month_year = exam_month_year
+        self.course_type     = str(course_type or "").strip().upper()
 
     def _get_template_path(self):
         """Map course_type to specific template file, fallback to default."""
@@ -529,7 +535,7 @@ class MBA4thSemResultGenerator:
             ws.title = f"Page_{idx + 1}"
 
             fill_students(ws, chunk, student_map)
-            fill_header(ws, self.exam_name, self.college, chunk)
+            fill_header(ws, self.exam_name, self.college, chunk, exam_month_year=self.exam_month_year)
             _add_logo(ws)
             fill_footer(ws, chunk)
 
