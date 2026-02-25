@@ -9,6 +9,30 @@ def generate_pg_admit_card_pdf(student, exam):
 
     logger = logging.getLogger(__name__)
 
+    def _get_base64_image(image_field_or_path):
+        """
+        Robustly convert a Django FieldFile, filesystem path, or static path to base64.
+        Handles S3 (.open()) and local paths/URLs.
+        """
+        import base64
+        if not image_field_or_path:
+            return ""
+        try:
+            # 1. Django FieldFile (S3/Storage friendly)
+            if hasattr(image_field_or_path, 'open'):
+                try:
+                    with image_field_or_path.open('rb') as f:
+                        return base64.b64encode(f.read()).decode()
+                except Exception:
+                    pass
+            # 2. Local path fallback
+            if isinstance(image_field_or_path, str) and os.path.exists(image_field_or_path):
+                with open(image_field_or_path, 'rb') as f:
+                    return base64.b64encode(f.read()).decode()
+        except Exception as e:
+            logger.error(f"Image encode error: {e}")
+        return ""
+
     # ── Static images path ─────────────────────────────────────────────────────
     STATIC_IMAGES = os.path.join(settings.BASE_DIR, "static", "images", "common")
 
@@ -95,11 +119,11 @@ def generate_pg_admit_card_pdf(student, exam):
         "center_name": exam_center.name if exam_center else "-",
         "center_code": exam_center.center_code if exam_center else "-",
         "schedules": schedules,
-        "university_logo": image_to_base64(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
-        "watermark_logo": image_to_base64(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
-        "student_photo": image_to_base64(student.profile_image.path if student.profile_image else None),
-        "student_sig": image_to_base64(student.signature or None),
-        "controller_signature": image_to_base64(os.path.join(settings.BASE_DIR, "static", "images", "controller-of-examination-signature.png")),
+        "university_logo": _get_base64_image(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
+        "watermark_logo": _get_base64_image(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
+        "student_photo": _get_base64_image(student.profile_image),
+        "student_sig": _get_base64_image(student.signature),
+        "controller_signature": _get_base64_image(os.path.join(settings.BASE_DIR, "static", "images", "controller-of-examination-signature.png")),
     }
 
     html_string = get_template("pg/admit_card.html").render(context)
