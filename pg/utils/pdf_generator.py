@@ -11,30 +11,111 @@ def generate_pg_admit_card_pdf(student, exam):
 
     def _get_base64_image(image_field_or_path):
         """
-        Robustly convert a Django FieldFile, filesystem path, or static path to base64.
-        Handles S3 (.open()) and local paths/URLs.
+        Convert a Django ImageField, filesystem path, or HTTP URL to a base64
+        data-URI suitable for embedding directly in HTML.
         """
-        import base64
         if not image_field_or_path:
-            return ""
+            return None
+
+        import base64
+        from io import BytesIO
         try:
-            # 1. Django FieldFile (S3/Storage friendly)
+            from PIL import Image, ImageOps
+            PIL_AVAILABLE = True
+        except ImportError:
+            PIL_AVAILABLE = False
+
+        try:
+            import requests
+            raw = None
+
+            # 1. Django FileField / ImageField — try .open() first (works for S3 + local)
             if hasattr(image_field_or_path, 'open'):
                 try:
                     with image_field_or_path.open('rb') as f:
-                        return base64.b64encode(f.read()).decode()
+                        raw = f.read()
                 except Exception:
                     pass
+
             # 2. Local path fallback
-            if isinstance(image_field_or_path, str) and os.path.exists(image_field_or_path):
+            if raw is None and hasattr(image_field_or_path, 'path'):
+                try:
+                    if os.path.exists(image_field_or_path.path):
+                        with open(image_field_or_path.path, 'rb') as f:
+                            raw = f.read()
+                except Exception:
+                    pass
+
+            # 3. Plain filesystem path string
+            if raw is None and isinstance(image_field_or_path, str) and os.path.exists(image_field_or_path):
                 with open(image_field_or_path, 'rb') as f:
-                    return base64.b64encode(f.read()).decode()
+                    raw = f.read()
+
+            # 4. HTTP URL (string or .url attribute)
+            if raw is None:
+                url = None
+                if isinstance(image_field_or_path, str) and image_field_or_path.startswith('http'):
+                    url = image_field_or_path
+                elif hasattr(image_field_or_path, 'url'):
+                    try:
+                        url = image_field_or_path.url
+                        if not url.startswith('http'):
+                            url = None
+                    except Exception:
+                        url = None
+                if url:
+                    try:
+                        resp = requests.get(url, timeout=5)
+                        if resp.status_code == 200:
+                            raw = resp.content
+                    except Exception:
+                        pass
+
+            if raw is None:
+                return None
+
+            if PIL_AVAILABLE:
+                img = Image.open(BytesIO(raw))
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
+                
+                # Transparency handling: RGBA -> RGB (white background)
+                if img.mode in ('RGBA', 'LA'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                buf = BytesIO()
+                img.save(buf, format='JPEG', quality=85)
+                raw = buf.getvalue()
+                mime = 'image/jpeg'
+            else:
+                mime = 'image/png'
+
+            b64 = base64.b64encode(raw).decode('utf-8')
+            return f"data:{mime};base64,{b64}"
+
         except Exception as e:
             logger.error(f"Image encode error: {e}")
-        return ""
+            return None
 
-    # ── Static images path ─────────────────────────────────────────────────────
-    STATIC_IMAGES = os.path.join(settings.BASE_DIR, "static", "images", "common")
+    def _load_static_image(relative_path):
+        # 1. Try common static path
+        common_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', relative_path)
+        if os.path.exists(common_path):
+            return _get_base64_image(common_path)
+
+        # 2. Try UG static (for shared signatures)
+        ug_path = os.path.join(settings.BASE_DIR, 'ug', 'static', 'ug', 'images', relative_path)
+        if os.path.exists(ug_path):
+            return _get_base64_image(ug_path)
+
+        return None
 
     # ── Exam Center ────────────────────────────────────────────────────────────
     exam_center = None
@@ -126,11 +207,11 @@ def generate_pg_admit_card_pdf(student, exam):
         "center_name": exam_center.name if exam_center else "-",
         "center_code": exam_center.center_code if exam_center else "-",
         "schedules": schedules,
-        "university_logo": _get_base64_image(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
-        "watermark_logo": _get_base64_image(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
+        "university_logo": _load_static_image("purnea-logo.png"),
+        "watermark_logo": _load_static_image("purnea-logo.png"),
         "student_photo": _get_base64_image(student.profile_image),
         "student_sig": _get_base64_image(student.signature),
-        "controller_signature": _get_base64_image(os.path.join(settings.BASE_DIR, "static", "images", "controller-of-examination-signature.png")),
+        "controller_signature": _load_static_image("controller-of-examination-signature.png"),
     }
 
     html_string = get_template("pg/admit_card.html").render(context)
