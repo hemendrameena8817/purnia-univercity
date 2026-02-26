@@ -201,12 +201,21 @@ def generate_pg_admit_card_pdf(student, exam):
         seen_papers.add(key)
 
         # Find the schedule entry for this course prefix to get date/time
-        prefix = (a.course_code or '').split('-')[0].upper()
-        sched = schedule_by_prefix.get(prefix, schedule_default)
+        # Try multiple strategies: course_code prefix → paper_code prefix → course_type
+        sched = None
+        for candidate in [a.course_code, a.paper_code, a.course_type]:
+            if not candidate:
+                continue
+            prefix = candidate.split('-')[0].upper()
+            if prefix and prefix in schedule_by_prefix:
+                sched = schedule_by_prefix[prefix]
+                break
+        if sched is None:
+            sched = schedule_default  # last resort fallback
 
         schedules.append(SimpleNamespace(
             common_course_structure=SimpleNamespace(
-                course_code=a.paper_code or a.course_code or '-',
+                course_code=a.course_code or '-',
                 course_name=a.course_name or '-',
             ),
             assessment_course_name=a.course_name or '-',
