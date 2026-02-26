@@ -6,12 +6,8 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <title>Admit Card - PG</title>
 
-    <!-- Google Fonts for Hindi (Devanagari) Support -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-        href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans:wght@400;600;700&display=swap"
-        rel="stylesheet" />
+    <!-- Note: WeasyPrint (PDF generator) loads system fonts only - CDN fonts are ignored in PDF mode -->
+    <!-- Noto Sans Devanagari must be installed as a system font on the server for Hindi rendering -->
 
     <style>
         @page {
@@ -26,15 +22,20 @@
         }
 
         body {
-            font-family: "Noto Sans", "Noto Sans Devanagari", Arial, sans-serif;
+            font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
             font-size: 10pt;
             line-height: 1.4;
             color: #000;
         }
 
-        /* Ensure Hindi text uses proper font */
+        /* Ensure Hindi text uses proper Devanagari system font */
         .hindi-text {
-            font-family: "Noto Sans Devanagari", "Noto Sans", sans-serif;
+            font-family: 'Noto Sans Devanagari', 'FreeSans', sans-serif;
+        }
+
+        /* English text embedded within Hindi paragraphs */
+        .english-text {
+            font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
         }
 
         .container {
@@ -213,13 +214,13 @@
 
         .signatures-table td {
             padding: 5px;
-            vertical-align: top;
+            vertical-align: bottom;
         }
 
         .sig-line {
             font-size: 9pt;
             font-weight: normal;
-            padding-top: 40px;
+            padding-top: 5px;
         }
 
         .sig-left {
@@ -422,7 +423,7 @@
                 margin: 0 30px 5px auto;
               " />
                     {% endif %}
-                    <div class="sig-line" style="padding-top: 5px">
+                    <div class="sig-line">
                         Controller of Examinations
                     </div>
                 </td>
@@ -451,8 +452,7 @@
                 इत्यादि लाना वर्जित है।
             </p>
             <p class="hindi-text">
-                5. नेत्रहीन, <span style="font-family: 'Helvetica', 'Arial', sans-serif;">physically handicapped and
-                    dyslexic</span>
+                5. नेत्रहीन, <span class="english-text">physically handicapped and dyslexic</span>
                 परीक्षार्थियों को लेखन सुविधा के साथ-साथ परीक्षा अवधि में 30 मिनट का अतिरिक्त समय प्रदान किया जायेगा।
             </p>
             <p class="hindi-text">
