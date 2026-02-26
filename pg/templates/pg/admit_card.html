@@ -383,7 +383,7 @@
                     <th class="code-col">Subject Code</th>
                     <th class="subject-col">Subject Name</th>
                     <th class="time-col">Time</th>
-                    <th class="date-col">Date & Sitting</th>
+                    <th class="date-col">Date</th>
                 </tr>
             </thead>
             <tbody>
@@ -396,7 +396,7 @@
                     </td>
                     <td>{{ s.exam_time|default:"-" }}</td>
                     <td>
-                        {{ s.exam_date|date:"d-m-Y"|default:"-" }} / {{ s.sitting|default:"-" }}
+                        {{ s.exam_date|date:"d-m-Y"|default:"-" }}
                     </td>
                 </tr>
                 {% empty %}
@@ -411,7 +411,7 @@
         <table class="signatures-table">
             <tr>
                 <td class="sig-left">
-                    <div class="sig-line">Sig. & Seal of the Principal</div>
+                    <div class="sig-line">Sig. & Seal of the Principal / HOD</div>
                 </td>
                 <td class="sig-right">
                     {% if controller_signature %}
