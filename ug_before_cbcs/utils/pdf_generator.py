@@ -146,29 +146,33 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         }
         
         # Categorize the subject
-        if sub_name not in subjects_map:
-            
-            # Strict BA Part 1 Categorization Logic
-            p_code = result.paper_code.upper() if result.paper_code else ""
-            p_type = result.paper_type_code.upper() if result.paper_type_code else ""
-            
-            sub_type = 'subsidiary'
-            if '101' in p_code or p_type in ['HONS', 'HONOURS']:
+        p_code = result.paper_code.upper() if result.paper_code else ""
+        p_type = result.paper_type_code.upper() if result.paper_type_code else ""
+        
+        sub_type = 'subsidiary'
+        if '101' in p_code or p_type in ['HONS', 'HONOURS']:
+            sub_type = 'honours'
+        elif p_code in ['BA104', 'BA105'] or p_type in ['RB', 'NRB']:
+            sub_type = 'composition'
+        elif '102' in p_code:
+            sub_type = 'subsidiary_1'
+        elif '103' in p_code:
+            sub_type = 'subsidiary_2'
+        
+        # General fallback
+        if sub_type == 'subsidiary' and student_discipline:
+            if student_discipline in sub_name or sub_name.startswith(student_discipline):
                 sub_type = 'honours'
-            elif p_code in ['BA104', 'BA105'] or p_type in ['RB', 'NRB']:
-                sub_type = 'composition'
-            elif '102' in p_code:
-                sub_type = 'subsidiary_1'
-            elif '103' in p_code:
-                sub_type = 'subsidiary_2'
-            
-            # General fallback
-            if sub_type == 'subsidiary' and student_discipline:
-                if student_discipline in sub_name or sub_name.startswith(student_discipline):
-                    sub_type = 'honours'
-                
-            subjects_map[sub_name] = {
-                'name': result.subject_name,
+
+        # Use a unique key to prevent collisions (e.g., Honours English vs Composition English)
+        if sub_type == 'composition':
+            bucket_key = "COMPOSITION_GROUP"
+        else:
+            bucket_key = f"{sub_type}_{sub_name}"
+
+        if bucket_key not in subjects_map:
+            subjects_map[bucket_key] = {
+                'name': result.subject_name if sub_type != 'composition' else 'Composition',
                 'type': sub_type,
                 'papers': [],
                 'total_max': 0,
@@ -176,14 +180,14 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
                 'total_obtained': 0
             }
         
-        subjects_map[sub_name]['papers'].append(paper_data)
-        subjects_map[sub_name]['total_max'] += paper_max
+        subjects_map[bucket_key]['papers'].append(paper_data)
+        subjects_map[bucket_key]['total_max'] += paper_max
         # Pass marks logic is tricky: usually 45% for hons total, 33% for subs
         # For now, we take the pass mark from the result if provided
-        subjects_map[sub_name]['total_pass'] = max(subjects_map[sub_name]['total_pass'], paper_pass)
+        subjects_map[bucket_key]['total_pass'] = max(subjects_map[bucket_key].get('total_pass', 0), paper_pass)
         
         if isinstance(paper_obt, (int, float)):
-            subjects_map[sub_name]['total_obtained'] += paper_obt
+            subjects_map[bucket_key]['total_obtained'] += paper_obt
 
     # Separate subjects into groups
     honours_papers = []
@@ -261,6 +265,15 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     
     if not sub1 and subsidiary_subjects: sub1 = subsidiary_subjects[0]
     if not sub2 and len(subsidiary_subjects) > 1: sub2 = subsidiary_subjects[1]
+
+    # Sort subsidiary papers: Theory (END_TERM) first, then Practical (LAB/PRAC)
+    def sort_subsidiary_papers(sub):
+        if sub and 'papers' in sub:
+            # Sort by status: END_TERM should come before LAB/PRAC
+            sub['papers'].sort(key=lambda p: 0 if 'END' in p['status'] else 1)
+
+    sort_subsidiary_papers(sub1)
+    sort_subsidiary_papers(sub2)
 
     # Calculate Totals
     def sum_marks(papers):
