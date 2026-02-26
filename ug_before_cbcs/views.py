@@ -146,8 +146,8 @@ class UGOldMarksheetPDFView(View):
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Call the PDF generator utility
-        from .utils.pdf_generator import generate_ug_old_ba_hons_marksheet_pdf
-        pdf_content = generate_ug_old_ba_hons_marksheet_pdf(
+        from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
+        pdf_content = generate_ug_old_ba_hons_part1_pdf(
             student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
         )
         
@@ -187,8 +187,8 @@ class UGOldMarksheetJSONView(APIView):
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Get marksheet context data
-        from .utils.pdf_generator import get_ug_old_ba_hons_marksheet_context
-        context_data = get_ug_old_ba_hons_marksheet_context(
+        from .utils.pdf_generator import get_ug_old_ba_hons_part1_context
+        context_data = get_ug_old_ba_hons_part1_context(
             student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
         )
         
@@ -245,16 +245,20 @@ class UGOldMarksheetUpdateView(APIView):
 
     def post(self, request):
         registration_no = request.data.get("registration_no")
+        roll_no = request.data.get("roll_no")
         part = request.data.get("part")
         
-        if not registration_no or not part:
+        if not (registration_no or roll_no) or not part:
             return Response(
-                {"error": "registration_no and part are required"},
+                {"error": "registration_no/roll_no and part are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
         part_code = f"PART{part}"
-        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Get the results to identify the exam
         results = UGBeforeCBCSStudentResult.objects.filter(
@@ -281,6 +285,7 @@ class UGOldMarksheetUpdateView(APIView):
         exam_month_year = request.data.get("exam_month_year")
         publication_date = request.data.get("publication_date")
         centre_name = request.data.get("center_name") or request.data.get("centre_name")
+        exam_year = request.data.get("exam_year")
         
         if exam_name:
             exam.name = exam_name
@@ -290,20 +295,28 @@ class UGOldMarksheetUpdateView(APIView):
             exam.publication_date = publication_date
         if centre_name:
             exam.centre_name = centre_name
-            
-        if exam_name or exam_month_year or publication_date or centre_name:
+        if exam_year:
+            exam.exam_year = exam_year            
+        if exam_name or exam_month_year or publication_date or centre_name or exam_year:
             exam.save()
             
         # Update Student details (if provided)
         student_name = request.data.get("student_name")
-        father_name = request.data.get("fathers_name")
+        father_name = request.data.get("fathers_name") 
         mother_name = request.data.get("mothers_name")
         
-        if student_name: student.student_name = student_name
-        if father_name: student.fathers_name = father_name
-        if mother_name: student.mothers_name = mother_name
+        student_updated = False
+        if student_name: 
+            student.student_name = student_name
+            student_updated = True
+        if father_name: 
+            student.fathers_name = father_name
+            student_updated = True
+        if mother_name: 
+            student.mothers_name = mother_name
+            student_updated = True
         
-        if student_name or father_name or mother_name:
+        if student_updated:
             student.save()
             
         # Update Marks

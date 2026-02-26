@@ -9,6 +9,7 @@ from ug_before_cbcs.models import (
 )
 from pup_umis_backend.utils.file_utils import image_to_base64
 from ug_before_cbcs.utils.qr_generator import generate_qr_code_base64, generate_ug_marksheet_qr_text
+from .res_calculation import calculate_ba_hons_part1_result
 import os
 import logging
 from decimal import Decimal
@@ -49,9 +50,9 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, course_code=None, batch_code=None):
+def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
     """
-    Prepares and returns the context dictionary for the UG Before CBCS BA Hons marksheet.
+    Prepares and returns the context dictionary for the UG Before CBCS BA Hons Part 1 marksheet.
     """
     """
     Generate marksheet PDF for UG Before CBCS student using simplified models.
@@ -145,35 +146,33 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
         }
         
         # Categorize the subject
-        if sub_name not in subjects_map:
-            # Identification Logic: Prioritize paper_type_code
-            is_honours = False
-            if result.paper_type_code and result.paper_type_code.upper() in ['HONS', 'HONOURS']:
-                is_honours = True
-            elif student_discipline:
-                # 1. Direct match or startswith
-                if student_discipline in sub_name or sub_name.startswith(student_discipline):
-                    is_honours = True
-                # 2. Acronym match (e.g. AIH match A... I... H...)
-                else:
-                    words = [w for w in sub_name.replace('&', '').split() if w]
-                    acronym = "".join([w[0] for w in words])
-                    if student_discipline in acronym:
-                        is_honours = True
-                    # 3. Common legacy mappings
-                    elif student_discipline == 'AIH' and 'ANCIENT' in sub_name:
-                        is_honours = True
-            
-            sub_type = 'subsidiary'
-            if is_honours:
+        p_code = result.paper_code.upper() if result.paper_code else ""
+        p_type = result.paper_type_code.upper() if result.paper_type_code else ""
+        
+        sub_type = 'subsidiary'
+        if '101' in p_code or p_type in ['HONS', 'HONOURS']:
+            sub_type = 'honours'
+        elif p_code in ['BA104', 'BA105'] or p_type in ['RB', 'NRB']:
+            sub_type = 'composition'
+        elif '102' in p_code:
+            sub_type = 'subsidiary_1'
+        elif '103' in p_code:
+            sub_type = 'subsidiary_2'
+        
+        # General fallback
+        if sub_type == 'subsidiary' and student_discipline:
+            if student_discipline in sub_name or sub_name.startswith(student_discipline):
                 sub_type = 'honours'
-            elif part_code == 'PART3' and ('GES' in sub_name or 'GENERAL' in sub_name or 'STUDIES' in sub_name):
-                sub_type = 'general_studies'
-            elif 'HINDI' in sub_name or 'MB' in sub_name or 'COMP' in sub_name or 'RB' in sub_name or 'COMPOSITION' in sub_name:
-                sub_type = 'composition'
-                
-            subjects_map[sub_name] = {
-                'name': result.subject_name,
+
+        # Use a unique key to prevent collisions (e.g., Honours English vs Composition English)
+        if sub_type == 'composition':
+            bucket_key = "COMPOSITION_GROUP"
+        else:
+            bucket_key = f"{sub_type}_{sub_name}"
+
+        if bucket_key not in subjects_map:
+            subjects_map[bucket_key] = {
+                'name': result.subject_name if sub_type != 'composition' else 'Composition',
                 'type': sub_type,
                 'papers': [],
                 'total_max': 0,
@@ -181,14 +180,14 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
                 'total_obtained': 0
             }
         
-        subjects_map[sub_name]['papers'].append(paper_data)
-        subjects_map[sub_name]['total_max'] += paper_max
+        subjects_map[bucket_key]['papers'].append(paper_data)
+        subjects_map[bucket_key]['total_max'] += paper_max
         # Pass marks logic is tricky: usually 45% for hons total, 33% for subs
         # For now, we take the pass mark from the result if provided
-        subjects_map[sub_name]['total_pass'] = max(subjects_map[sub_name]['total_pass'], paper_pass)
+        subjects_map[bucket_key]['total_pass'] = max(subjects_map[bucket_key].get('total_pass', 0), paper_pass)
         
         if isinstance(paper_obt, (int, float)):
-            subjects_map[sub_name]['total_obtained'] += paper_obt
+            subjects_map[bucket_key]['total_obtained'] += paper_obt
 
     # Separate subjects into groups
     honours_papers = []
@@ -201,10 +200,34 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
             honours_papers.extend(sub['papers'])
         elif sub['type'] == 'composition':
             composition_papers.extend(sub['papers'])
-        elif sub['type'] == 'general_studies':
-            general_studies_papers.extend(sub['papers'])
-        else:
+        elif sub['type'] == 'subsidiary_1':
+            subsidiary_subjects.append(sub) # We'll handle them by type specifically
+        elif sub['type'] == 'subsidiary_2':
             subsidiary_subjects.append(sub)
+        else:
+            # Fallback for old grouping logic
+            subsidiary_subjects.append(sub)
+
+    # Sort Composition papers and assign display names
+    # BA104 (RB or NRB) and BA105 (MB if NRB)
+    final_composition_papers = []
+    comp_papers_raw = sorted(composition_papers, key=lambda x: x['paper_code'])
+    for p in comp_papers_raw:
+        res_obj = next((r for r in results if r.uid == p['uid']), None)
+        p_type = res_obj.paper_type_code.upper() if res_obj and res_obj.paper_type_code else ""
+        p_code = p['paper_code'].upper() if p['paper_code'] else ""
+        
+        if p_type == 'RB':
+            p['display_name'] = "Rastrabhasha hindi"
+        elif p_type == 'NRB':
+            if '104' in p_code:
+                p['display_name'] = "Non-Hindi"
+            else:
+                p['display_name'] = f"MB: {p['name'].title()}"
+        else:
+            p['display_name'] = p['name']
+        final_composition_papers.append(p)
+    composition_papers = final_composition_papers
 
     # Organize and rename Honours papers
     is_honours_with_practical = False
@@ -236,9 +259,21 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
     
     honours_papers = organized_honours
 
-    # Assign Subsidiaries (Only for Part 1/2)
-    sub1 = subsidiary_subjects[0] if len(subsidiary_subjects) > 0 else None
-    sub2 = subsidiary_subjects[1] if len(subsidiary_subjects) > 1 else None
+    # Explicitly assign Subsidiaries by type or fallback order
+    sub1 = next((s for s in subjects_map.values() if s['type'] == 'subsidiary_1'), None)
+    sub2 = next((s for s in subjects_map.values() if s['type'] == 'subsidiary_2'), None)
+    
+    if not sub1 and subsidiary_subjects: sub1 = subsidiary_subjects[0]
+    if not sub2 and len(subsidiary_subjects) > 1: sub2 = subsidiary_subjects[1]
+
+    # Sort subsidiary papers: Theory (END_TERM) first, then Practical (LAB/PRAC)
+    def sort_subsidiary_papers(sub):
+        if sub and 'papers' in sub:
+            # Sort by status: END_TERM should come before LAB/PRAC
+            sub['papers'].sort(key=lambda p: 0 if 'END' in p['status'] else 1)
+
+    sort_subsidiary_papers(sub1)
+    sort_subsidiary_papers(sub2)
 
     # Calculate Totals
     def sum_marks(papers):
@@ -255,7 +290,8 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
     hons_total_max = sum_max(honours_papers)
     
     comp_total_obt = sum_marks(composition_papers)
-    comp_total_max = sum_max(composition_papers)
+    # Composition total is always 100 (either RB 100 or NRB 50 + MB 50)
+    comp_total_max = 100
     
     gs_total_obt = sum_marks(general_studies_papers)
     gs_total_max = sum_max(general_studies_papers)
@@ -300,20 +336,21 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
                 'papers': honours_papers,
                 'total_max': hons_total_max,
                 'total_pass': int(hons_total_max * 0.45),
-                'total_obtained': hons_total_obt
+                'total_obtained': hons_total_obt,
+                'theory_total': sum_marks([p for p in honours_papers if 'Practical' not in p['name']])
             },
             'subsidiary_1': {
                 'name': sub1['name'] if sub1 else '',
                 'papers': sub1['papers'] if sub1 else [],
                 'total_max': sub1['total_max'] if sub1 else 0,
-                'total_pass': sub1['total_pass'] if sub1 else 0,
+                'total_pass': int((sub1['total_max'] if sub1 else 0) * 0.33),
                 'total_obtained': sub1['total_obtained'] if sub1 else 0
             },
             'subsidiary_2': {
                 'name': sub2['name'] if sub2 else '',
                 'papers': sub2['papers'] if sub2 else [],
                 'total_max': sub2['total_max'] if sub2 else 0,
-                'total_pass': sub2['total_pass'] if sub2 else 0,
+                'total_pass': int((sub2['total_max'] if sub2 else 0) * 0.33),
                 'total_obtained': sub2['total_obtained'] if sub2 else 0
             },
             'composition': {
@@ -323,16 +360,14 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
                 'total_pass': int(comp_total_max * 0.33),
                 'total_obtained': comp_total_obt
             },
-            'general_studies': {
-                'name': 'General & Environmental Studies',
-                'papers': general_studies_papers,
-                'total_max': gs_total_max,
-                'total_pass': int(gs_total_max * 0.33),
-                'total_obtained': gs_total_obt
-            }
         },
         'grand_total': final_grand_total,
-        'result_status': summary.final_result if summary else "PENDING",
+        'result_status': calculate_ba_hons_part1_result(
+            hons_total_obt, hons_total_max,
+            sub1.get('total_obtained', 0) if sub1 else 0, sub1.get('total_max', 0) if sub1 else 0,
+            sub2.get('total_obtained', 0) if sub2 else 0, sub2.get('total_max', 0) if sub2 else 0,
+            comp_total_obt, comp_total_max
+        ),
         'hons_total_words': num2words(hons_total_obt),
         'grand_total_words': num2words(final_grand_total) + " Only",
         'publication_date': exam.publication_date.strftime("%d-%m-%Y") if exam.publication_date else "N/A",
@@ -354,12 +389,12 @@ def get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type=None, cou
 
     return context
 
-def generate_ug_old_ba_hons_marksheet_pdf(student, exam_part, exam_type=None, course_code=None, batch_code=None):
+def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
     """
-    Generate marksheet PDF for UG Before CBCS student using simplified models.
+    Generate marksheet PDF for UG Before CBCS student Part 1.
     """
     from weasyprint import HTML
-    context = get_ug_old_ba_hons_marksheet_context(student, exam_part, exam_type, course_code, batch_code)
+    context = get_ug_old_ba_hons_part1_context(student, exam_part, exam_type, course_code, batch_code)
 
     if not context:
         return None
