@@ -1,6 +1,8 @@
 from django.db import models
 import uuid
 from django.conf import settings
+from pup_umis_backend.storage_backends import MediaStorage
+from pup_umis_backend.upload_paths import unique_file_path
 from .choices import (
     SEMESTER_RESULT_CHOICES,
     STUDENT_STATUS_CHOICES,
@@ -117,8 +119,8 @@ class MCAStudentProfile(models.Model):
     session_str = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='REGULAR')
 
-    profile_image = models.ImageField(upload_to='mca_students/profiles/', null=True, blank=True)
-    signature = models.ImageField(upload_to='mca_students/signatures/', null=True, blank=True)
+    profile_image = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('mca_students/profiles/'), null=True, blank=True)
+    signature = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('mca_students/signatures/'), null=True, blank=True)
     is_active = models.BooleanField(default=True)
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

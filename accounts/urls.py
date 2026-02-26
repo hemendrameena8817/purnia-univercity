@@ -2,6 +2,7 @@ from django.urls import path
 from dj_rest_auth.views import LogoutView
 from .views import LoginView, ProfileView, DashboardView, ChangePasswordView
 from .api.admin import RegistrationWindowControlView
+from .api.college_students import CollegeStudentListView, CollegeStudentDetailView
 
 urlpatterns = [
     # Unified Login
@@ -17,4 +18,8 @@ urlpatterns = [
     
     # Admin APIs
     path('admin/registration-window/', RegistrationWindowControlView.as_view(), name='registration-window-control'),
+
+    # College Student Management
+    path('college/students/', CollegeStudentListView.as_view(), name='college-student-list'),
+    path('college/students/<str:identifier>/', CollegeStudentDetailView.as_view(), name='college-student-detail'),
 ]
