@@ -163,22 +163,26 @@ def generate_pg_admit_card_pdf(student, exam):
         if dept_schedules.exists():
             schedules_query = dept_schedules
 
-    # Build TWO lookups for matching assessment subjects to exam schedules:
-    # 1. schedule_by_course_type: 'CC' → schedule (from ccs.course_type)  ← most reliable
-    # 2. schedule_by_prefix: 'CC' → schedule (from ccs.course_code prefix) ← fallback
-    schedule_by_prefix = {}
-    schedule_by_course_type = {}
+    # Build THREE lookups for matching assessment subjects to exam schedules:
+    # 1. schedule_by_course_code: 'CC-1' → schedule  ← most accurate (exact match)
+    # 2. schedule_by_course_type: 'CC' → schedule    ← fallback (only if course_type is unique)
+    # 3. schedule_by_prefix: 'CC' → schedule         ← last prefix fallback
+    schedule_by_course_code = {}   # exact: 'CC-1', 'EC-2', etc.
+    schedule_by_course_type = {}   # broad: 'CC', 'EC', etc. (may overwrite if multiple groups)
+    schedule_by_prefix = {}        # prefix fallback
     schedule_default = schedules_query.first()  # last resort fallback
     for s in schedules_query:
         ccs = s.common_course_structure
         if ccs:
-            # By course_type (most reliable: 'CC', 'EC', 'AECC', 'SEC')
-            if ccs.course_type:
-                schedule_by_course_type[ccs.course_type.upper()] = s
-            # By course_code prefix (fallback: 'CC-X' → 'CC')
+            # Exact course_code match — most reliable (unique per paper)
             if ccs.course_code:
+                schedule_by_course_code[ccs.course_code.upper()] = s
+                # Prefix fallback (e.g. 'CC-1' → key 'CC')
                 prefix = ccs.course_code.split('-')[0].upper()
                 schedule_by_prefix[prefix] = s
+            # course_type fallback (may be overwritten for same-type schedules)
+            if ccs.course_type:
+                schedule_by_course_type[ccs.course_type.upper()] = s
 
     # ── Get subjects from student's ESE assessments ────────────────────────────
     # Convert registration semester (int) to text like '3RD'
@@ -211,16 +215,22 @@ def generate_pg_admit_card_pdf(student, exam):
         # Find correct schedule for this subject's date/time:
         # Priority: course_type match → course_code prefix → paper_code prefix → fallback
         sched = None
-        # 1. Direct course_type match (most accurate: 'CC', 'EC', 'AECC', 'SEC')
-        if a.course_type:
+        # 1. Exact course_code match (most accurate: 'CC-1', 'EC-2', etc.)
+        if a.course_code:
+            sched = schedule_by_course_code.get(a.course_code.upper())
+        # 2. Exact paper_code match
+        if not sched and a.paper_code:
+            sched = schedule_by_course_code.get(a.paper_code.upper())
+        # 3. course_type match (broad: 'CC', 'EC', 'AECC', 'SEC')
+        if not sched and a.course_type:
             sched = schedule_by_course_type.get(a.course_type.upper())
-        # 2. Prefix from course_code
+        # 4. Prefix from course_code
         if not sched and a.course_code:
             sched = schedule_by_prefix.get(a.course_code.split('-')[0].upper())
-        # 3. Prefix from paper_code
+        # 5. Prefix from paper_code
         if not sched and a.paper_code:
             sched = schedule_by_prefix.get(a.paper_code.split('-')[0].upper())
-        # 4. Last resort
+        # 6. Last resort
         if not sched:
             sched = schedule_default
 
