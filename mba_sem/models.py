@@ -1,6 +1,8 @@
 from django.db import models
 import uuid
 from django.conf import settings
+from pup_umis_backend.storage_backends import MediaStorage
+from pup_umis_backend.upload_paths import unique_file_path
 from .choices import (
     SEMESTER_RESULT_CHOICES,
     STUDENT_STATUS_CHOICES,
@@ -123,8 +125,8 @@ class MBAStudentProfile(models.Model):
     session_str = models.CharField(max_length=50, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STUDENT_STATUS_CHOICES, default='Regular')
 
-    profile_image = models.ImageField(upload_to='mba_students/profiles/', null=True, blank=True)
-    signature = models.ImageField(upload_to='mba_students/signatures/', null=True, blank=True)
+    profile_image = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('mba_students/profiles/'), null=True, blank=True)
+    signature = models.ImageField(storage=MediaStorage(), upload_to=unique_file_path('mba_students/signatures/'), null=True, blank=True)
 
     sem_1_gpa = models.CharField(max_length=50, null=True, blank=True)
     sem_1_credit_earned = models.CharField(max_length=50, null=True, blank=True)
