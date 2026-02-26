@@ -163,14 +163,22 @@ def generate_pg_admit_card_pdf(student, exam):
         if dept_schedules.exists():
             schedules_query = dept_schedules
 
-    # Build a lookup: course_code_prefix → schedule entry (for date/time attaching)
-    # e.g. 'CC' → schedule_entry for CC-X, 'AECC' → schedule_entry for AECC-II
+    # Build TWO lookups for matching assessment subjects to exam schedules:
+    # 1. schedule_by_course_type: 'CC' → schedule (from ccs.course_type)  ← most reliable
+    # 2. schedule_by_prefix: 'CC' → schedule (from ccs.course_code prefix) ← fallback
     schedule_by_prefix = {}
-    schedule_default = schedules_query.first()  # fallback
+    schedule_by_course_type = {}
+    schedule_default = schedules_query.first()  # last resort fallback
     for s in schedules_query:
-        if s.common_course_structure and s.common_course_structure.course_code:
-            prefix = s.common_course_structure.course_code.split('-')[0].upper()
-            schedule_by_prefix[prefix] = s
+        ccs = s.common_course_structure
+        if ccs:
+            # By course_type (most reliable: 'CC', 'EC', 'AECC', 'SEC')
+            if ccs.course_type:
+                schedule_by_course_type[ccs.course_type.upper()] = s
+            # By course_code prefix (fallback: 'CC-X' → 'CC')
+            if ccs.course_code:
+                prefix = ccs.course_code.split('-')[0].upper()
+                schedule_by_prefix[prefix] = s
 
     # ── Get subjects from student's ESE assessments ────────────────────────────
     # Convert registration semester (int) to text like '3RD'
@@ -200,18 +208,21 @@ def generate_pg_admit_card_pdf(student, exam):
             continue
         seen_papers.add(key)
 
-        # Find the schedule entry for this course prefix to get date/time
-        # Try multiple strategies: course_code prefix → paper_code prefix → course_type
+        # Find correct schedule for this subject's date/time:
+        # Priority: course_type match → course_code prefix → paper_code prefix → fallback
         sched = None
-        for candidate in [a.course_code, a.paper_code, a.course_type]:
-            if not candidate:
-                continue
-            prefix = candidate.split('-')[0].upper()
-            if prefix and prefix in schedule_by_prefix:
-                sched = schedule_by_prefix[prefix]
-                break
-        if sched is None:
-            sched = schedule_default  # last resort fallback
+        # 1. Direct course_type match (most accurate: 'CC', 'EC', 'AECC', 'SEC')
+        if a.course_type:
+            sched = schedule_by_course_type.get(a.course_type.upper())
+        # 2. Prefix from course_code
+        if not sched and a.course_code:
+            sched = schedule_by_prefix.get(a.course_code.split('-')[0].upper())
+        # 3. Prefix from paper_code
+        if not sched and a.paper_code:
+            sched = schedule_by_prefix.get(a.paper_code.split('-')[0].upper())
+        # 4. Last resort
+        if not sched:
+            sched = schedule_default
 
         schedules.append(SimpleNamespace(
             common_course_structure=SimpleNamespace(
