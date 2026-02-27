@@ -477,8 +477,8 @@ class UGBeforeCBCSOverviewRefreshView(APIView):
         stats_obj.save()
 
         # Keep only the latest 5 entries to save space
-        UGBeforeCBCSStatistics.objects.filter(
-            pk__in=UGBeforeCBCSStatistics.objects.order_by('-last_updated').values_list('pk', flat=True)[5:]
-        ).delete()
+        old_ids = list(UGBeforeCBCSStatistics.objects.order_by('-last_updated').values_list('pk', flat=True)[5:])
+        if old_ids:
+            UGBeforeCBCSStatistics.objects.filter(pk__in=old_ids).delete()
 
         return Response(data, status=status.HTTP_201_CREATED)
