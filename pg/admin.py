@@ -333,6 +333,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
         'is_cia_fill', 'is_ese_fill',
         'department',
         'college_code',
+        'course_code',
     )
 
     # Search on indexed fields only
