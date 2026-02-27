@@ -62,41 +62,58 @@
         .roll-sheet-table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 10px;
             margin-bottom: 10px;
+            table-layout: fixed;
         }
 
         .roll-sheet-table th,
         .roll-sheet-table td {
             border: 1px solid #000;
-            padding: 3px 2px;
+            padding: 5px 2px;
             text-align: center;
             vertical-align: middle;
-            font-size: 8pt;
+            font-size: 7.5pt;
+            overflow: hidden;
+            word-wrap: break-word;
         }
 
         .roll-sheet-table th {
-            background-color: #e8e8e8;
+            background-color: #f0f0f0;
             font-weight: bold;
-            font-size: 8.5pt;
+            font-size: 8pt;
+            height: 30px;
+        }
+
+        .vertical-text {
+            writing-mode: vertical-rl;
+            display: inline-block;
+            text-align: left;
+            padding: 5px 0;
+            max-height: 150px;
+            word-break: break-all;
         }
 
         .roll-sheet-table .serial-col {
-            width: 30px;
+            width: 25px;
         }
 
         .roll-sheet-table .student-name {
-            text-align: left;
-            padding-left: 5px;
-            width: 140px;
-            font-size: 8pt;
+            width: 50px;
+            /* Narrow because text is vertical */
+            height: 120px;
         }
 
         .roll-sheet-table .roll-col {
-            width: 60px;
+            width: 45px;
         }
 
         .roll-sheet-table .reg-col {
-            width: 80px;
+            width: 70px;
+        }
+
+        .roll-sheet-table .subject-col {
+            width: 45px;
         }
 
         .roll-sheet-table .subject-col {
@@ -117,6 +134,19 @@
             display: block;
             line-height: 1.1;
             word-wrap: break-word;
+        }
+
+        .subject-data-cell {
+            font-size: 6.5pt;
+            line-height: 1.1;
+            word-wrap: break-word;
+            word-break: break-all;
+            padding: 2px;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         /* Signature placeholder box */
@@ -192,7 +222,7 @@
         <!-- Header -->
         <div class="header">
             <h1>{{ center_name|upper }}</h1>
-            <p style="font-size: 10pt; margin: 5px 0 10px; font-weight: normal">
+            <p style="font-size: 11pt; margin: 3px 0 8px; font-weight: bold; letter-spacing: 1px;">
                 Exam Roll Sheet
             </p>
         </div>
@@ -201,18 +231,15 @@
         <div class="meta-info">
             <table>
                 <tr>
-                    <td>
-                        <span class="label">Batch:</span> {{ batch_name|default:"-" }}
-                    </td>
-                    <td><span class="label">Course:</span> {{ course_name }}</td>
-                    <td>
-                        <span class="label">Semester:</span> {{ semester|default:"-" }}
-                    </td>
+                    <td width="20%"><span class="label">Batch:</span> {{ batch_name|default:"-" }}</td>
+                    <td width="20%"><span class="label">Session:</span> {{ exam.session|default:"-" }}</td>
+                    <td width="25%"><span class="label">Course:</span> {{ course_name }}</td>
+                    <td width="35%"><span class="label">Discipline:</span> {{ discipline_name }}</td>
                 </tr>
                 <tr>
-                    <td colspan="3">
-                        <span class="label">College:</span> {{ college_name }}
-                    </td>
+                    <td><span class="label">Semester:</span> {{ semester|default:"-" }}</td>
+                    <td><span class="label">Syllabus:</span> {{ syllabus_year|default:"-" }}</td>
+                    <td colspan="2"><span class="label">Institute:</span> {{ institute_name }}</td>
                 </tr>
             </table>
         </div>
@@ -227,8 +254,9 @@
                     <th class="reg-col">Reg No</th>
                     {% for subject in subjects %}
                     <th class="subject-col">
-                        <span class="subject-code">{{ subject.code|default:"-" }}</span>
-                        <span class="subject-name">{{ subject.course_name }}</span>
+                        <div class="vertical-text">
+                            <span class="subject-code">{{ subject.code }}</span>
+                        </div>
                     </th>
                     {% endfor %}
                 </tr>
@@ -237,16 +265,18 @@
                 {% for student_row in student_data %}
                 <tr>
                     <td class="serial-col">{{ forloop.counter }}</td>
-                    <td class="student-name">{{ student_row.name|upper }}</td>
+                    <td class="student-name">
+                        <div class="vertical-text">{{ student_row.name|upper }}</div>
+                    </td>
                     <td class="roll-col">{{ student_row.roll_no }}</td>
                     <td class="reg-col">{{ student_row.registration_no }}</td>
-                    {% for subject in subjects %}
+                    {% for subj_info in student_row.row_subjects %}
                     <td class="subject-col">
-                        {% if subject.id in student_row.subject_ids %}
-                        <!-- Student is registered for this subject - show subject code -->
-                        <span style="font-weight: bold; font-size: 8pt">{{ subject.code|default:"-" }}</span>
+                        {% if subj_info.is_registered %}
+                        <div class="subject-data-cell" style="font-weight: bold;">
+                            {{ subj_info.display_name|default:"-" }}
+                        </div>
                         {% else %}
-                        <!-- Not registered (for backlog/improvement cases) -->
                         <span class="not-registered">-</span>
                         {% endif %}
                     </td>
@@ -266,26 +296,10 @@
         <div class="footer">
             <table>
                 <tr>
-                    <!-- <td
-              class="sig-box"
-              style="text-align: left; vertical-align: bottom"
-            >
-              <div style="height: 45px"></div>
-              <div class="sig-line">Signature of Invigilator</div>
-            </td>
-            <td class="sig-box" style="vertical-align: bottom">
-              <div style="height: 40px"></div>
-              <div class="sig-line">Signature of Center Supdt.</div>
-            </td> -->
                     <td class="sig-box" style="text-align: right; vertical-align: bottom">
                         {% if controller_signature %}
-                        <div style="
-                  height: 40px;
-                  display: flex;
-                  align-items: flex-end;
-                  justify-content: center;
-                  margin-left: 870px;
-                ">
+                        <div
+                            style="height: 40px; display: flex; align-items: flex-end; justify-content: center; margin-left: 870px;">
                             <img src="data:image/png;base64,{{ controller_signature }}" alt="Controller Signature"
                                 style="max-width: 120px; max-height: 40px; display: block" />
                         </div>
