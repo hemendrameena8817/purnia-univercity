@@ -236,20 +236,30 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     paper2 = None
     practical = None
 
+    # First, check if there's a practical components for Honours
+    has_hons_practical = any(p['status'] == 'LAB' for p in honours_papers)
+    is_honours_with_practical = has_hons_practical
+
     for p in honours_papers:
         if '101' in p['paper_code']:
             if p['status'] == 'END_TERM':
                 paper1 = p
                 paper1['name'] = 'Paper-I'
+                if has_hons_practical:
+                    paper1['max_marks'] = 75
+                    paper1['pass_marks'] = 33 # Usually combined 67 for theory in some rules, but individual pass marks are often ignored in Hons
             elif p['status'] == 'END2_TERM':
                 paper2 = p
                 paper2['name'] = 'Paper-II'
+                if has_hons_practical:
+                    paper2['max_marks'] = 75
             elif p['status'] == 'LAB':
                 practical = p
                 practical['name'] = 'Practical'
-                is_honours_with_practical = True
+                if has_hons_practical:
+                    practical['max_marks'] = 50
+                    practical['pass_marks'] = 23
         else:
-            # For other honours papers that are not '101'
             organized_honours.append(p)
 
     # Add in specific order
@@ -265,6 +275,30 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     
     if not sub1 and subsidiary_subjects: sub1 = subsidiary_subjects[0]
     if not sub2 and len(subsidiary_subjects) > 1: sub2 = subsidiary_subjects[1]
+
+    # Handle Practical Marks for Subsidiaries
+    def apply_subsidiary_practical_rules(sub):
+        if not sub or 'papers' not in sub: return
+        
+        has_prac = any('LAB' in p['status'] or 'PRAC' in p['status'] for p in sub['papers'])
+        if has_prac:
+            for p in sub['papers']:
+                if 'END' in p['status']: # Theory
+                    p['name'] = 'Theory'
+                    p['max_marks'] = 75
+                    p['pass_marks'] = 23
+                else: # Practical
+                    p['name'] = 'Practical'
+                    p['max_marks'] = 25
+                    p['pass_marks'] = 10
+            
+            # Recalculate totals for the subject
+            sub['total_max'] = sum(p['max_marks'] for p in sub['papers'])
+            sub['total_pass'] = sum(p['pass_marks'] for p in sub['papers'])
+            # total_obtained is already summed during initial grouping
+
+    apply_subsidiary_practical_rules(sub1)
+    apply_subsidiary_practical_rules(sub2)
 
     # Sort subsidiary papers: Theory (END_TERM) first, then Practical (LAB/PRAC)
     def sort_subsidiary_papers(sub):
@@ -309,10 +343,15 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         else:
             honours_subject_name = "Honours"
 
-    # Calculate Grand Total
+    # Calculate Grand Total Marks
     calculated_grand_total = hons_total_obt + comp_total_obt + gs_total_obt
     if sub1: calculated_grand_total += sub1.get('total_obtained', 0)
     if sub2: calculated_grand_total += sub2.get('total_obtained', 0)
+
+    # Calculate Grand Total Possible (Full Marks)
+    grand_total_max = hons_total_max + comp_total_max + gs_total_max
+    if sub1: grand_total_max += sub1.get('total_max', 0)
+    if sub2: grand_total_max += sub2.get('total_max', 0)
 
     # Use stored total if valid and non-zero, otherwise use calculated
     stored_total = clean_mark(summary.total_secured_mark) if summary else 0
@@ -335,7 +374,7 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
                 'name': honours_subject_name,
                 'papers': honours_papers,
                 'total_max': hons_total_max,
-                'total_pass': int(hons_total_max * 0.45),
+                'total_pass': 90,
                 'total_obtained': hons_total_obt,
                 'theory_total': sum_marks([p for p in honours_papers if 'Practical' not in p['name']])
             },
@@ -343,14 +382,14 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
                 'name': sub1['name'] if sub1 else '',
                 'papers': sub1['papers'] if sub1 else [],
                 'total_max': sub1['total_max'] if sub1 else 0,
-                'total_pass': int((sub1['total_max'] if sub1 else 0) * 0.33),
+                'total_pass': sub1['total_pass'] if sub1 and 'total_pass' in sub1 else int((sub1['total_max'] if sub1 else 0) * 0.33),
                 'total_obtained': sub1['total_obtained'] if sub1 else 0
             },
             'subsidiary_2': {
                 'name': sub2['name'] if sub2 else '',
                 'papers': sub2['papers'] if sub2 else [],
                 'total_max': sub2['total_max'] if sub2 else 0,
-                'total_pass': int((sub2['total_max'] if sub2 else 0) * 0.33),
+                'total_pass': sub2['total_pass'] if sub2 and 'total_pass' in sub2 else int((sub2['total_max'] if sub2 else 0) * 0.33),
                 'total_obtained': sub2['total_obtained'] if sub2 else 0
             },
             'composition': {
@@ -361,6 +400,7 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
                 'total_obtained': comp_total_obt
             },
         },
+        'grand_total_max': grand_total_max,
         'grand_total': final_grand_total,
         'result_status': calculate_ba_hons_part1_result(
             hons_total_obt, hons_total_max,

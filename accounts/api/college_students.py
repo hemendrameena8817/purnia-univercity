@@ -397,14 +397,16 @@ def _find_student(identifier, college=None):
 class CollegeStudentListView(APIView):
     """
     GET /api/accounts/college/students/
+    Returns students from ALL profile tables combined.
     college_user     → only their college students
     university_admin → all students (or ?college_code= to filter)
+
+    Optional: ?profile_type=ug  → search only that one table
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        print(f"[DEBUG-LIST] user={request.user.username}, user_type={request.user.user_type}")
         if request.user.user_type not in ('college_user', 'university_admin'):
             return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -412,9 +414,9 @@ class CollegeStudentListView(APIView):
         if err:
             return err
 
-        profile_type = request.GET.get('profile_type', 'ug').strip().lower()
-        conf = PROFILE_REGISTRY.get(profile_type)
-        if not conf:
+        # Optional: narrow to one profile type
+        profile_type_filter = request.GET.get('profile_type', '').strip().lower()
+        if profile_type_filter and profile_type_filter not in PROFILE_REGISTRY:
             return Response(
                 {'error': f"Unknown profile_type. Valid: {', '.join(PROFILE_REGISTRY)}"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -432,43 +434,67 @@ class CollegeStudentListView(APIView):
             page = 1
             page_size = PAGE_SIZE
 
-        Model = conf['get_model']()
-        qs = Model.objects.select_related('user', 'college')
-
-        if college:
-            qs = qs.filter(**{f"{conf['college_field']}__college_code": college.college_code})
-            print(f"[DEBUG-LIST] Filtering by college_code={college.college_code}")
-
         from django.db.models import Q
-        if search:
-            qs = qs.filter(
-                Q(**{f"{conf['reg_field']}__icontains": search}) |
-                Q(**{f"{conf['roll_field']}__icontains": search}) |
-                Q(**{f"{conf['first_name_field']}__icontains": search})
-            )
-        if roll_no:
-            qs = qs.filter(**{f"{conf['roll_field']}__icontains": roll_no})
-        if reg_no:
-            qs = qs.filter(**{f"{conf['reg_field']}__icontains": reg_no})
-        if name:
-            qs = qs.filter(**{f"{conf['first_name_field']}__icontains": name})
 
-        qs = qs.order_by(conf['reg_field'])
-        total = qs.count()
-        print(f"[DEBUG-LIST] Total results: {total}, SQL: {qs.query}")
+        # Decide which tables to scan
+        if profile_type_filter:
+            tables_to_scan = {profile_type_filter: PROFILE_REGISTRY[profile_type_filter]}
+        else:
+            tables_to_scan = PROFILE_REGISTRY
+
+        # Collect results from all tables
+        all_results = []
+        counts_by_type = {}
+
+        for ptype, conf in tables_to_scan.items():
+            try:
+                Model = conf['get_model']()
+                qs = Model.objects.select_related('user', 'college')
+
+                # College filter
+                if college:
+                    qs = qs.filter(**{f"{conf['college_field']}__college_code": college.college_code})
+
+                # Search filters
+                if search:
+                    qs = qs.filter(
+                        Q(**{f"{conf['reg_field']}__icontains": search}) |
+                        Q(**{f"{conf['roll_field']}__icontains": search}) |
+                        Q(**{f"{conf['first_name_field']}__icontains": search})
+                    )
+                if roll_no:
+                    qs = qs.filter(**{f"{conf['roll_field']}__icontains": roll_no})
+                if reg_no:
+                    qs = qs.filter(**{f"{conf['reg_field']}__icontains": reg_no})
+                if name:
+                    qs = qs.filter(**{f"{conf['first_name_field']}__icontains": name})
+
+                qs = qs.order_by(conf['reg_field'])
+                count = qs.count()
+                counts_by_type[ptype] = count
+
+                # Serialize all matching records from this table
+                SerializerClass = conf['make_serializer']()
+                for profile in qs:
+                    data = SerializerClass(profile, context={'request': request}).data
+                    data['profile_type'] = ptype
+                    all_results.append(data)
+            except Exception:
+                counts_by_type[ptype] = 0
+                continue
+
+        total = len(all_results)
         offset = (page - 1) * page_size
-
-        SerializerClass = conf['make_serializer']()
-        data = SerializerClass(qs[offset:offset + page_size], many=True, context={'request': request}).data
+        page_results = all_results[offset:offset + page_size]
 
         return Response({
             'total': total,
             'page': page,
             'page_size': page_size,
             'num_pages': (total + page_size - 1) // page_size,
-            'profile_type': profile_type,
             'college': college.name if college else 'All',
-            'results': data,
+            'counts_by_profile': counts_by_type,
+            'results': page_results,
         })
 
 
