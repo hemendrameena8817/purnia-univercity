@@ -1034,6 +1034,7 @@ class PGExamAdmin(admin.ModelAdmin):
     list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
     list_filter = ('session', 'year', 'batch')
     search_fields = ('name', 'session', 'batch')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
 
 @admin.register(PGExamCenterMapping)
