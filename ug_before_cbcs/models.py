@@ -505,7 +505,7 @@ class UGBeforeCBCSStatistics(models.Model):
     heavy database queries on every dashboard load.
     """
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    data = models.JSONField(help_text='The statistics JSON structure')
+    data = models.JSONField(help_text='The statistics JSON structure', null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True)
 
     class Meta:

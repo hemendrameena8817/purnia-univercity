@@ -19,18 +19,29 @@ from django.contrib import messages
 class UGBeforeCBCSStatisticsAdmin(admin.ModelAdmin):
     list_display = ('last_updated', 'total_students', 'total_results')
     readonly_fields = ('uid', 'last_updated', 'data')
-    actions = ['refresh_stats']
+    change_list_template = "admin/ug_before_cbcs/stats_changelist.html"
 
     def total_students(self, obj):
+        if not obj.data: return 0
         return obj.data.get('counts', {}).get('global', {}).get('total_students', 0)
     
     def total_results(self, obj):
+        if not obj.data: return 0
         return obj.data.get('counts', {}).get('global', {}).get('total_result_entries', 0)
 
-    @admin.action(description='Recalculate and Refresh Statistics')
-    def refresh_stats(self, request, queryset):
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('refresh-stats/', self.admin_site.admin_view(self.refresh_stats_view), name='refresh-stats'),
+        ]
+        return custom_urls + urls
+
+    def refresh_stats_view(self, request):
+        from django.shortcuts import redirect
         calculate_and_save_ug_before_cbcs_stats()
         self.message_user(request, "Statistics refreshed successfully.", messages.SUCCESS)
+        return redirect("..")
 
 @admin.register(UGBeforeCBCSStudentProfile)
 class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
