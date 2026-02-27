@@ -6,7 +6,9 @@ def generate_pg_admit_card_pdf(student, exam):
     from django.template.loader import get_template
     from pg.models import PGExamCenterMapping, PGExamSchedule, PGExamRegistration, PGStudentCourseAssessment
     from pup_umis_backend.utils.file_utils import image_to_base64
-
+    import qrcode
+    import base64
+    from io import BytesIO
     logger = logging.getLogger(__name__)
 
     def _get_base64_image(image_field_or_path):
@@ -245,7 +247,28 @@ def generate_pg_admit_card_pdf(student, exam):
             sitting=sched.sitting if sched else '-',
         ))
 
+    # ── QR Code ─────────────────────────────────────────────────────────────────
+    qr_code_image = None
+    try:
+        qr_data = (
+            f"Session: {registration.student.batch if registration else '-'}\n"
+            f"Candidate Name: {student.first_name}\n"
+            f"Registration No: {student.registration_no}\n"
+            f"Exam Center: {exam_center.center_code if exam_center else '-'} - {exam_center.name if exam_center else '-'}\n"
+            f"College: {student.college.name if student.college else '-'}\n"
+            f"Exam Type: {exam_type}"
+        )
 
+        qr = qrcode.QRCode(version=1, box_size=6, border=2)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+
+        buf = BytesIO()
+        qr_img.save(buf, format='PNG')
+        qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    except Exception as e:
+        logger.warning(f"QR code generation failed: {e}")
     # ── Context ────────────────────────────────────────────────────────────────
     context = {
         "student": student,
@@ -260,6 +283,7 @@ def generate_pg_admit_card_pdf(student, exam):
         "student_photo": _get_base64_image(student.profile_image),
         "student_sig": _get_base64_image(student.signature),
         "controller_signature": _load_static_image("controller-of-examination-signature.png"),
+        "qr_code_image": qr_code_image,
     }
 
     html_string = get_template("pg/admit_card.html").render(context)

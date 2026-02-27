@@ -411,10 +411,16 @@
         <!-- SIGNATURES -->
         <table class="signatures-table">
             <tr>
-                <td class="sig-left">
+                <td class="sig-left" style="width: 33%;">
                     <div class="sig-line">Sig. & Seal of the Principal / HOD</div>
                 </td>
-                <td class="sig-right">
+                <td style="width: 34%; text-align: center; vertical-align: bottom;">
+                    {% if qr_code_image %}
+                    <img src="{{ qr_code_image }}" alt="QR Code"
+                        style="width: 90px; height: 90px; display: block; margin: 0 auto 5px auto;" />
+                    {% endif %}
+                </td>
+                <td class="sig-right" style="width: 33%;">
                     {% if controller_signature %}
                     <img src="{{ controller_signature }}" alt="Controller Signature" style="
                 max-width: 150px;
