@@ -267,6 +267,7 @@ def generate_pg_admit_card_pdf(student, exam):
         buf = BytesIO()
         qr_img.save(buf, format='PNG')
         qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        qr_code_image = f"data:image/png;base64,{qr_b64}"
     except Exception as e:
         logger.warning(f"QR code generation failed: {e}")
     # ── Context ────────────────────────────────────────────────────────────────
