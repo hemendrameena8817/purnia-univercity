@@ -9,8 +9,28 @@ from django.utils.html import format_html
 from .models import (
     UGBeforeCBCSStudentProfile,
     UGBeforeCBCSExam,
-    UGBeforeCBCSStudentResult
+    UGBeforeCBCSStudentResult,
+    UGBeforeCBCSStatistics
 )
+from .utils.stats import calculate_and_save_ug_before_cbcs_stats
+from django.contrib import messages
+
+@admin.register(UGBeforeCBCSStatistics)
+class UGBeforeCBCSStatisticsAdmin(admin.ModelAdmin):
+    list_display = ('last_updated', 'total_students', 'total_results')
+    readonly_fields = ('uid', 'last_updated', 'data')
+    actions = ['refresh_stats']
+
+    def total_students(self, obj):
+        return obj.data.get('counts', {}).get('global', {}).get('total_students', 0)
+    
+    def total_results(self, obj):
+        return obj.data.get('counts', {}).get('global', {}).get('total_result_entries', 0)
+
+    @admin.action(description='Recalculate and Refresh Statistics')
+    def refresh_stats(self, request, queryset):
+        calculate_and_save_ug_before_cbcs_stats()
+        self.message_user(request, "Statistics refreshed successfully.", messages.SUCCESS)
 
 @admin.register(UGBeforeCBCSStudentProfile)
 class UGBeforeCBCSStudentProfileAdmin(admin.ModelAdmin):
