@@ -272,6 +272,7 @@ def generate_pg_admit_card_pdf(student, exam):
         logger.warning(f"QR code generation failed: {e}")
     # ── Context ────────────────────────────────────────────────────────────────
     context = {
+        "exam": exam.name,
         "student": student,
         "registration": registration,
         "exam_type": exam_type,
@@ -321,9 +322,22 @@ def generate_pg_roll_sheet_pdf(exam, college):
     logger = logging.getLogger(__name__)
 
     # 1. Get all students registered for this exam in this college
-    # Filter by session only — `sem` field in PGExamRegistration may be NULL or inconsistent.
+    # `sem` on PGExamRegistration is an IntegerField.
+    # exam.year might be wrong in DB (e.g. year=2 for '3rd sem exam'), so
+    # also extract semester number from exam.name as a robust fallback.
+    import re as _re
     ey = str(exam.year) if exam.year else ""
-    sem_variants_int = [int(ey)] if ey.isdigit() else []
+    sem_variants_int = set()
+    if ey.isdigit():
+        sem_variants_int.add(int(ey))
+
+    # Extract from exam.name, e.g. "PG 3rd sem exam" → 3
+    if exam.name:
+        m = _re.search(r'\b(\d+)', exam.name)
+        if m:
+            sem_variants_int.add(int(m.group(1)))
+    sem_variants_int = list(sem_variants_int)
+    logger.info(f"Roll sheet sem filter: exam.year={exam.year}, exam.name={exam.name}, sem_variants_int={sem_variants_int}")
 
     # Fetch base queryset
     registrations_qs = PGExamRegistration.objects.filter(
