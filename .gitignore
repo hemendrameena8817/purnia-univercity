@@ -21,7 +21,7 @@ ENV/
 VENV/
 .venv/
 .env/
-
+temp/
 # Django
 *.sqlite3
 db.sqlite3
