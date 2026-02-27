@@ -300,6 +300,13 @@
             <tr>
                 <td style="vertical-align: top">
                     <table class="info-table">
+                        {% if exam %}
+                        <tr>
+                            <td class="info-label">Name of Exam</td>
+                            <td class="info-colon">:</td>
+                            <td class="info-value">{{ exam }}</td>
+                        </tr>
+                        {% endif %}
                         <tr>
                             <td class="info-label">Roll No.</td>
                             <td class="info-colon">:</td>
