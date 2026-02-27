@@ -13,6 +13,7 @@ from .views import (
     PGStudentUploadView,
     PGRegistrationStatusView,
     PGRegistrationCardPDFView,
+    PGRollSheetPDFView,
 )
 
 urlpatterns = [
@@ -32,5 +33,5 @@ urlpatterns = [
     path('student-image-upload/', PGStudentUploadView.as_view(), name='pg-student-image-upload'),
     # Registration status (public — used after CC Avenue redirect)
     path('<uuid:uid>/status/', PGRegistrationStatusView.as_view(), name='pg-registration-status'),
-  
+    path('roll-sheet/pdf/', PGRollSheetPDFView.as_view(), name='pg-roll-sheet-pdf'),
 ]
