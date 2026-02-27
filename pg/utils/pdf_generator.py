@@ -6,7 +6,9 @@ def generate_pg_admit_card_pdf(student, exam):
     from django.template.loader import get_template
     from pg.models import PGExamCenterMapping, PGExamSchedule, PGExamRegistration, PGStudentCourseAssessment
     from pup_umis_backend.utils.file_utils import image_to_base64
-
+    import qrcode
+    import base64
+    from io import BytesIO
     logger = logging.getLogger(__name__)
 
     def _get_base64_image(image_field_or_path):
@@ -245,7 +247,28 @@ def generate_pg_admit_card_pdf(student, exam):
             sitting=sched.sitting if sched else '-',
         ))
 
+    # ── QR Code ─────────────────────────────────────────────────────────────────
+    qr_code_image = None
+    try:
+        qr_data = (
+            f"Session: {registration.student.batch if registration else '-'}\n"
+            f"Candidate Name: {student.first_name}\n"
+            f"Registration No: {student.registration_no}\n"
+            f"Exam Center: {exam_center.center_code if exam_center else '-'} - {exam_center.name if exam_center else '-'}\n"
+            f"College: {student.college.name if student.college else '-'}\n"
+            f"Exam Type: {exam_type}"
+        )
 
+        qr = qrcode.QRCode(version=1, box_size=6, border=2)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+
+        buf = BytesIO()
+        qr_img.save(buf, format='PNG')
+        qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    except Exception as e:
+        logger.warning(f"QR code generation failed: {e}")
     # ── Context ────────────────────────────────────────────────────────────────
     context = {
         "student": student,
@@ -260,6 +283,7 @@ def generate_pg_admit_card_pdf(student, exam):
         "student_photo": _get_base64_image(student.profile_image),
         "student_sig": _get_base64_image(student.signature),
         "controller_signature": _load_static_image("controller-of-examination-signature.png"),
+        "qr_code_image": qr_code_image,
     }
 
     html_string = get_template("pg/admit_card.html").render(context)
@@ -280,6 +304,8 @@ def generate_pg_roll_sheet_pdf(exam, college):
     from weasyprint import HTML
     from django.conf import settings
     from django.template.loader import get_template
+    from django.db import models
+    from django.db.models import Q
     from pg.models import (
         PGExamRegistration,
         PGExamSchedule,
@@ -294,32 +320,27 @@ def generate_pg_roll_sheet_pdf(exam, college):
     logger = logging.getLogger(__name__)
 
     # 1. Get all students registered for this exam in this college
-    # We use session from exam if available. We only allow REGISTERED as per request.
-    registrations = PGExamRegistration.objects.filter(
+    # Filter by session only — `sem` field in PGExamRegistration may be NULL or inconsistent.
+    ey = str(exam.year) if exam.year else ""
+    sem_variants_int = [int(ey)] if ey.isdigit() else []
+
+    # Fetch base queryset
+    registrations_qs = PGExamRegistration.objects.filter(
         student__college=college,
         status='REGISTERED'
     )
 
-    # Try exact match first (sem=exam.year AND session=exam.session)
-    exact_match = registrations.filter(
-        sem=exam.year,
-        session=exam.session
-    )
-
-    if exact_match.exists():
-        registrations = exact_match
+    # Strict filter: session + sem together (sem is IntegerField, e.g. 3 for Sem 3)
+    # NO session-only fallback — that would mix students from different semesters.
+    if sem_variants_int:
+        registrations = registrations_qs.filter(
+            session=exam.session,
+            sem__in=sem_variants_int
+        )
     else:
-        # Fallback 1: Try matching just session (usually more reliable for a specific exam cycle)
-        session_match = registrations.filter(session=exam.session)
-        if session_match.exists():
-            registrations = session_match
-        else:
-            # Fallback 2: Try matching just semester
-            sem_match = registrations.filter(sem=exam.year)
-            if sem_match.exists():
-                registrations = sem_match
+        registrations = registrations_qs.filter(session=exam.session)
     
-    registrations = registrations.select_related('student').order_by('student__roll_no', 'student__registration_no')
+    registrations = registrations.select_related('student', 'student__department', 'student__program').order_by('student__roll_no', 'student__registration_no')
 
     # Wait, PGExam might have 'name' like "PG 1ST SEMESTER" and 'year' as 1.
     # Let's adjust filters to be more robust or match MCA logic if it matches.
@@ -339,27 +360,230 @@ def generate_pg_roll_sheet_pdf(exam, college):
         center_name = center_mapping.center.name
 
     # 2. Get the subjects (schedules) for this exam
+    # We deduplicate by common_course_structure to avoid multiple columns for the same paper (e.g. if multiple groups share a paper)
     schedules = PGExamSchedule.objects.filter(
         exam=exam
     ).select_related('common_course_structure').order_by('exam_date', 'exam_time')
 
     subjects = []
     all_subject_ids = []
-    # Map common_course_structure.course_code to PGCommonCourseStructure.id for lookup
-    code_to_id = {} 
+    seen_subject_ids = set()
+    # Mapping for Roman to Arabic subject codes (handles both directions via normalization)
+    roman_to_arabic = {
+        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5',
+        'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10',
+        'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'
+    }
+    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
+    
+    def normalize_code(code):
+        if not code: return ""
+        # Handle spaces and hyphens e.g. "CC I" -> "CC-I"
+        code = code.upper().strip().replace(" ", "-")
+        
+        # Handle cases like "CC1" -> "CC-1" (adding hyphen before number)
+        import re
+        m = re.match(r'^([A-Z]+)(\d+)$', code)
+        if m:
+            code = f"{m.group(1)}-{m.group(2)}"
+            
+        # Handle formats like "CC-I" or "CC-1"
+        if "-" in code:
+            parts = code.rsplit("-", 1)
+            prefix = parts[0]
+            suffix = parts[1]
+            if suffix in roman_to_arabic:
+                return f"{prefix}-{roman_to_arabic[suffix]}"
+            return code
+        if code in roman_to_arabic:
+            return roman_to_arabic[code]
+        return code
 
+    # 2. Collect ALL subjects for this strictly matching semester
+    from pg.models import PGCommonCourseStructure
+    from django.db.models import Q
+    
+    # Define EXACT matches for the current exam year to ensure zero cross-semester contamination
+    ey = str(exam.year) if exam.year else ""
+    roman_ey = roman_map_inv.get(ey, "")
+    sem_variants = [
+        ey, f"{ey}ST", f"{ey}ND", f"{ey}RD", f"{ey}TH", 
+        f"Semester-{roman_ey}", f"Semester {roman_ey}",
+        f"Semester-{ey}", f"Semester {ey}",
+        roman_ey
+    ]
+    sem_variants = list(set([v.upper() for v in sem_variants if v]))
+    
+    # We use exact match or case-insensitive exact match to avoid matching '2' with '12'
+    all_css = PGCommonCourseStructure.objects.filter(semester__in=sem_variants)
+    
+    subjects = []
+    all_subject_ids = []
+    seen_subject_ids = set()
+    encountered_norm_codes = set()
+    code_to_id = {} 
+    normalized_to_id = {}
+
+    # First priority: Subjects in the explicit exam schedules
     for s in schedules:
         if s.common_course_structure:
+            subj = s.common_course_structure
+            nc = normalize_code(subj.course_code)
+            if nc not in encountered_norm_codes:
+                subjects.append({
+                    'id': subj.id,
+                    'code': subj.course_code or "-",
+                    'course_name': subj.course_name or "-",
+                    'norm_code': nc
+                })
+                all_subject_ids.append(subj.id)
+                seen_subject_ids.add(subj.id)
+                encountered_norm_codes.add(nc)
+                if subj.course_code:
+                    code_to_id[subj.course_code.upper()] = subj.id
+                    normalized_to_id[nc] = subj.id
+
+    # Second priority: All other subjects belonging to THIS exact semester curriculum
+    for css in all_css:
+        nc = normalize_code(css.course_code)
+        if nc and nc not in encountered_norm_codes:
             subjects.append({
-                'id': s.common_course_structure.id,
-                'code': s.common_course_structure.course_code or "-",
-                'course_name': s.common_course_structure.course_name or "-"
+                'id': css.id,
+                'code': css.course_code or "-",
+                'course_name': css.course_name or "-",
+                'norm_code': nc
             })
-            all_subject_ids.append(s.common_course_structure.id)
-            if s.common_course_structure.course_code:
-                code_to_id[s.common_course_structure.course_code.upper()] = s.common_course_structure.id
+            all_subject_ids.append(css.id)
+            seen_subject_ids.add(css.id)
+            encountered_norm_codes.add(nc)
+            if css.course_code:
+                code_to_id[css.course_code.upper()] = css.id
+                normalized_to_id[nc] = css.id
 
     # 3. Prepare student data rows
+    # Pre-fetch assessments for these students to find descriptive names
+    # We broaden this search to ensure we find names even if session/semester formats vary slightly
+    all_student_ids = [reg.student.id for reg in registrations]
+    assessments_qs = PGStudentCourseAssessment.objects.filter(
+        student_id__in=all_student_ids,
+        # session=exam.session, # Broaden: names are usually consistent across sessions
+        # semester__in=sem_variants, 
+        label__iregex=r'^(ESE|CIA)'
+    ).values('student_id', 'course_code', 'course_name', 'label', 'semester', 'session')
+
+    # Build map: (student_id, subj_id/dyn_id) -> best name
+    student_subject_names = {}
+    student_subject_names_is_target = {}
+    found_names_for_subject = {} 
+    
+    # Helper for suffix-based fallback matching
+    def get_suffix(code):
+        nc = normalize_code(code)
+        if "-" in nc:
+            return nc.split("-")[-1]
+        return nc
+
+    # Cache suffixes for subjects to speed up matching
+    subject_suffix_map = {get_suffix(s['code']): s['id'] for s in subjects}
+
+    for a in assessments_qs:
+        raw_code = a['course_code'] or ""
+        code_upper = raw_code.upper()
+        norm_code = normalize_code(raw_code)
+        
+        # 1. Exact Match (Code or Normalized)
+        subj_id = code_to_id.get(code_upper) or normalized_to_id.get(norm_code)
+        
+        # 2. Fuzzy Match by Suffix (e.g., ECO-V matches CC-V in same semester)
+        if not subj_id:
+            suffix = get_suffix(raw_code)
+            if suffix in subject_suffix_map:
+                subj_id = subject_suffix_map[suffix]
+
+        if subj_id:
+            key = (a['student_id'], subj_id)
+            cname = (a['course_name'] or "").strip()
+            
+            # Skip if name is just a dash or empty
+            if not cname or cname == "-":
+                continue
+                
+            # Check if this assessment is for the TARGET session/semester
+            is_target = (a['session'] == exam.session and a['semester'] in sem_variants)
+            
+            # Prioritize: 
+            # 1. Target session/semester assessments
+            # 2. Anything that looks like a real name (not a code)
+            # 3. ESE over CIA
+            current_best = student_subject_names.get(key)
+            is_better = not current_best
+            
+            if current_best:
+                curr_target = student_subject_names_is_target.get(key, False)
+                if is_target and not curr_target:
+                    is_better = True
+                elif is_target == curr_target:
+                    # If both are target or both NOT target, pick the one that looks more like a name
+                    curr_is_code = (normalize_code(current_best) == norm_code)
+                    new_is_code = (normalize_code(cname) == norm_code)
+                    if curr_is_code and not new_is_code:
+                        is_better = True
+                    elif curr_is_code == new_is_code:
+                        # Fallback to ESE over CIA
+                        if a['label'].upper().startswith('ESE'):
+                            is_better = True
+
+            if is_better:
+                student_subject_names[key] = cname
+                student_subject_names_is_target[key] = is_target
+                found_names_for_subject[subj_id] = cname
+
+    # Final name refinement: If a subject still doesn't have a descriptive name, look GLOBALLY.
+    # This is useful when the current set of students/curriculum have bad data but other students have correct data.
+    missing_name_subjects = [s for s in subjects if not s.get('has_name')]
+    if missing_name_subjects:
+        codes_to_check = [s['code'] for s in missing_name_subjects]
+        norm_codes_to_check = [s['norm_code'] for s in missing_name_subjects]
+        
+        # Look for any assessment with a name that isn't just the code
+        # We search by both raw code and normalized code
+        global_names_qs = PGStudentCourseAssessment.objects.filter(
+            Q(course_code__in=codes_to_check) | Q(course_code__in=norm_codes_to_check)
+        ).exclude(
+            course_name=models.F('course_code')
+        ).exclude(
+            course_name__isnull=True
+        ).exclude(
+            course_name='-'
+        ).exclude(
+            course_name=''
+        ).values('course_code', 'course_name')
+        
+        global_name_map = {}
+        for gn in global_names_qs:
+            nc = normalize_code(gn['course_code'])
+            gn_name = gn['course_name'].strip()
+            # Double check it's not a code
+            if normalize_code(gn_name) != nc:
+                global_name_map[nc] = gn_name
+
+        for subj in missing_name_subjects:
+            nc = subj['norm_code']
+            if nc in global_name_map:
+                subj['course_name'] = global_name_map[nc]
+                subj['has_name'] = True
+                found_names_for_subject[subj['id']] = global_name_map[nc]
+
+    # Sort subjects by code (numeric part if possible)
+    import re
+    def get_sort_key(s):
+        m = re.search(r'(\d+)', s['norm_code'] or "")
+        return (0, int(m.group(1))) if m else (1, s['code'])
+    
+    subjects.sort(key=get_sort_key)
+    # Re-calculate all_subject_ids order after sort
+    all_subject_ids = [s['id'] for s in subjects]
+
     student_data = []
     for reg in registrations:
         student = reg.student
@@ -369,26 +593,74 @@ def generate_pg_roll_sheet_pdf(exam, college):
             student_subject_ids = all_subject_ids
         else:
             # For BACKLOG/IMPROVEMENT, get specific subjects from assessments
-            # Filter ESE assessments for this student, session and exam_type
+            # We look for assessments that match the SEMESTER of this exam (sem_variants)
+            # This handles cases where a student is registered for Sem 3 but taking a Sem 2 BACK exam.
             student_assessments = PGStudentCourseAssessment.objects.filter(
                 student=student,
-                session=reg.session,
-                semester=reg.sem, # Need to be careful with formats like '1ST' vs 1
-                exam_type__iexact=reg.exam_type,
+                semester__in=sem_variants,
                 label__icontains='ESE'
             )
             
-            # Match assessments to subject IDs via course_code
+            # If nothing found for EXAM_SEM, fall back to the registration's semester (just in case)
+            if not student_assessments.exists():
+                student_assessments = PGStudentCourseAssessment.objects.filter(
+                    student=student,
+                    semester=reg.sem,
+                    label__icontains='ESE'
+                )
+
+            # Match assessments to subject IDs via fuzzy matching if exact code fails
             student_subject_ids = []
             for a in student_assessments:
-                if a.course_code and a.course_code.upper() in code_to_id:
-                    student_subject_ids.append(code_to_id[a.course_code.upper()])
+                acode = (a.course_code or "").upper()
+                sid = code_to_id.get(acode) or normalized_to_id.get(normalize_code(acode))
+                if not sid:
+                    suffix = get_suffix(acode)
+                    if suffix in subject_suffix_map:
+                        sid = subject_suffix_map[suffix]
+                if sid:
+                    student_subject_ids.append(sid)
+
+        # Build a list of info for each subject column
+        row_subjects = []
+        for subj in subjects:
+            subj_id = subj['id']
+            is_registered = subj_id in student_subject_ids
+            display_name = ""
+            if is_registered:
+                # Priority for display_name in cell:
+                # 1. Assessment Name for this student (if it's a real name)
+                # 2. Subject Name from curriculum/global search (if it's a real name)
+                # 3. Code (last resort)
+                
+                assessment_name = student_subject_names.get((student.id, subj_id))
+                subject_name = subj.get('course_name')
+                subj_code = subj['code']
+                subj_norm = subj['norm_code']
+                
+                # Helper: is it a real name or just a code?
+                def is_real_name(name, norm_code):
+                    if not name or name == "-" or name == "": return False
+                    return normalize_code(name) != norm_code
+
+                if is_real_name(assessment_name, subj_norm):
+                    display_name = assessment_name
+                elif is_real_name(subject_name, subj_norm):
+                    display_name = subject_name
+                else:
+                    display_name = subj_code
+            
+            row_subjects.append({
+                'id': subj_id,
+                'is_registered': is_registered,
+                'display_name': display_name
+            })
 
         student_data.append({
             'name': student.get_full_name(),
             'roll_no': student.roll_no or "-",
             'registration_no': student.registration_no or "-",
-            'subject_ids': student_subject_ids
+            'row_subjects': row_subjects
         })
 
     # Load controller signature (using existing helper logic from generate_pg_admit_card_pdf if possible)
@@ -399,13 +671,36 @@ def generate_pg_roll_sheet_pdf(exam, college):
         controller_sig_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', 'controller-of-examination-signature.png')
 
     # 4. Prepare Context
+    # Try to resolve extra info from the first student's profile if available
+    discipline_name = "-"
+    degree_name = "Post Graduation"
+    syllabus_year = "-"
+    institute_name = college.name or "-"
+    
+    first_reg = registrations.first()
+    if first_reg and first_reg.student:
+        student = first_reg.student
+        if student.program:
+            discipline_name = student.program.name
+        if student.degree:
+            degree_name = student.degree.name
+        if student.department:
+            institute_name = student.department.name
+        # Try to find syllabus from json_data or just use a default?
+        # In the image it says Syllabus: 2020. I'll check if it's in registration or exam.
+        if student.json_data and 'syllabus' in student.json_data:
+            syllabus_year = student.json_data['syllabus']
+
     context = {
         "exam": exam,
         "college": college,
-        "course_name": "PG", # Or resolve from student's degree
+        "course_name": degree_name,
+        "discipline_name": discipline_name,
+        "syllabus_year": syllabus_year,
         "batch_name": exam.batch or "-",
         "session_name": exam.session or "-",
         "college_name": college.name or "-",
+        "institute_name": institute_name,
         "center_name": center_name,
         "semester": f"{exam.year}" if exam.year else "-",
         "subjects": subjects,
