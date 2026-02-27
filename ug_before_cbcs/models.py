@@ -499,4 +499,18 @@ class UGBeforeCBCSStudentResult(models.Model):
         return f"{self.student.student_name} - {self.subject_name} - {self.exam.name}"
 
 
+class UGBeforeCBCSStatistics(models.Model):
+    """
+    Stores pre-calculated statistical overview data to avoid
+    heavy database queries on every dashboard load.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    data = models.JSONField(help_text='The statistics JSON structure')
+    last_updated = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        verbose_name = 'UG Before CBCS Statistics'
+        verbose_name_plural = 'UG Before CBCS Statistics'
+
+    def __str__(self):
+        return f"UG Before CBCS Stats - {self.last_updated.strftime('%Y-%m-%d %H:%M')}"

@@ -152,50 +152,68 @@ def migrate_data(skip_existing=True, start_from=0, semester_code=None):
                 # 2. GET OR CREATE STUDENT PROFILE
                 # ============================================================
                 reg_no = record.college_reg_no
-                if not reg_no:
-                    print(f"  ⚠ Skipping record {idx}: No registration number")
+                roll_no = record.college_roll_no
+                
+                # Identification logic: Try reg_no first, then roll_no
+                student_identifier = reg_no if reg_no else (f"ROLL_{roll_no}" if roll_no else None)
+                
+                if not student_identifier:
+                    print(f"  ⚠ Skipping record {idx}: No registration or roll number")
                     continue
                 
-                if reg_no not in student_cache:
-                    # Create or get user
-                    user, user_created = UserAccount.objects.get_or_create(
-                        username=reg_no,
-                        defaults={
-                            'first_name': record.student_name or 'Student',
-                            'user_type': 'student',
-                            'current_profile': 'ug_before_cbcs',
-                            'college': college
-                        }
-                    )
+                if student_identifier not in student_cache:
+                    # Attempt to find existing profile in DB first
+                    profile = None
+                    if reg_no:
+                        profile = UGBeforeCBCSStudentProfile.objects.filter(registration_no=reg_no).first()
+                    elif roll_no:
+                        # Search by roll_no if reg_no is missing
+                        profile = UGBeforeCBCSStudentProfile.objects.filter(roll_no=roll_no).first()
                     
-                    if not user_created and college and not user.college:
-                        user.college = college
-                        user.save(update_fields=['college'])
-                    
-                    # Create or get student profile
-                    profile, profile_created = UGBeforeCBCSStudentProfile.objects.get_or_create(
-                        registration_no=reg_no,
-                        defaults={
-                            'user': user,
-                            'roll_no': record.college_roll_no,
-                            'student_name': record.student_name or 'Unknown',
-                            'fathers_name': record.fathers_name,
-                            'mothers_name': record.mothers_name,
-                            'college': college,
-                            'course_code': record.course_code,
-                            'discipline_code': record.discipline_code,
-                            'source_user_id': record.user_id,
-                        }
-                    )
-                    
-                    student_cache[reg_no] = profile
-                    
-                    if profile_created:
+                    if not profile:
+                        # Create new user
+                        # If reg_no is missing, use roll_no based identifier for username
+                        username = reg_no if reg_no else f"roll_{roll_no}"
+                        
+                        user, user_created = UserAccount.objects.get_or_create(
+                            username=username,
+                            defaults={
+                                'first_name': record.student_name or 'Student',
+                                'user_type': 'student',
+                                'current_profile': 'ug_before_cbcs',
+                                'college': college
+                            }
+                        )
+                        
+                        if not user_created and college and not user.college:
+                            user.college = college
+                            user.save(update_fields=['college'])
+                        
+                        # Create new student profile
+                        # If reg_no is missing in staging, we use our surrogate identifier for the unique registration_no field
+                        profile = UGBeforeCBCSStudentProfile.objects.create(
+                            user=user,
+                            registration_no=reg_no if reg_no else f"MISSING_REG_{roll_no}",
+                            roll_no=roll_no,
+                            student_name=record.student_name or 'Unknown',
+                            fathers_name=record.fathers_name,
+                            mothers_name=record.mothers_name,
+                            college=college,
+                            course_code=record.course_code,
+                            discipline_code=record.discipline_code,
+                            source_user_id=record.user_id,
+                        )
                         stats['students_created'] += 1
                     else:
+                        # Profile exists, update it if necessary
+                        if college and not profile.college:
+                            profile.college = college
+                            profile.save(update_fields=['college'])
                         stats['students_updated'] += 1
+                    
+                    student_cache[student_identifier] = profile
                 else:
-                    profile = student_cache[reg_no]
+                    profile = student_cache[student_identifier]
                 
                 # ============================================================
                 # 3. GET OR CREATE EXAM
@@ -298,7 +316,7 @@ def migrate_data(skip_existing=True, start_from=0, semester_code=None):
                     student_check=record.student_check,
                     # Source tracking
                     source_id=record.source_id,
-                    registration_no=record.college_reg_no,
+                    registration_no=profile.registration_no,
                 )
                 stats['results_created'] += 1
                 
