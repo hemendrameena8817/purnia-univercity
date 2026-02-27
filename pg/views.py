@@ -1,4 +1,6 @@
 from django.http import HttpResponse
+from django.views import View
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -90,6 +92,40 @@ class PGCIAMarksEntryView(APIView):
             return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
             
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class PGRollSheetPDFView(View):
+    """
+    Generates and returns Exam Roll Sheet PDF for PG.
+    Query params: exam_uid, college_uid
+    """
+    def get(self, request):
+        from colleges.models import College
+        from .utils.pdf_generator import generate_pg_roll_sheet_pdf
+        from .models import PGExam
+        
+        exam_uid = request.GET.get("exam_uid")
+        college_uid = request.GET.get("college_uid")
+
+        if not all([exam_uid, college_uid]):
+            return HttpResponse("exam_uid and college_uid are required", status=400, content_type='text/plain')
+
+        exam = get_object_or_404(PGExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+
+        pdf_content = generate_pg_roll_sheet_pdf(exam, college)
+
+        if not pdf_content:
+            return HttpResponse(f"Failed to generate Roll Sheet for {college.name}. Ensure students are enrolled for this exam.", status=404, content_type='text/plain')
+
+        # Check if user wants to force download or view inline
+        download = request.GET.get('download', 'false').lower() == 'true'
+        disposition = 'attachment' if download else 'inline'
+        
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
+        response["Content-Disposition"] = f'{disposition}; filename="Roll_Sheet_{safe_college_name}_SEM_{exam.year}.pdf"'
+        return response
 
 
 class PGCollegeStudentsView(APIView):

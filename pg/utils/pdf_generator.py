@@ -271,3 +271,155 @@ def generate_pg_admit_card_pdf(student, exam):
     except Exception as e:
         logger.error(f"PG Admit Card PDF generation failed: {e}")
         return None
+
+
+def generate_pg_roll_sheet_pdf(exam, college):
+    """
+    Generates and returns Exam Roll Sheet PDF for PG.
+    """
+    from weasyprint import HTML
+    from django.conf import settings
+    from django.template.loader import get_template
+    from pg.models import (
+        PGExamRegistration,
+        PGExamSchedule,
+        PGCommonCourseStructure,
+        PGExamCenterMapping,
+        PGStudentCourseAssessment
+    )
+    from pup_umis_backend.utils.file_utils import image_to_base64
+    import os
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # 1. Get all students registered for this exam in this college
+    # We use session from exam if available. We only allow REGISTERED as per request.
+    registrations = PGExamRegistration.objects.filter(
+        student__college=college,
+        status='REGISTERED'
+    )
+
+    # Try exact match first (sem=exam.year AND session=exam.session)
+    exact_match = registrations.filter(
+        sem=exam.year,
+        session=exam.session
+    )
+
+    if exact_match.exists():
+        registrations = exact_match
+    else:
+        # Fallback 1: Try matching just session (usually more reliable for a specific exam cycle)
+        session_match = registrations.filter(session=exam.session)
+        if session_match.exists():
+            registrations = session_match
+        else:
+            # Fallback 2: Try matching just semester
+            sem_match = registrations.filter(sem=exam.year)
+            if sem_match.exists():
+                registrations = sem_match
+    
+    registrations = registrations.select_related('student').order_by('student__roll_no', 'student__registration_no')
+
+    # Wait, PGExam might have 'name' like "PG 1ST SEMESTER" and 'year' as 1.
+    # Let's adjust filters to be more robust or match MCA logic if it matches.
+    # Actually, MCARollSheetPDFView passes the 'exam' object.
+    
+    if not registrations.exists():
+        logger.warning(f"No registrations found for Exam: {exam.name}, College: {college.name}")
+        return None
+
+    # Get exam center mapping for this college
+    center_name = "-"
+    center_mapping = PGExamCenterMapping.objects.filter(
+        exams=exam,
+        attached_colleges=college
+    ).first()
+    if center_mapping and center_mapping.center:
+        center_name = center_mapping.center.name
+
+    # 2. Get the subjects (schedules) for this exam
+    schedules = PGExamSchedule.objects.filter(
+        exam=exam
+    ).select_related('common_course_structure').order_by('exam_date', 'exam_time')
+
+    subjects = []
+    all_subject_ids = []
+    # Map common_course_structure.course_code to PGCommonCourseStructure.id for lookup
+    code_to_id = {} 
+
+    for s in schedules:
+        if s.common_course_structure:
+            subjects.append({
+                'id': s.common_course_structure.id,
+                'code': s.common_course_structure.course_code or "-",
+                'course_name': s.common_course_structure.course_name or "-"
+            })
+            all_subject_ids.append(s.common_course_structure.id)
+            if s.common_course_structure.course_code:
+                code_to_id[s.common_course_structure.course_code.upper()] = s.common_course_structure.id
+
+    # 3. Prepare student data rows
+    student_data = []
+    for reg in registrations:
+        student = reg.student
+        
+        # Determine subjects student is registered for
+        if reg.exam_type == 'REGULAR':
+            student_subject_ids = all_subject_ids
+        else:
+            # For BACKLOG/IMPROVEMENT, get specific subjects from assessments
+            # Filter ESE assessments for this student, session and exam_type
+            student_assessments = PGStudentCourseAssessment.objects.filter(
+                student=student,
+                session=reg.session,
+                semester=reg.sem, # Need to be careful with formats like '1ST' vs 1
+                exam_type__iexact=reg.exam_type,
+                label__icontains='ESE'
+            )
+            
+            # Match assessments to subject IDs via course_code
+            student_subject_ids = []
+            for a in student_assessments:
+                if a.course_code and a.course_code.upper() in code_to_id:
+                    student_subject_ids.append(code_to_id[a.course_code.upper()])
+
+        student_data.append({
+            'name': student.get_full_name(),
+            'roll_no': student.roll_no or "-",
+            'registration_no': student.registration_no or "-",
+            'subject_ids': student_subject_ids
+        })
+
+    # Load controller signature (using existing helper logic from generate_pg_admit_card_pdf if possible)
+    # Since I'm inside the file, I can't easily call the inner helper, I'll just use the path.
+    controller_sig_path = os.path.join(settings.MEDIA_ROOT, "common/controller-of-examination-signature.png")
+    if not os.path.exists(controller_sig_path):
+        # try static fallback
+        controller_sig_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', 'controller-of-examination-signature.png')
+
+    # 4. Prepare Context
+    context = {
+        "exam": exam,
+        "college": college,
+        "course_name": "PG", # Or resolve from student's degree
+        "batch_name": exam.batch or "-",
+        "session_name": exam.session or "-",
+        "college_name": college.name or "-",
+        "center_name": center_name,
+        "semester": f"{exam.year}" if exam.year else "-",
+        "subjects": subjects,
+        "student_data": student_data,
+        "controller_signature": image_to_base64(controller_sig_path) if os.path.exists(controller_sig_path) else None,
+    }
+
+    # Render HTML template
+    html_string = get_template("pg/roll_sheet.html").render(context)
+
+    try:
+        # Generate PDF using WeasyPrint
+        pdf_file = HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf()
+        return pdf_file
+    except Exception as e:
+        logger.error(f"PG Roll Sheet PDF generation failed: {str(e)}")
+        return None
