@@ -308,6 +308,11 @@
                         </tr>
                         {% endif %}
                         <tr>
+                            <td class="info-label">Subject</td>
+                            <td class="info-colon">:</td>
+                            <td class="info-value">{{student.department.name}}</td>
+                        </tr>
+                        <tr>
                             <td class="info-label">Roll No.</td>
                             <td class="info-colon">:</td>
                             <td class="info-value">{{ student.roll_no|default:"-" }}</td>
