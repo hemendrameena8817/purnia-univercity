@@ -710,3 +710,189 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
     except Exception as e:
         logger.error(f"PG Roll Sheet PDF generation failed: {e}")
         return None
+
+
+def generate_pg_attendance_sheet_pdf(exam, college, department=None):
+    """
+    Generates student-wise PG Attendance Sheet PDF.
+    One page per student with: photo, barcode, exam schedule table.
+    department: optional PGDepartment — if given, only that dept's students.
+    """
+    from weasyprint import HTML
+    from django.conf import settings
+    from django.template.loader import get_template
+    from pg.models import (
+        PGExamRegistration,
+        PGExamSchedule,
+        PGExamCenterMapping,
+        PGStudentCourseAssessment,
+    )
+    from pup_umis_backend.utils.file_utils import image_to_base64, generate_barcode_base64
+    import os, re as _re, logging
+
+    logger = logging.getLogger(__name__)
+
+    # ── Semester variants (same logic as roll sheet) ─────────────────────────
+    _roman_str_to_int = {
+        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+    }
+    ey = str(exam.year) if exam.year else ""
+    sem_variants_int = set()
+    if ey.isdigit():
+        sem_variants_int.add(int(ey))
+    if exam.name:
+        roman_m = _re.search(r'\b(?:SEM|SEMESTER)[-\s]*(I{1,3}|IV|VI{0,3}|IX|X)\b', exam.name, _re.IGNORECASE)
+        if roman_m:
+            rn = roman_m.group(1).upper()
+            if rn in _roman_str_to_int:
+                sem_variants_int.add(_roman_str_to_int[rn])
+        digit_m = _re.search(r'(?<!\d)([1-8])(?!\d)', exam.name)
+        if digit_m:
+            sem_variants_int.add(int(digit_m.group(1)))
+    sem_variants_int = list(sem_variants_int)
+
+    _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
+
+    # ── Fetch registrations ──────────────────────────────────────────────────
+    regs_qs = PGExamRegistration.objects.filter(
+        student__college=college,
+        status='REGISTERED',
+    )
+    if sem_variants_int:
+        if _is_year_range:
+            regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
+        else:
+            regs_qs = regs_qs.filter(sem__in=sem_variants_int)
+    else:
+        if _is_year_range:
+            regs_qs = regs_qs.filter(session=exam.session)
+
+    if department:
+        regs_qs = regs_qs.filter(student__department=department)
+
+    regs_qs = regs_qs.select_related(
+        'student', 'student__department', 'student__program'
+    ).order_by('student__roll_no', 'student__registration_no')
+
+    if not regs_qs.exists():
+        dept_info = f" ({department.name})" if department else ""
+        logger.warning(f"[ATTENDANCE] No registrations for exam='{exam.name}', college='{college.name}'{dept_info}")
+        return None
+
+    # ── Exam center ──────────────────────────────────────────────────────────
+    center_name = "-"
+    cm = PGExamCenterMapping.objects.filter(exams=exam, attached_colleges=college).first()
+    if cm and cm.center:
+        center_name = cm.center.name
+
+    # ── All schedules for this exam ──────────────────────────────────────────
+    all_schedules = PGExamSchedule.objects.filter(
+        exam=exam
+    ).select_related('common_course_structure').order_by('exam_date', 'exam_time')
+
+    # ── University logo ──────────────────────────────────────────────────────
+    logo_path = os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")
+    university_logo = image_to_base64(logo_path) if os.path.exists(logo_path) else None
+
+    # ── Build per-student attendance data ────────────────────────────────────
+    attendance_data = []
+
+    for reg in regs_qs:
+        student = reg.student
+
+        # Get student's registered subject codes from ESE assessments
+        ese_codes = set(
+            PGStudentCourseAssessment.objects.filter(
+                student=student,
+                label__iregex=r'^ESE',
+                semester__in=sem_variants_int if sem_variants_int else [],
+            ).values_list('course_code', flat=True)
+        )
+        # Normalise codes for lookup
+        ese_codes_upper = {(c or "").upper().strip() for c in ese_codes}
+
+        # Filter schedules relevant to this student
+        student_schedules_raw = []
+        for s in all_schedules:
+            if not s.common_course_structure:
+                continue
+            code = (s.common_course_structure.course_code or "").upper().strip()
+            if not code:
+                continue
+            # Include if student has this ESE, OR if exam_type is REGULAR (show all)
+            if reg.exam_type == 'REGULAR' or code in ese_codes_upper:
+                student_schedules_raw.append(s)
+
+        student_schedules = [
+            {
+                'date': s.exam_date.strftime('%d-%m-%Y') if s.exam_date else '-',
+                'exam_time': s.exam_time or '',
+                'sitting': s.sitting or '',
+                'subject_name': s.common_course_structure.course_name or '-',
+                'subject_code': s.common_course_structure.course_code or '-',
+            }
+            for s in student_schedules_raw
+        ]
+
+        # Barcode
+        barcode_text = (
+            f"Roll:{student.roll_no or ''} "
+            f"Reg:{student.registration_no or ''} "
+            f"Name:{student.get_full_name()}"
+        )
+        try:
+            barcode_base64 = generate_barcode_base64(barcode_text)
+        except Exception:
+            barcode_base64 = None
+
+        # Photo
+        photo_base64 = None
+        if student.profile_image:
+            try:
+                photo_base64 = image_to_base64(student.profile_image.path)
+            except Exception as e:
+                logger.error(f"Photo error {student.registration_no}: {e}")
+
+        dept_name = student.department.name if student.department else "-"
+
+        attendance_data.append({
+            'name': student.get_full_name(),
+            'roll_no': student.roll_no or 'N/A',
+            'registration_no': student.registration_no or 'N/A',
+            'department_name': dept_name,
+            'college_name': college.name,
+            'photo': photo_base64,
+            'barcode': barcode_base64,
+            'schedules': student_schedules,
+        })
+
+    if not attendance_data:
+        logger.warning(f"[ATTENDANCE] attendance_data empty for exam='{exam.name}'")
+        return None
+
+    # ── Context ──────────────────────────────────────────────────────────────
+    sem_display = str(sem_variants_int[0]) if sem_variants_int else (exam.session or '-')
+    context = {
+        'attendance_data': attendance_data,
+        'university_logo': university_logo,
+        'exam_header': f"{exam.name} (Semester {sem_display})",
+        'center_name': center_name,
+        'batch': exam.batch or '-',
+        'session': exam.session or '-',
+        'course_name': 'Post Graduation',
+        'semester': sem_display,
+        'syllabus': exam.batch.split('-')[0] if exam.batch and '-' in exam.batch else '-',
+        'college_name': college.name,
+    }
+
+    html_string = get_template('pg/attendance_sheet.html').render(context)
+
+    try:
+        pdf_file = HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf()
+        logger.info(f"[ATTENDANCE] PDF generated: {college.name}, {len(attendance_data)} students, {len(pdf_file)} bytes")
+        return pdf_file
+    except Exception as e:
+        logger.error(f"[ATTENDANCE] PDF generation failed: {e}")
+        return None
+
