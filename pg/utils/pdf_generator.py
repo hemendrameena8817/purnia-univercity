@@ -441,12 +441,22 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
     ).select_related('common_course_structure', 'group').order_by('exam_date', 'exam_time')
 
     # ── Controller signature ─────────────────────────────────────────────────
-    ctrl_sig_path = os.path.join(settings.MEDIA_ROOT, "common/controller-of-examination-signature.png")
-    if not os.path.exists(ctrl_sig_path):
-        ctrl_sig_path = os.path.join(
-            settings.BASE_DIR, 'static', 'images', 'common',
-            'controller-of-examination-signature.png'
-        )
+    SIG_FILENAME = "common/controller-of-examination-signature.png"
+    SIG_FILENAME_IMG = "images/common/controller-of-examination-signature.png"
+    _sig_candidates = [
+        os.path.join(settings.MEDIA_ROOT, SIG_FILENAME),
+        os.path.join(settings.BASE_DIR, 'static', SIG_FILENAME),
+        os.path.join(settings.BASE_DIR, 'static', SIG_FILENAME_IMG),
+        os.path.join(getattr(settings, 'STATIC_ROOT', ''), SIG_FILENAME),
+        os.path.join(getattr(settings, 'STATIC_ROOT', ''), SIG_FILENAME_IMG),
+    ]
+    for sdir in getattr(settings, 'STATICFILES_DIRS', []):
+        _sig_candidates.append(os.path.join(sdir, SIG_FILENAME))
+        _sig_candidates.append(os.path.join(sdir, SIG_FILENAME_IMG))
+
+    ctrl_sig_path = next((p for p in _sig_candidates if p and os.path.exists(p)), None)
+    if not ctrl_sig_path:
+        logger.warning(f"[ROLLSHEET] Signature file not found. Checked: {_sig_candidates}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helper: build one roll-sheet section for the given list of registrations
@@ -677,7 +687,7 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         "center_name": center_name,
         "semester": str(exam.year) if exam.year else "-",
         "department_sections": dept_sections,
-        "controller_signature": image_to_base64(ctrl_sig_path) if os.path.exists(ctrl_sig_path) else None,
+        "controller_signature": image_to_base64(ctrl_sig_path) if ctrl_sig_path else None,
     }
 
     html_string = get_template("pg/roll_sheet.html").render(context)
