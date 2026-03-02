@@ -775,21 +775,39 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
         'student', 'student__department', 'student__program'
     ).order_by('student__roll_no', 'student__registration_no')
 
-    if not regs_qs.exists():
+    regs_list = list(regs_qs)
+    if not regs_list:
         dept_info = f" ({department.name})" if department else ""
         logger.warning(f"[ATTENDANCE] No registrations for exam='{exam.name}', college='{college.name}'{dept_info}")
         return None
 
-    # ── Exam center ──────────────────────────────────────────────────────────
+    # ── Center mapping ───────────────────────────────────────────────────────
     center_name = "-"
     cm = PGExamCenterMapping.objects.filter(exams=exam, attached_colleges=college).first()
     if cm and cm.center:
         center_name = cm.center.name
 
-    # ── All schedules for this exam ──────────────────────────────────────────
+    # ── All schedules ────────────────────────────────────────────────────────
     all_schedules = PGExamSchedule.objects.filter(
         exam=exam
     ).select_related('common_course_structure').order_by('exam_date', 'exam_time')
+
+    # ── Pre-fetch ESE codes for all students in one query (Avoid N+1) ────────
+    student_ids = [r.student_id for r in regs_list]
+    assessments = PGStudentCourseAssessment.objects.filter(
+        student_id__in=student_ids,
+        label__iregex=r'^ESE',
+        semester__in=sem_variants_int if sem_variants_int else [],
+    ).values('student_id', 'course_code')
+
+    student_ese_map = {}
+    for a in assessments:
+        sid = a['student_id']
+        code = (a['course_code'] or "").upper().strip()
+        if sid not in student_ese_map:
+            student_ese_map[sid] = set()
+        if code:
+            student_ese_map[sid].add(code)
 
     # ── University logo ──────────────────────────────────────────────────────
     logo_path = os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")
@@ -797,20 +815,15 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
 
     # ── Build per-student attendance data ────────────────────────────────────
     attendance_data = []
+    total_regs = len(regs_list)
+    logger.info(f"[ATTENDANCE] Processing {total_regs} registrations for {college.name}")
 
-    for reg in regs_qs:
+    for idx, reg in enumerate(regs_list):
+        if idx > 0 and idx % 100 == 0:
+            logger.info(f"[ATTENDANCE] Processed {idx}/{total_regs} students...")
+
         student = reg.student
-
-        # Get student's registered subject codes from ESE assessments
-        ese_codes = set(
-            PGStudentCourseAssessment.objects.filter(
-                student=student,
-                label__iregex=r'^ESE',
-                semester__in=sem_variants_int if sem_variants_int else [],
-            ).values_list('course_code', flat=True)
-        )
-        # Normalise codes for lookup
-        ese_codes_upper = {(c or "").upper().strip() for c in ese_codes}
+        ese_codes_upper = student_ese_map.get(student.id, set())
 
         # Filter schedules relevant to this student
         student_schedules_raw = []
