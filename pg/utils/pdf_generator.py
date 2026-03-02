@@ -380,42 +380,24 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         student__college=college,
         status='REGISTERED',
     )
-    _s1 = regs_qs.count()
-    print(f"[ROLLSHEET] Step1 - All REGISTERED for college '{college.name}': {_s1}")
-    logger.info(f"[ROLLSHEET] Step1 - All REGISTERED for college '{college.name}': {_s1}")
 
     if sem_variants_int:
         regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
-        _s2 = regs_qs.count()
-        print(f"[ROLLSHEET] Step2 - After session={exam.session} + sem__in={sem_variants_int}: {_s2}")
-        logger.info(f"[ROLLSHEET] Step2 - After session={exam.session} + sem__in={sem_variants_int}: {_s2}")
     else:
         regs_qs = regs_qs.filter(session=exam.session)
-        _s2 = regs_qs.count()
-        print(f"[ROLLSHEET] Step2 - After session={exam.session} (no sem filter): {_s2}")
-        logger.info(f"[ROLLSHEET] Step2 - After session={exam.session} (no sem filter): {_s2}")
 
     if department:
         regs_qs = regs_qs.filter(student__department=department)
-        _s3 = regs_qs.count()
-        print(f"[ROLLSHEET] Step3 - After dept filter '{department.name}': {_s3}")
-        logger.info(f"[ROLLSHEET] Step3 - After dept filter '{department.name}': {_s3}")
 
     regs_qs = regs_qs.select_related(
         'student', 'student__department', 'student__program', 'student__degree'
     ).order_by('student__roll_no', 'student__registration_no')
 
     if not regs_qs.exists():
-        all_regs = PGExamRegistration.objects.filter(student__college=college, status='REGISTERED')
-        from django.db.models import Count
-        breakdown = list(all_regs.values('session', 'sem').annotate(c=Count('id')))
-        msg = (
-            f"[ROLLSHEET] FAILED - exam='{exam.name}' "
-            f"session={exam.session}, sem={sem_variants_int}, college='{college.name}'. "
-            f"Available: {breakdown}"
+        logger.warning(
+            f"[ROLLSHEET] No registrations for exam='{exam.name}' "
+            f"session={exam.session}, sem={sem_variants_int}, college='{college.name}'"
         )
-        print(msg)
-        logger.warning(msg)
         return None
 
     # ── Exam center ──────────────────────────────────────────────────────────
