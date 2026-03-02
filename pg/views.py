@@ -135,11 +135,22 @@ class PGRollSheetPDFView(View):
         return response
 
 
-class PGAttendanceSheetPDFView(View):
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PGAttendanceSheetPDFView(APIView):
+    permission_classes = [AllowAny]
     """
     Generates student-wise PG Attendance Sheet PDF.
     Query params: exam_uid, college_uid, department_uid (optional)
     """
+    def post(self, request):
+        return self.get(request)
+
     def get(self, request):
         from colleges.models import College
         from .utils.pdf_generator import generate_pg_attendance_sheet_pdf
