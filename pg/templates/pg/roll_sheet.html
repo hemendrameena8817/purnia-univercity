@@ -13,7 +13,7 @@
 
         body {
             font-family: Arial, sans-serif;
-            font-size: 9pt;
+            font-size: 10pt;
             margin: 0;
             padding: 0;
         }
@@ -39,14 +39,14 @@
         }
 
         .header h1 {
-            font-size: 14pt;
+            font-size: 16pt;
             margin: 0;
             font-weight: bold;
             text-decoration: underline;
         }
 
         .header h2 {
-            font-size: 12pt;
+            font-size: 13pt;
             margin: 4px 0 6px;
             font-weight: bold;
             color: #222;
@@ -67,7 +67,7 @@
         .meta-info td {
             padding: 2px 5px;
             vertical-align: top;
-            font-size: 8.5pt;
+            font-size: 10pt;
         }
 
         .label {
@@ -89,7 +89,7 @@
             padding: 3px 2px;
             text-align: center;
             vertical-align: middle;
-            font-size: 7.5pt;
+            font-size: 9pt;
             overflow: hidden;
             word-wrap: break-word;
         }
@@ -97,7 +97,7 @@
         .roll-sheet-table th {
             background-color: #f0f0f0;
             font-weight: bold;
-            font-size: 8pt;
+            font-size: 9.5pt;
             height: 12px;
         }
 
@@ -106,50 +106,50 @@
             display: inline-block;
             text-align: left;
             padding: 2px 0;
-            max-height: 60px;
+            max-height: 70px;
             word-break: break-all;
         }
 
         .roll-sheet-table .serial-col {
-            width: 25px;
+            width: 28px;
         }
 
         .roll-sheet-table .student-name {
-            width: 50px;
-            height: 80px;
+            width: 55px;
+            height: 85px;
         }
 
         .roll-sheet-table .roll-col {
-            width: 45px;
+            width: 50px;
         }
 
         .roll-sheet-table .reg-col {
-            width: 70px;
+            width: 75px;
         }
 
         .roll-sheet-table .subject-col {
-            font-size: 7pt;
-            width: 70px;
-            min-width: 70px;
+            font-size: 8pt;
+            width: 75px;
+            min-width: 75px;
         }
 
         .subject-code {
             font-weight: bold;
             display: block;
             margin-bottom: 1px;
-            font-size: 7.5pt;
+            font-size: 8.5pt;
         }
 
         .subject-name {
-            font-size: 6.5pt;
+            font-size: 7.5pt;
             display: block;
             line-height: 1.1;
             word-wrap: break-word;
         }
 
         .subject-data-cell {
-            font-size: 6.5pt;
-            line-height: 1.1;
+            font-size: 8pt;
+            line-height: 1.2;
             word-wrap: break-word;
             word-break: break-all;
             padding: 2px;
@@ -169,7 +169,7 @@
         .not-registered {
             color: #999;
             font-weight: bold;
-            font-size: 9pt;
+            font-size: 10pt;
         }
 
         /* Footer Section */
@@ -244,15 +244,15 @@
         <div class="meta-info">
             <table>
                 <tr>
-                    <td width="20%"><span class="label">Batch:</span> {{ batch_name|default:"-" }}</td>
-                    <td width="20%"><span class="label">Session:</span> {{ exam.session|default:"-" }}</td>
-                    <td width="25%"><span class="label">Course:</span> {{ section.degree_name }}</td>
+                    <td width="20%"><span class="label">Batch:</span> 2024-26</td>
+                    <td width="20%"><span class="label">Session:</span> 2025-26</td>
+                    <td width="25%"><span class="label">Course:</span> Post Graduation</td>
                     <td width="35%"><span class="label">Discipline:</span> {{ section.discipline_name }}</td>
                 </tr>
                 <tr>
                     <td><span class="label">Semester:</span> {{ semester|default:"-" }}</td>
-                    <td><span class="label">Syllabus:</span> {{ section.syllabus_year|default:"-" }}</td>
-                    <td colspan="2"><span class="label">Institute:</span> {{ section.institute_name }}</td>
+                    <td><span class="label">Syllabus:</span> 2020</td>
+                    <td colspan="2"><span class="label">Institute:</span> {{ college_name }}</td>
                 </tr>
             </table>
         </div>
@@ -283,10 +283,10 @@
                     </td>
                     <td class="roll-col">{{ student_row.roll_no }}</td>
                     <td class="reg-col">{{ student_row.registration_no }}</td>
-                    {% for subj_info in student_row.row_subjects %}
+                    {% for subj_info in student_row.row_subjects %}Cell Biology & Cytogenetics
                     <td class="subject-col">
                         {% if subj_info.is_registered %}
-                        <div class="subject-data-cell" style="font-weight: bold;">
+                        <div class="subject-data-cell">
                             {{ subj_info.display_name|default:"-" }}
                         </div>
                         {% else %}
