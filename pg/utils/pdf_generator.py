@@ -808,7 +808,7 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     # ── All schedules ────────────────────────────────────────────────────────
     all_schedules = PGExamSchedule.objects.filter(
         exam=exam
-    ).select_related('common_course_structure').order_by('exam_date', 'exam_time')
+    ).select_related('common_course_structure', 'group').prefetch_related('group__department').order_by('exam_date', 'exam_time')
 
     # ── Pre-fetch ESE codes for all students in one query (Avoid N+1) ────────
     student_ids = [r.student_id for r in regs_list]
@@ -861,7 +861,10 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     import time
 
     # Pre-calculate schedule map for faster lookup (MOVE OUTSIDE LOOP)
+    # code_to_schedules: code -> list of schedules
+    # schedule_id_to_dept_ids: id -> set of department IDs
     code_to_schedules = {}
+    schedule_id_to_dept_ids = {}
     for s in all_schedules:
         if s.common_course_structure:
             code = (s.common_course_structure.course_code or "").upper().strip()
@@ -869,6 +872,12 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
                 if code not in code_to_schedules:
                     code_to_schedules[code] = []
                 code_to_schedules[code].append(s)
+        
+        # Pre-cache department IDs for the schedule's group
+        if s.group:
+            schedule_id_to_dept_ids[s.id] = set(s.group.department.values_list('id', flat=True))
+        else:
+            schedule_id_to_dept_ids[s.id] = set()
     # ── Photo Optimization Helper ────────────────────────────────────────────
     def _get_optimized_base64_photo(image_field):
         if not image_field:
@@ -918,14 +927,22 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
             student = reg.student
             ese_codes_upper = student_ese_map.get(student.id, set())
 
-            # Filter schedules relevant to this student
+            # Filter schedules relevant to this student:
+            # Must match both: 
+            # 1. Course Code (from student's ESE assessment)
+            # 2. Department (if the schedule has a group assigned)
             student_schedules_raw = []
-            if reg.exam_type == 'REGULAR':
-                student_schedules_raw = [s for s in all_schedules if s.common_course_structure]
-            else:
-                for code in ese_codes_upper:
-                    if code in code_to_schedules:
-                        student_schedules_raw.extend(code_to_schedules[code])
+            dept_id = student.department_id
+            
+            for code in ese_codes_upper:
+                if code in code_to_schedules:
+                    for s in code_to_schedules[code]:
+                        dept_ids = schedule_id_to_dept_ids.get(s.id, set())
+                        # If no group/depts assigned, allow for all. 
+                        # If depts assigned, must match student's dept.
+                        if not dept_ids or dept_id in dept_ids:
+                            if s not in student_schedules_raw:
+                                student_schedules_raw.append(s)
                 
             # Sort by date/time
             student_schedules_raw.sort(key=lambda x: (x.exam_date or timezone.now().date(), x.exam_time or ""))
