@@ -428,11 +428,12 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         seen_norms = set()
 
         if dept_obj is not None:
-            # Derive columns from actual ESE assessments of this dept's students
+            # Derive columns from actual ESE assessments of this dept's students.
+            # NOTE: do NOT filter by session here — PGExam.session and
+            # PGStudentCourseAssessment.session can differ (e.g. 2025-26 vs 2024-25).
             ese_rows = PGStudentCourseAssessment.objects.filter(
                 student_id__in=stu_ids,
                 label__iregex=r'^ESE',
-                session=exam.session,
                 semester__in=sem_variants,
             ).values('course_code', 'course_name').distinct()
 
@@ -503,7 +504,7 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
                 continue
 
             key = (a['student_id'], sid)
-            is_tgt = (a['session'] == exam.session and a['semester'] in sem_variants)
+            is_tgt = (a['semester'] in sem_variants)  # session may differ; use semester only
             cur = sn.get(key)
             better = not cur
             if cur:
@@ -521,10 +522,13 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
                 sn[key] = cname
                 sn_tgt[key] = is_tgt
 
-        # ── Sort subjects by numeric part of code ─────────────────────────
+        # ── Sort subjects: normal subjects first, AECC/AEC last ──────────────
         def _sort(s):
-            m = _re.search(r'(\d+)', s['norm_code'] or "")
-            return (0, int(m.group(1))) if m else (1, s['code'])
+            nc = s['norm_code'] or ""
+            prefix = nc.split('-')[0] if '-' in nc else nc
+            is_aecc = 1 if prefix in ('AECC', 'AEC') else 0
+            m = _re.search(r'(\d+)', nc)
+            return (is_aecc, int(m.group(1))) if m else (is_aecc, s['code'])
         subjects.sort(key=_sort)
 
         # ── Student rows ──────────────────────────────────────────────────
