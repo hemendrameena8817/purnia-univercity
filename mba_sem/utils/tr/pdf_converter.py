@@ -6,11 +6,12 @@ import os
 
 def convert_excel_to_pdf(temp_excel_path):
 
+    soffice = os.path.join(os.environ.get("ProgramFiles",""), "LibreOffice","program","soffice.exe") if os.name=="nt" else "soffice"
     subprocess.run([
-        "soffice",
+        soffice,
         "--headless",
         "--convert-to", "pdf:calc_pdf_Export",
-        "--outdir", "/tmp",
+        "--outdir", os.environ.get("TEMP", "/tmp"),
         temp_excel_path
     ])
 
