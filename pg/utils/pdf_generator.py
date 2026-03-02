@@ -440,23 +440,34 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         exam=exam
     ).select_related('common_course_structure', 'group').order_by('exam_date', 'exam_time')
 
-    # ── Controller signature ─────────────────────────────────────────────────
-    SIG_FILENAME = "common/controller-of-examination-signature.png"
-    SIG_FILENAME_IMG = "images/common/controller-of-examination-signature.png"
-    _sig_candidates = [
-        os.path.join(settings.MEDIA_ROOT, SIG_FILENAME),
-        os.path.join(settings.BASE_DIR, 'static', SIG_FILENAME),
-        os.path.join(settings.BASE_DIR, 'static', SIG_FILENAME_IMG),
-        os.path.join(getattr(settings, 'STATIC_ROOT', ''), SIG_FILENAME),
-        os.path.join(getattr(settings, 'STATIC_ROOT', ''), SIG_FILENAME_IMG),
-    ]
-    for sdir in getattr(settings, 'STATICFILES_DIRS', []):
-        _sig_candidates.append(os.path.join(sdir, SIG_FILENAME))
-        _sig_candidates.append(os.path.join(sdir, SIG_FILENAME_IMG))
+    # ── Controller signature (same path logic as admit card) ─────────────────
+    def _find_static_image(filename):
+        """Finds a static image the same way generate_pg_admit_card_pdf does."""
+        # 1. static/images/common/ (local dev)
+        p = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', filename)
+        if os.path.exists(p):
+            return p
+        # 2. static/images/ directly (live server)
+        p = os.path.join(settings.BASE_DIR, 'static', 'images', filename)
+        if os.path.exists(p):
+            return p
+        # 3. MEDIA_ROOT/common/
+        p = os.path.join(settings.MEDIA_ROOT, 'common', filename)
+        if os.path.exists(p):
+            return p
+        # 4. STATIC_ROOT
+        for base in [getattr(settings, 'STATIC_ROOT', '')] + list(getattr(settings, 'STATICFILES_DIRS', [])):
+            if base:
+                for sub in ['images/common', 'images', 'common', '']:
+                    p = os.path.join(base, sub, filename) if sub else os.path.join(base, filename)
+                    if os.path.exists(p):
+                        return p
+        return None
 
-    ctrl_sig_path = next((p for p in _sig_candidates if p and os.path.exists(p)), None)
-    if not ctrl_sig_path:
-        logger.warning(f"[ROLLSHEET] Signature file not found. Checked: {_sig_candidates}")
+    ctrl_sig_path = _find_static_image("controller-of-examination-signature.png")
+    ctrl_sig_b64 = image_to_base64(ctrl_sig_path) if ctrl_sig_path else None
+    if not ctrl_sig_b64:
+        logger.warning(f"[ROLLSHEET] Signature not found for: controller-of-examination-signature.png")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helper: build one roll-sheet section for the given list of registrations
@@ -687,7 +698,7 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         "center_name": center_name,
         "semester": str(exam.year) if exam.year else "-",
         "department_sections": dept_sections,
-        "controller_signature": image_to_base64(ctrl_sig_path) if ctrl_sig_path else None,
+        "controller_signature": ctrl_sig_b64,
     }
 
     html_string = get_template("pg/roll_sheet.html").render(context)
