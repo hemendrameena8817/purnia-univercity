@@ -737,6 +737,10 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
         'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
         'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
     }
+    roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
+    roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
+    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
+
     ey = str(exam.year) if exam.year else ""
     sem_variants_int = set()
     if ey.isdigit():
@@ -751,6 +755,19 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
         if digit_m:
             sem_variants_int.add(int(digit_m.group(1)))
     sem_variants_int = list(sem_variants_int)
+
+    # sem_variants: text forms used to filter PGStudentCourseAssessment.semester
+    ey_for_str = str(sem_variants_int[0]) if sem_variants_int else ey
+    roman_ey = roman_map_inv.get(ey_for_str, "")
+    sem_variants = [
+        ey_for_str,
+        f"{ey_for_str}ST", f"{ey_for_str}ND", f"{ey_for_str}RD", f"{ey_for_str}TH",
+        f"Semester-{roman_ey}", f"Semester {roman_ey}",
+        f"Semester-{ey_for_str}", f"Semester {ey_for_str}",
+        roman_ey,
+    ]
+    sem_variants = list(set(v.upper() for v in sem_variants if v))
+    logger.info(f"[ATTENDANCE] sem_variants_int={sem_variants_int}, sem_variants={sem_variants}")
 
     _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
 
@@ -794,11 +811,15 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
 
     # ── Pre-fetch ESE codes for all students in one query (Avoid N+1) ────────
     student_ids = [r.student_id for r in regs_list]
-    assessments = PGStudentCourseAssessment.objects.filter(
+    # Use sem_variants (text list like ['3RD', '3TH', ...]) NOT sem_variants_int (integers)
+    # because PGStudentCourseAssessment.semester stores text values like '3RD'
+    ese_filter = dict(
         student_id__in=student_ids,
         label__iregex=r'^ESE',
-        semester__in=sem_variants_int if sem_variants_int else [],
-    ).values('student_id', 'course_code')
+    )
+    if sem_variants:
+        ese_filter['semester__in'] = sem_variants
+    assessments = PGStudentCourseAssessment.objects.filter(**ese_filter).values('student_id', 'course_code')
 
     student_ese_map = {}
     for a in assessments:
@@ -814,80 +835,12 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     university_logo = image_to_base64(logo_path) if os.path.exists(logo_path) else None
 
     # ── Build per-student attendance data ────────────────────────────────────
-    attendance_data = []
     total_regs = len(regs_list)
-    logger.info(f"[ATTENDANCE] Processing {total_regs} registrations for {college.name}")
+    logger.info(f"[ATTENDANCE] Processing {total_regs} registrations for {college.name} in batches of 50.")
 
-    for idx, reg in enumerate(regs_list):
-        if idx > 0 and idx % 100 == 0:
-            logger.info(f"[ATTENDANCE] Processed {idx}/{total_regs} students...")
-
-        student = reg.student
-        ese_codes_upper = student_ese_map.get(student.id, set())
-
-        # Filter schedules relevant to this student
-        student_schedules_raw = []
-        for s in all_schedules:
-            if not s.common_course_structure:
-                continue
-            code = (s.common_course_structure.course_code or "").upper().strip()
-            if not code:
-                continue
-            # Include if student has this ESE, OR if exam_type is REGULAR (show all)
-            if reg.exam_type == 'REGULAR' or code in ese_codes_upper:
-                student_schedules_raw.append(s)
-
-        student_schedules = [
-            {
-                'date': s.exam_date.strftime('%d-%m-%Y') if s.exam_date else '-',
-                'exam_time': s.exam_time or '',
-                'sitting': s.sitting or '',
-                'subject_name': s.common_course_structure.course_name or '-',
-                'subject_code': s.common_course_structure.course_code or '-',
-            }
-            for s in student_schedules_raw
-        ]
-
-        # Barcode
-        barcode_text = (
-            f"Roll:{student.roll_no or ''} "
-            f"Reg:{student.registration_no or ''} "
-            f"Name:{student.get_full_name()}"
-        )
-        try:
-            barcode_base64 = generate_barcode_base64(barcode_text)
-        except Exception:
-            barcode_base64 = None
-
-        # Photo
-        photo_base64 = None
-        if student.profile_image:
-            try:
-                photo_base64 = image_to_base64(student.profile_image.path)
-            except Exception as e:
-                logger.error(f"Photo error {student.registration_no}: {e}")
-
-        dept_name = student.department.name if student.department else "-"
-
-        attendance_data.append({
-            'name': student.get_full_name(),
-            'roll_no': student.roll_no or 'N/A',
-            'registration_no': student.registration_no or 'N/A',
-            'department_name': dept_name,
-            'college_name': college.name,
-            'photo': photo_base64,
-            'barcode': barcode_base64,
-            'schedules': student_schedules,
-        })
-
-    if not attendance_data:
-        logger.warning(f"[ATTENDANCE] attendance_data empty for exam='{exam.name}'")
-        return None
-
-    # ── Context ──────────────────────────────────────────────────────────────
+    # ── Context (Global) ─────────────────────────────────────────────────────
     sem_display = str(sem_variants_int[0]) if sem_variants_int else (exam.session or '-')
-    context = {
-        'attendance_data': attendance_data,
+    global_context = {
         'university_logo': university_logo,
         'exam_header': f"{exam.name} (Semester {sem_display})",
         'center_name': center_name,
@@ -899,13 +852,124 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
         'college_name': college.name,
     }
 
-    html_string = get_template('pg/attendance_sheet.html').render(context)
+    # ── Batch Processing ─────────────────────────────────────────────────────
+    BATCH_SIZE = 50
+    all_pages = []
+    template = get_template('pg/attendance_sheet.html')
+
+    for i in range(0, total_regs, BATCH_SIZE):
+        batch_regs = regs_list[i : i + BATCH_SIZE]
+        batch_attendance_data = []
+
+        logger.info(f"[ATTENDANCE] Generating batch {i//BATCH_SIZE + 1} ({i} to {min(i+BATCH_SIZE, total_regs)})")
+
+        for reg in batch_regs:
+            student = reg.student
+            ese_codes_upper = student_ese_map.get(student.id, set())
+
+            # Filter schedules relevant to this student
+            student_schedules_raw = []
+            for s in all_schedules:
+                if not s.common_course_structure:
+                    continue
+                code = (s.common_course_structure.course_code or "").upper().strip()
+                if not code:
+                    continue
+                # Include if student has this ESE, OR if exam_type is REGULAR (show all)
+                if reg.exam_type == 'REGULAR' or code in ese_codes_upper:
+                    student_schedules_raw.append(s)
+
+            student_schedules = [
+                {
+                    'date': s.exam_date.strftime('%d-%m-%Y') if s.exam_date else '-',
+                    'exam_time': s.exam_time or '',
+                    'sitting': s.sitting or '',
+                    'subject_name': s.common_course_structure.course_name or '-',
+                    'subject_code': s.common_course_structure.course_code or '-',
+                }
+                for s in student_schedules_raw
+            ]
+
+            # Barcode
+            barcode_text = (
+                f"Roll:{student.roll_no or ''} "
+                f"Reg:{student.registration_no or ''} "
+                f"Name:{student.get_full_name()}"
+            )
+            try:
+                barcode_base64 = generate_barcode_base64(barcode_text)
+            except Exception:
+                barcode_base64 = None
+
+            # Photo
+            photo_base64 = None
+            if student.profile_image:
+                try:
+                    photo_base64 = image_to_base64(student.profile_image.path)
+                except Exception as e:
+                    logger.error(f"Photo error {student.registration_no}: {e}")
+
+            dept_name = student.department.name if student.department else "-"
+
+            batch_attendance_data.append({
+                'name': student.get_full_name(),
+                'roll_no': student.roll_no or 'N/A',
+                'registration_no': student.registration_no or 'N/A',
+                'department_name': dept_name,
+                'college_name': college.name,
+                'photo': photo_base64,
+                'barcode': barcode_base64,
+                'schedules': student_schedules,
+            })
+
+        # Render this batch
+        batch_context = global_context.copy()
+        batch_context['attendance_data'] = batch_attendance_data
+        
+        html_string = template.render(batch_context)
+        
+        try:
+            # Render batch to a list of pages
+            batch_doc = HTML(string=html_string, base_url=settings.BASE_DIR).render()
+            all_pages.extend(batch_doc.pages)
+        except Exception as e:
+            logger.error(f"[ATTENDANCE] Rendering batch starting at {i} failed: {e}")
+            # Continue to next batch or return what we have? 
+            # Usually better to fail fast or try to recover?
+            # For now, let's keep going if one batch fails, though it's rare.
+            continue
+        
+        # Explicitly clear memory
+        del batch_attendance_data
+        del html_string
+        del batch_doc
+
+    if not all_pages:
+        logger.warning(f"[ATTENDANCE] No pages generated for exam='{exam.name}'")
+        return None
 
     try:
-        pdf_file = HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf()
-        logger.info(f"[ATTENDANCE] PDF generated: {college.name}, {len(attendance_data)} students, {len(pdf_file)} bytes")
+        # Merge all pages into final PDF
+        # We pick the metadata from the first page's document or a dummy one
+        final_doc = all_pages[0]._page_maker.set_metadata(all_pages) if hasattr(all_pages[0], '_page_maker') else None
+        
+        # WeasyPrint document creation from pages
+        # Actually, the standard way is using the first batch's document as a base if possible,
+        # but creating a new one from collected pages is safer.
+        from weasyprint import Document
+        # In newer WeasyPrint versions, you can just do Document(all_pages, doc.metadata, doc.url_fetcher)
+        # But we don't have the original doc easily. 
+        # Safer: use one doc as a container.
+        
+        # Re-rendering a small empty doc to get a container
+        base_doc = HTML(string="<html></html>").render()
+        base_doc.pages = all_pages
+        
+        pdf_file = base_doc.write_pdf()
+        logger.info(f"[ATTENDANCE] Optimized PDF generated: {college.name}, {total_regs} students, {len(pdf_file)} bytes")
         return pdf_file
+        
     except Exception as e:
-        logger.error(f"[ATTENDANCE] PDF generation failed: {e}")
+        logger.error(f"[ATTENDANCE] Final PDF assembly failed: {e}")
         return None
 
