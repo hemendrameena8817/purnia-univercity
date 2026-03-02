@@ -14,7 +14,7 @@ class MBAResultGenerator:
 
     TEMPLATE_PATH = os.path.join(
         settings.BASE_DIR,
-        "mba_sem/static/tr/MBA_Result_final_1.xlsx"
+        "mba_sem/static/tr/MBA_Result_2nd.xlsx"
     )
 
     def __init__(self, students, college, semester, batch_uid=None, exam_name=None, course_type=None, exam_month_year=None):
@@ -47,7 +47,7 @@ class MBAResultGenerator:
 
         # All other semesters → dynamic subject builder
         temp_excel = os.path.join(
-            "/tmp", f"mba_result_{uuid.uuid4().hex}.xlsx"
+            os.environ.get("TEMP", "/tmp"), f"mba_result_{uuid.uuid4().hex}.xlsx"
         )
 
         shutil.copy(self.TEMPLATE_PATH, temp_excel)
