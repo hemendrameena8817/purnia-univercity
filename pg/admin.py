@@ -38,9 +38,10 @@ class PGFacultyAdmin(admin.ModelAdmin):
 
 @admin.register(PGDepartment)
 class PGDepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'faculty', 'head_of_department', 'created_at')
+    list_display = ('uid', 'name', 'code', 'faculty', 'head_of_department', 'created_at')
     list_filter = ('faculty',)
-    search_fields = ('name', 'code', 'faculty__name')
+    search_fields = ('uid', 'name', 'code', 'faculty__name')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('faculty', 'name')
 
 
