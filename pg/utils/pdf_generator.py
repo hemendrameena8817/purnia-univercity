@@ -380,6 +380,7 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         student__college=college,
         status='REGISTERED',
     )
+
     if sem_variants_int:
         regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
     else:
@@ -393,7 +394,10 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
     ).order_by('student__roll_no', 'student__registration_no')
 
     if not regs_qs.exists():
-        logger.warning(f"No registrations for Exam: {exam.name}, College: {college.name}")
+        logger.warning(
+            f"[ROLLSHEET] No registrations for exam='{exam.name}' "
+            f"session={exam.session}, sem={sem_variants_int}, college='{college.name}'"
+        )
         return None
 
     # ── Exam center ──────────────────────────────────────────────────────────
