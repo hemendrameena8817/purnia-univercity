@@ -10,10 +10,18 @@ from .models import (
     UGBeforeCBCSStudentProfile,
     UGBeforeCBCSExam,
     UGBeforeCBCSStudentResult,
-    UGBeforeCBCSStatistics
+    UGBeforeCBCSStatistics,
+    UGBeforeCBCSExamCenterMapping
 )
 from .utils.stats import calculate_and_save_ug_before_cbcs_stats
 from django.contrib import messages
+
+@admin.register(UGBeforeCBCSExamCenterMapping)
+class UGBeforeCBCSExamCenterMappingAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'student_college', 'center_college', 'center_name', 'updated_at')
+    list_filter = ('exam', 'student_college', 'center_college')
+    search_fields = ('exam__name', 'student_college__name', 'center_college__name', 'center_name')
+    raw_id_fields = ('exam', 'student_college', 'center_college')
 
 @admin.register(UGBeforeCBCSStatistics)
 class UGBeforeCBCSStatisticsAdmin(admin.ModelAdmin):
