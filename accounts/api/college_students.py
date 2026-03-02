@@ -473,17 +473,19 @@ class CollegeStudentListView(APIView):
                 count = qs.count()
                 counts_by_type[ptype] = count
 
-                # Serialize all matching records from this table
+                # Only serialize records for the current page window
                 SerializerClass = conf['make_serializer']()
-                for profile in qs:
+                for profile in qs[:page_size]:
                     data = SerializerClass(profile, context={'request': request}).data
                     data['profile_type'] = ptype
                     all_results.append(data)
-            except Exception:
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Error scanning {ptype}: {e}")
                 counts_by_type[ptype] = 0
                 continue
 
-        total = len(all_results)
+        total = sum(counts_by_type.values())
         offset = (page - 1) * page_size
         page_results = all_results[offset:offset + page_size]
 
