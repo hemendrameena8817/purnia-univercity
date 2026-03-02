@@ -729,6 +729,7 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     )
     from pup_umis_backend.utils.file_utils import image_to_base64, generate_barcode_base64
     import os, re as _re, logging
+    from django.utils import timezone
 
     logger = logging.getLogger(__name__)
 
@@ -853,15 +854,65 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     }
 
     # ── Batch Processing ─────────────────────────────────────────────────────
-    BATCH_SIZE = 50
+    BATCH_SIZE = 20  # Reduced from 50 to 10-20 to avoid 502/Gateway Timeouts
     all_pages = []
     template = get_template('pg/attendance_sheet.html')
+    
+    import time
+
+    # Pre-calculate schedule map for faster lookup (MOVE OUTSIDE LOOP)
+    code_to_schedules = {}
+    for s in all_schedules:
+        if s.common_course_structure:
+            code = (s.common_course_structure.course_code or "").upper().strip()
+            if code:
+                if code not in code_to_schedules:
+                    code_to_schedules[code] = []
+                code_to_schedules[code].append(s)
+    # ── Photo Optimization Helper ────────────────────────────────────────────
+    def _get_optimized_base64_photo(image_field):
+        if not image_field:
+            return None
+        
+        try:
+            from PIL import Image, ImageOps
+            import io
+            import base64
+            
+            # Open the image (works for S3 and local)
+            with image_field.open('rb') as f:
+                img = Image.open(f)
+                
+                # Convert to RGB (in case of RGBA/P)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                    
+                # Resize if larger than 150px width (standard for attendance sheets)
+                max_width = 150
+                if img.width > max_width:
+                    ratio = max_width / float(img.width)
+                    height = int(float(img.height) * float(ratio))
+                    img = img.resize((max_width, height), Image.Resampling.LANCZOS)
+                
+                # Compress and convert to base64
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG', quality=75) # High compression JPEG
+                return base64.b64encode(buf.getvalue()).decode('utf-8')
+        except Exception as e:
+            logger.warning(f"Photo optimization failed for {image_field}: {e}")
+            # Fallback to simple base64 if possible
+            try:
+                from pup_umis_backend.utils.file_utils import image_to_base64
+                return image_to_base64(image_field.path)
+            except:
+                return None
 
     for i in range(0, total_regs, BATCH_SIZE):
         batch_regs = regs_list[i : i + BATCH_SIZE]
         batch_attendance_data = []
 
-        logger.info(f"[ATTENDANCE] Generating batch {i//BATCH_SIZE + 1} ({i} to {min(i+BATCH_SIZE, total_regs)})")
+        start_time = time.time()
+        logger.info(f"[ATTENDANCE] Rendering batch {i//BATCH_SIZE + 1} ({i} to {min(i+BATCH_SIZE, total_regs)})")
 
         for reg in batch_regs:
             student = reg.student
@@ -869,15 +920,15 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
 
             # Filter schedules relevant to this student
             student_schedules_raw = []
-            for s in all_schedules:
-                if not s.common_course_structure:
-                    continue
-                code = (s.common_course_structure.course_code or "").upper().strip()
-                if not code:
-                    continue
-                # Include if student has this ESE, OR if exam_type is REGULAR (show all)
-                if reg.exam_type == 'REGULAR' or code in ese_codes_upper:
-                    student_schedules_raw.append(s)
+            if reg.exam_type == 'REGULAR':
+                student_schedules_raw = [s for s in all_schedules if s.common_course_structure]
+            else:
+                for code in ese_codes_upper:
+                    if code in code_to_schedules:
+                        student_schedules_raw.extend(code_to_schedules[code])
+                
+            # Sort by date/time
+            student_schedules_raw.sort(key=lambda x: (x.exam_date or timezone.now().date(), x.exam_time or ""))
 
             student_schedules = [
                 {
@@ -901,13 +952,8 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
             except Exception:
                 barcode_base64 = None
 
-            # Photo
-            photo_base64 = None
-            if student.profile_image:
-                try:
-                    photo_base64 = image_to_base64(student.profile_image.path)
-                except Exception as e:
-                    logger.error(f"Photo error {student.registration_no}: {e}")
+            # Photo (OPTIMIZED)
+            photo_base64 = _get_optimized_base64_photo(student.profile_image)
 
             dept_name = student.department.name if student.department else "-"
 
@@ -932,17 +978,19 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
             # Render batch to a list of pages
             batch_doc = HTML(string=html_string, base_url=settings.BASE_DIR).render()
             all_pages.extend(batch_doc.pages)
+            
+            end_time = time.time()
+            logger.info(f"[ATTENDANCE] Batch {i//BATCH_SIZE + 1} rendered in {end_time - start_time:.2f}s. Total pages: {len(all_pages)}")
         except Exception as e:
             logger.error(f"[ATTENDANCE] Rendering batch starting at {i} failed: {e}")
-            # Continue to next batch or return what we have? 
-            # Usually better to fail fast or try to recover?
-            # For now, let's keep going if one batch fails, though it's rare.
             continue
         
         # Explicitly clear memory
         del batch_attendance_data
         del html_string
         del batch_doc
+        import gc
+        gc.collect()
 
     if not all_pages:
         logger.warning(f"[ATTENDANCE] No pages generated for exam='{exam.name}'")
