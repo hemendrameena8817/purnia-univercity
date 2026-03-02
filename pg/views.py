@@ -97,26 +97,32 @@ class PGCIAMarksEntryView(APIView):
 class PGRollSheetPDFView(View):
     """
     Generates and returns Exam Roll Sheet PDF for PG.
-    Query params: exam_uid, college_uid
+    Query params: exam_uid, college_uid, department_uid (optional)
     """
     def get(self, request):
         from colleges.models import College
         from .utils.pdf_generator import generate_pg_roll_sheet_pdf
-        from .models import PGExam
+        from .models import PGExam, PGDepartment
         
         exam_uid = request.GET.get("exam_uid")
         college_uid = request.GET.get("college_uid")
+        department_uid = request.GET.get("department_uid")  # optional
 
         if not all([exam_uid, college_uid]):
             return HttpResponse("exam_uid and college_uid are required", status=400, content_type='text/plain')
 
         exam = get_object_or_404(PGExam, uid=exam_uid)
         college = get_object_or_404(College, uid=college_uid)
+        
+        department = None
+        if department_uid:
+            department = get_object_or_404(PGDepartment, uid=department_uid)
 
-        pdf_content = generate_pg_roll_sheet_pdf(exam, college)
+        pdf_content = generate_pg_roll_sheet_pdf(exam, college, department=department)
 
         if not pdf_content:
-            return HttpResponse(f"Failed to generate Roll Sheet for {college.name}. Ensure students are enrolled for this exam.", status=404, content_type='text/plain')
+            dept_info = f" ({department.name})" if department else ""
+            return HttpResponse(f"Failed to generate Roll Sheet for {college.name}{dept_info}. Ensure students are enrolled for this exam.", status=404, content_type='text/plain')
 
         # Check if user wants to force download or view inline
         download = request.GET.get('download', 'false').lower() == 'true'
@@ -124,8 +130,10 @@ class PGRollSheetPDFView(View):
         
         response = HttpResponse(pdf_content, content_type="application/pdf")
         safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
-        response["Content-Disposition"] = f'{disposition}; filename="Roll_Sheet_{safe_college_name}_SEM_{exam.year}.pdf"'
+        dept_suffix = f"_{department.name.replace(' ', '_')}" if department else ""
+        response["Content-Disposition"] = f'{disposition}; filename="Roll_Sheet_{safe_college_name}{dept_suffix}_SEM_{exam.year}.pdf"'
         return response
+
 
 
 class PGCollegeStudentsView(APIView):
