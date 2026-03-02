@@ -357,6 +357,22 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     stored_total = clean_mark(summary.total_secured_mark) if summary else 0
     final_grand_total = stored_total if stored_total and stored_total != 0 else calculated_grand_total
 
+    # 5. Fetch Center Name from Mapping (if exists, else fallback to exam default)
+    from ..models import UGBeforeCBCSExamCenterMapping
+    mapping = UGBeforeCBCSExamCenterMapping.objects.filter(
+        exam=exam, 
+        student_college=student.college
+    ).first()
+    
+    center_display_name = "N/A"
+    if mapping:
+        if mapping.center_college:
+            center_display_name = mapping.center_college.name
+        elif mapping.center_name:
+            center_display_name = mapping.center_name
+    else:
+        center_display_name = exam.centre_name or "N/A"
+
     # Prepare Context
     context = {
         'is_honours_with_practical': is_honours_with_practical,
@@ -367,7 +383,7 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         'batch_year': exam.batch_code or "N/A",
         'session_year': exam.session_code or "N/A",
         'hons_subject': honours_subject_name,
-        'center_name': exam.centre_name or "N/A",
+        'center_name': center_display_name,
         
         'subjects': {
             'honours': {

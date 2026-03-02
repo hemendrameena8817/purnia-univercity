@@ -499,6 +499,56 @@ class UGBeforeCBCSStudentResult(models.Model):
         return f"{self.student.student_name} - {self.subject_name} - {self.exam.name}"
 
 
+class UGBeforeCBCSExamCenterMapping(models.Model):
+    """
+    Maps an Exam to a specific Examination Center for a particular Student's College.
+    One exam can have different centers for different colleges.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    exam = models.ForeignKey(
+        UGBeforeCBCSExam, 
+        on_delete=models.CASCADE, 
+        related_name='center_mappings'
+    )
+    student_college = models.ForeignKey(
+        'colleges.College', 
+        on_delete=models.CASCADE, 
+        related_name='ug_before_cbcs_student_center_mappings'
+    )
+    center_college = models.ForeignKey(
+        'colleges.College', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='ug_before_cbcs_as_center_mappings',
+        help_text='The college that acts as the examination center'
+    )
+    center_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text='Fallback center name if center_college is not set'
+    )
+    center_code = models.CharField(
+        max_length=50, 
+        null=True, 
+        blank=True,
+        help_text='Optional center code'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'UG Before CBCS Exam Center Mapping'
+        verbose_name_plural = 'UG Before CBCS Exam Center Mappings'
+        unique_together = ('exam', 'student_college')
+
+    def __str__(self):
+        center_str = self.center_college.name if self.center_college else self.center_name
+        return f"{self.exam.name} - {self.student_college.name} -> {center_str}"
+
+
 class UGBeforeCBCSStatistics(models.Model):
     """
     Stores pre-calculated statistical overview data to avoid

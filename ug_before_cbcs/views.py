@@ -296,12 +296,37 @@ class UGOldMarksheetUpdateView(APIView):
             exam.exam_month_year = exam_month_year
         if publication_date:
             exam.publication_date = publication_date
-        if centre_name:
-            exam.centre_name = centre_name
         if exam_year:
             exam.exam_year = exam_year            
-        if exam_name or exam_month_year or publication_date or centre_name or exam_year:
+        if exam_name or exam_month_year or publication_date or exam_year:
             exam.save()
+            
+        # Update Center Name (Using the new mapping approach)
+        center_college_uid = request.data.get("center_college_uid")
+        
+        if centre_name or center_college_uid:
+            from .models import UGBeforeCBCSExamCenterMapping
+            from colleges.models import College
+            
+            defaults = {}
+            if centre_name:
+                defaults['center_name'] = centre_name
+            
+            if center_college_uid:
+                try:
+                    center_col = College.objects.get(uid=center_college_uid)
+                    defaults['center_college'] = center_col
+                    # If we have a formal college, sync its name as backup
+                    defaults['center_name'] = center_col.name
+                except College.DoesNotExist:
+                    pass
+
+            # Update for ALL students of THIS college in THIS exam
+            UGBeforeCBCSExamCenterMapping.objects.update_or_create(
+                exam=exam,
+                student_college=student.college,
+                defaults=defaults
+            )
             
         # Update Student details (if provided)
         student_name = request.data.get("student_name")
