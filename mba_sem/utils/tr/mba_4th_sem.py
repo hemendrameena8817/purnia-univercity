@@ -24,7 +24,7 @@ Summary (fixed columns, already labelled in template):
     Col 62  BJ  Result Status
 
 Footer (same row logic as original builder):
-    DATA_START_ROW(17) + STUDENTS_PER_PAGE(5) - 1 + 4  = row 25
+    DATA_START_ROW(17) + (actual students) + 3 = dynamic footer row
 """
 
 import os
@@ -365,10 +365,13 @@ def fill_students(ws, students, student_map):
 
         if status == "Pass":
             letter, desc = get_letter_and_description(gpa)
+            gpa_numeric  = calculate_numeric_grade(gpa * 10)
         elif status == "Fail":
             letter, desc = "F",  "Fail"
+            gpa_numeric  = 0
         else:
             letter, desc = "AB", "Absent"
+            gpa_numeric  = 0
 
         cgpa = _calc_cgpa(student, total_grade_points, total_credit_allotted, status)
 
@@ -378,7 +381,7 @@ def fill_students(ws, students, student_map):
         ws.cell(row=row, column=SUMMARY_COLS["credit_earned"] ).value = total_credit_earned
         ws.cell(row=row, column=SUMMARY_COLS["gpa"]           ).value = gpa
         ws.cell(row=row, column=SUMMARY_COLS["cgpa"]          ).value = cgpa
-        ws.cell(row=row, column=SUMMARY_COLS["gpa2"]          ).value = gpa
+        ws.cell(row=row, column=SUMMARY_COLS["gpa2"]          ).value = gpa_numeric
         ws.cell(row=row, column=SUMMARY_COLS["letter"]        ).value = letter
         ws.cell(row=row, column=SUMMARY_COLS["desc"]          ).value = desc
         ws.cell(row=row, column=SUMMARY_COLS["status"]        ).value = status
@@ -402,7 +405,7 @@ def _add_logo(ws):
     img = XLImage(logo_path)
     img.width = 110
     img.height = 110
-    img.anchor = "W1"
+    img.anchor = "R1"
     ws.add_image(img)
 
 
@@ -424,12 +427,13 @@ def fill_header(ws, exam_name, college, students, exam_month_year=None):
 
 def fill_footer(ws, students):
     """Write pass/fail/absent counts and signature lines."""
-    footer_row = DATA_START_ROW + STUDENTS_PER_PAGE - 1 + 4   # row 25
+    num_students = len(students)
+    footer_row   = DATA_START_ROW + num_students + 3
 
     page_pass = page_fail = page_absent = 0
     status_col = SUMMARY_COLS["status"]
 
-    for i in range(len(students)):
+    for i in range(num_students):
         s = ws.cell(row=DATA_START_ROW + i, column=status_col).value
         if   s == "Pass":   page_pass   += 1
         elif s == "Fail":   page_fail   += 1
@@ -515,7 +519,7 @@ class MBA4thSemResultGenerator:
             print("[MBA4] No students – aborting.")
             return None
 
-        temp_excel = os.path.join("/tmp", f"mba4_{uuid.uuid4().hex}.xlsx")
+        temp_excel = os.path.join(os.environ.get("TEMP", "/tmp"), f"mba4_{uuid.uuid4().hex}.xlsx")
         shutil.copy(self._get_template_path(), temp_excel)
 
         wb          = load_workbook(temp_excel)
@@ -523,6 +527,13 @@ class MBA4thSemResultGenerator:
         master.title = "MASTER_TEMPLATE"
 
         student_map = self._build_student_map()
+
+        # Filter out students who have NO assessment records (implements "if the data is not available the row is not show")
+        self.students = [s for s in self.students if s.id in student_map]
+
+        if not self.students:
+            print("[MBA4] No students with data – aborting.")
+            return None
 
         # Split students into pages of 5
         pages = [
@@ -535,6 +546,11 @@ class MBA4thSemResultGenerator:
             ws.title = f"Page_{idx + 1}"
 
             fill_students(ws, chunk, student_map)
+
+            # Delete unused student rows so the footer moves up ("footer will be fixed")
+            if len(chunk) < STUDENTS_PER_PAGE:
+                ws.delete_rows(DATA_START_ROW + len(chunk), STUDENTS_PER_PAGE - len(chunk))
+
             fill_header(ws, self.exam_name, self.college, chunk, exam_month_year=self.exam_month_year)
             _add_logo(ws)
             fill_footer(ws, chunk)
