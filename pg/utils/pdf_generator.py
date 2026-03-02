@@ -327,32 +327,54 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
     logger = logging.getLogger(__name__)
 
     # ── Semester number variants ─────────────────────────────────────────────
+    _roman_str_to_int = {
+        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+    }
+    roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
+    roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
+    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
+
     ey = str(exam.year) if exam.year else ""
     sem_variants_int = set()
+
+    # 1. From exam.year directly
     if ey.isdigit():
         sem_variants_int.add(int(ey))
+
     if exam.name:
-        m = _re.search(r'\b(\d+)', exam.name)
-        if m:
-            sem_variants_int.add(int(m.group(1)))
+        # 2. Roman numeral in name: "SEM-III", "SEM III", "SEMESTER-III" → 3
+        roman_m = _re.search(
+            r'\b(?:SEM|SEMESTER)[-\s]*(I{1,3}|IV|VI{0,3}|IX|X)\b',
+            exam.name, _re.IGNORECASE
+        )
+        if roman_m:
+            rn = roman_m.group(1).upper()
+            if rn in _roman_str_to_int:
+                sem_variants_int.add(_roman_str_to_int[rn])
+
+        # 3. Small digit (1-8) only — avoids picking up years like 2025
+        digit_m = _re.search(r'(?<!\d)([1-8])(?!\d)', exam.name)
+        if digit_m:
+            sem_variants_int.add(int(digit_m.group(1)))
+
     sem_variants_int = list(sem_variants_int)
     logger.info(f"Roll sheet sem filter: exam.year={exam.year}, name={exam.name}, sem_variants_int={sem_variants_int}")
 
-    roman_to_arabic = {
-        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5',
-        'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10',
-        'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15',
-    }
-    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
-    roman_ey = roman_map_inv.get(ey, "")
-
+    # sem_variants: string forms used to filter PGStudentCourseAssessment.semester
+    ey_for_str = str(list(sem_variants_int)[0]) if sem_variants_int else ey
+    roman_ey = roman_map_inv.get(ey_for_str, "")
     sem_variants = [
-        ey, f"{ey}ST", f"{ey}ND", f"{ey}RD", f"{ey}TH",
+        ey_for_str,
+        f"{ey_for_str}ST", f"{ey_for_str}ND", f"{ey_for_str}RD", f"{ey_for_str}TH",
         f"Semester-{roman_ey}", f"Semester {roman_ey}",
-        f"Semester-{ey}", f"Semester {ey}",
+        f"Semester-{ey_for_str}", f"Semester {ey_for_str}",
         roman_ey,
     ]
     sem_variants = list(set(v.upper() for v in sem_variants if v))
+
+    # Whether exam.session is a real session year-range like "2025-26"
+    _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
 
     def normalize_code(code):
         if not code:
@@ -380,11 +402,17 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         student__college=college,
         status='REGISTERED',
     )
-
     if sem_variants_int:
-        regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
+        if _is_year_range:
+            # Exact match: session + sem
+            regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
+        else:
+            # exam.session is not a year-range (e.g. '3RD') — filter only by sem
+            regs_qs = regs_qs.filter(sem__in=sem_variants_int)
     else:
-        regs_qs = regs_qs.filter(session=exam.session)
+        if _is_year_range:
+            regs_qs = regs_qs.filter(session=exam.session)
+        # else: no reliable filter, return all registered for this college
 
     if department:
         regs_qs = regs_qs.filter(student__department=department)
@@ -396,7 +424,8 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
     if not regs_qs.exists():
         logger.warning(
             f"[ROLLSHEET] No registrations for exam='{exam.name}' "
-            f"session={exam.session}, sem={sem_variants_int}, college='{college.name}'"
+            f"session={exam.session} (is_year_range={_is_year_range}), "
+            f"sem={sem_variants_int}, college='{college.name}'"
         )
         return None
 
