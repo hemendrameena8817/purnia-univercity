@@ -1,24 +1,33 @@
-# python manage.py refresh_ug_stats
+# Usage: poetry run python scripts/ug_before_cbcs/refresh_ug_stats.py
 
-from django.core.management.base import BaseCommand
-from ug_before_cbcs.utils.stats import calculate_and_save_ug_before_cbcs_stats
+import os
+import sys
+import django
 import time
 
-class Command(BaseCommand):
-    help = 'Recalculates and saves statistical overview of UG Before CBCS data.'
+# Django setup
+# Get the absolute path of the project root (2 levels up from this script)
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings')
+django.setup()
 
-    def handle(self, *args, **options):
-        self.stdout.write(self.style.SUCCESS('Starting UG Before CBCS statistics recalculation...'))
-        start_time = time.time()
+from ug_before_cbcs.utils.stats import calculate_and_save_ug_before_cbcs_stats
+
+def refresh_stats():
+    print('Starting UG Before CBCS statistics recalculation...')
+    start_time = time.time()
+    
+    try:
+        stats_obj = calculate_and_save_ug_before_cbcs_stats()
+        duration = round(time.time() - start_time, 2)
         
-        try:
-            stats_obj = calculate_and_save_ug_before_cbcs_stats()
-            duration = round(time.time() - start_time, 2)
-            
-            self.stdout.write(self.style.SUCCESS(
-                f'Successfully updated statistics in {duration} seconds!'
-            ))
-            self.stdout.write(f'New Statistics UUID: {stats_obj.uid}')
-            
-        except Exception as e:
-            self.stdout.write(self.style.ERROR(f'An error occurred: {str(e)}'))
+        print(f'Successfully updated statistics in {duration} seconds!')
+        print(f'New Statistics UUID: {stats_obj.uid}')
+        
+    except Exception as e:
+        print(f'An error occurred: {str(e)}')
+
+if __name__ == "__main__":
+    refresh_stats()
+
