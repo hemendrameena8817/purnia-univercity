@@ -1,10 +1,14 @@
 import os
 import re
+import logging
+import traceback
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from pg.models import PGExam, PGExamRegistration, PGDepartment
 from colleges.models import College
 from pg.utils.pdf_generator import generate_pg_attendance_sheet_pdf
+
+logger = logging.getLogger(__name__)
 # python manage.py generate_pg_attendance_sheets \
 #   --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48 \
 #   --college-uid \
@@ -130,30 +134,36 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Found {total_colleges} colleges with registrations.")
 
-        for college in colleges:
-            self.stdout.write(f"\nProcessing College: {college.name} ({college.college_code})")
-            
-            # Find departments for this college/exam
-            dept_filters = filters.copy()
-            dept_filters['student__college'] = college
-            
-            if dept_uids:
-                depts_found = PGDepartment.objects.filter(uid__in=dept_uids)
-                if not depts_found.exists():
-                    self.stdout.write(self.style.WARNING(f"  - No matching departments found for this college among specified UIDs."))
-                    continue
-                dept_filters['student__department__in'] = depts_found
+        try:
+            for college in colleges:
+                self.stdout.write(f"\nProcessing College: {college.name} ({college.college_code})")
+                
+                # Find departments for this college/exam
+                dept_filters = filters.copy()
+                dept_filters['student__college'] = college
+                
+                if dept_uids:
+                    depts_found = PGDepartment.objects.filter(uid__in=dept_uids)
+                    if not depts_found.exists():
+                        self.stdout.write(self.style.WARNING(f"  - No matching departments found for this college among specified UIDs."))
+                        continue
+                    dept_filters['student__department__in'] = depts_found
 
-            dept_ids = PGExamRegistration.objects.filter(**dept_filters).values_list('student__department_id', flat=True).distinct()
-            departments = PGDepartment.objects.filter(id__in=dept_ids)
-            
-            if not departments.exists():
-                # Check for registrations without a department
-                # Or just try one generation for the college as "General" if no depts found
-                self.process_generation(exam, college, None, output_dir)
-            else:
-                for dept in departments:
-                    self.process_generation(exam, college, dept, output_dir)
+                dept_ids = PGExamRegistration.objects.filter(**dept_filters).values_list('student__department_id', flat=True).distinct()
+                departments = PGDepartment.objects.filter(id__in=dept_ids)
+                
+                if not departments.exists():
+                    # Check for registrations without a department
+                    # Or just try one generation for the college as "General" if no depts found
+                    self.process_generation(exam, college, None, output_dir)
+                else:
+                    for dept in departments:
+                        self.process_generation(exam, college, dept, output_dir)
+        except Exception as e:
+            logger.error(f"Critical error in batch generation: {str(e)}")
+            logger.error(traceback.format_exc())
+            self.stdout.write(self.style.ERROR(f"\nCritical error occurred: {str(e)}"))
+            self.stdout.write("Check server logs for full traceback.")
 
         self.stdout.write(self.style.SUCCESS(f"\nBatch generation complete! Files saved in: {output_dir}"))
 
@@ -177,4 +187,6 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.WARNING(f"    No students returned by generator for {dept_name}."))
         except Exception as e:
+            logger.error(f"Error generating PDF for College: {college.name}, Dept: {dept_name}. Error: {str(e)}")
+            logger.error(traceback.format_exc())
             self.stdout.write(self.style.ERROR(f"    Error generating PDF for {dept_name}: {str(e)}"))
