@@ -403,15 +403,10 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         status='REGISTERED',
     )
     if sem_variants_int:
-        if _is_year_range:
-            # Exact match: session + sem
-            regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
-        else:
-            # exam.session is not a year-range (e.g. '3RD') — filter only by sem
-            regs_qs = regs_qs.filter(sem__in=sem_variants_int)
-    else:
-        if _is_year_range:
-            regs_qs = regs_qs.filter(session=exam.session)
+        # Filter primarily by semester.
+        regs_qs = regs_qs.filter(sem__in=sem_variants_int)
+    elif _is_year_range:
+        regs_qs = regs_qs.filter(session=exam.session)
         # else: no reliable filter, return all registered for this college
 
     if department:
@@ -778,13 +773,10 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
         status='REGISTERED',
     )
     if sem_variants_int:
-        if _is_year_range:
-            regs_qs = regs_qs.filter(session=exam.session, sem__in=sem_variants_int)
-        else:
-            regs_qs = regs_qs.filter(sem__in=sem_variants_int)
-    else:
-        if _is_year_range:
-            regs_qs = regs_qs.filter(session=exam.session)
+        # Filter primarily by semester.
+        regs_qs = regs_qs.filter(sem__in=sem_variants_int)
+    elif _is_year_range:
+        regs_qs = regs_qs.filter(session=exam.session)
 
     if department:
         regs_qs = regs_qs.filter(student__department=department)
