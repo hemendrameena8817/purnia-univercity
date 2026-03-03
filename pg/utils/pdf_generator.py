@@ -832,8 +832,20 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
             student_ese_map[sid].add(code)
 
     # ── University logo ──────────────────────────────────────────────────────
-    logo_path = os.path.join(settings.MEDIA_ROOT, "common/purnea-logo.png")
-    university_logo = image_to_base64(logo_path) if os.path.exists(logo_path) else None
+    def _find_logo():
+        # Try different possible locations
+        possible_paths = [
+            os.path.join(settings.BASE_DIR, "static", "images", "common", "purnea-logo.png"),
+            os.path.join(settings.BASE_DIR, "static", "images", "purnea-logo.png"),
+            os.path.join(settings.BASE_DIR, "ug", "static", "ug", "images", "purnea-logo.png"),
+            os.path.join(settings.MEDIA_ROOT, "common", "purnea-logo.png"),
+        ]
+        for p in possible_paths:
+            if os.path.exists(p):
+                return image_to_base64(p)
+        return None
+
+    university_logo = _find_logo()
 
     # ── Build per-student attendance data ────────────────────────────────────
     total_regs = len(regs_list)

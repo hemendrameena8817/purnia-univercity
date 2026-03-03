@@ -12,19 +12,49 @@
 
         body {
             font-family: Arial, sans-serif;
-            font-size: 8.5pt;
+            font-size: 8.2pt;
             margin: 0;
             padding: 0;
         }
 
+        /* ── Page Header (Repeats on every page) ── */
+        .page-header {
+            text-align: center;
+            margin-bottom: 1mm;
+            padding-bottom: 1mm;
+            position: relative;
+            height: 18mm;
+            overflow: hidden;
+        }
+
+        .page-header h2 {
+            margin: 0;
+            font-size: 14pt;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+
+        .page-header p {
+            margin: 1px 0 0;
+            font-size: 10pt;
+            font-weight: bold;
+        }
+
+        .university-logo {
+            position: absolute;
+            top: 1mm;
+            left: 2mm;
+            width: 45px;
+        }
+
+        /* ── Card Layout (2 per page) ── */
         .attendance-container {
             width: 100%;
-            height: 135mm;
-            padding: 30px 5px 5px 5px;
-            /* Added top padding for logo/barcode */
+            height: 132mm;
+            padding: 2mm 5mm;
             box-sizing: border-box;
             position: relative;
-            border-bottom: 1.5px dashed #aaa;
+            border-bottom: 1.5px dashed #888;
             page-break-inside: avoid;
             overflow: hidden;
         }
@@ -39,77 +69,24 @@
             page-break-after: auto;
         }
 
-        /* ── Header ── */
-        .header {
-            text-align: center;
-            margin-bottom: 5px;
-            padding-top: 2px;
-            border-bottom: 1px solid #000;
-            padding-bottom: 3px;
+        /* ── Student Headers & Barcode ── */
+        .card-top {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 2mm;
         }
 
-        .header h2 {
-            margin: 0;
-            font-size: 13pt;
-            font-weight: bold;
-            text-decoration: underline;
-        }
-
-        .header p {
-            margin: 2px 0 0;
-            font-size: 9pt;
-            font-weight: bold;
-        }
-
-        /* ── Logos ── */
-        .university-logo {
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 42px;
-        }
-
-        .barcode-container {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-        }
-
-        .barcode {
-            height: 22px;
-            width: 120px;
-        }
-
-        /* ── Summary Box ── */
-        .summary-box {
-            width: 100%;
-            border-top: 1px solid #999;
-            border-bottom: 1px solid #999;
-            padding: 2px 0;
-            margin-bottom: 5px;
-            font-size: 7.5pt;
-            display: table;
-        }
-
-        .summary-row {
-            display: table-row;
-        }
-
-        .summary-item {
-            display: table-cell;
-            padding: 1px 10px 1px 2px;
-            white-space: nowrap;
-        }
-
-        .summary-label {
-            font-weight: bold;
+        .card-barcode {
+            height: 25px;
+            width: 150px;
         }
 
         /* ── Info section ── */
         .info-section {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 5px;
+            margin-bottom: 5mm;
         }
 
         .student-details {
@@ -117,14 +94,13 @@
         }
 
         .student-photo {
-            width: 70px;
-            height: 85px;
+            width: 75px;
+            height: 90px;
             border: 1px solid #000;
-            text-align: center;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 7pt;
+            font-size: 8pt;
         }
 
         .student-photo img {
@@ -134,13 +110,13 @@
         }
 
         .detail-row {
-            margin-bottom: 2px;
+            margin-bottom: 3px;
             display: flex;
-            font-size: 8pt;
+            font-size: 10pt;
         }
 
         .label {
-            width: 130px;
+            width: 140px;
             font-weight: bold;
         }
 
@@ -152,14 +128,15 @@
         .attendance-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 7.2pt;
+            font-size: 8.5pt;
         }
 
         .attendance-table th,
         .attendance-table td {
             border: 1px solid #000;
-            padding: 2px 2px;
+            padding: 3px 4px;
             text-align: center;
+            height: 22px;
         }
 
         .attendance-table th {
@@ -169,56 +146,53 @@
 
         .subject-cell {
             text-align: left !important;
-            padding-left: 4px !important;
+            padding-left: 5px !important;
         }
 
         /* ── Footer ── */
         .cs-signature-wrapper {
-            margin-top: 20px;
+            margin-top: 4mm;
             display: flex;
             justify-content: flex-end;
         }
 
-        .cs-signature {
-            border-top: 1px solid #000;
-            padding-top: 2px;
-            font-weight: bold;
-            font-size: 7.5pt;
-            min-width: 140px;
+        .cs-signature-box {
             text-align: center;
+            width: 180px;
+        }
+
+        .sig-line {
+            border-top: 1px solid #000;
+            margin-bottom: 2px;
+        }
+
+        .sig-text {
+            font-weight: bold;
+            font-size: 10pt;
         }
     </style>
 </head>
 
 <body>
     {% for student in attendance_data %}
+
+    {# Show University Heading only for the first student of each page (every 2nd student card) #}
+    {% if forloop.counter0|divisibleby:2 %}
+    <div class="page-header">
+        {% if university_logo %}
+        <img src="data:image/png;base64,{{ university_logo }}" class="university-logo" alt="Logo" />
+        {% endif %}
+        <h2>Purnea University, Purnia</h2>
+        <p>Attendance Sheet — {{ exam_header }}</p>
+    </div>
+    {% endif %}
+
     <div class="attendance-container">
 
-        {% if university_logo %}
-        <img src="data:image/png;base64,{{ university_logo }}" class="university-logo" alt="University Logo" />
-        {% endif %}
-
-        {% if student.barcode %}
-        <div class="barcode-container">
-            <img src="data:image/png;base64,{{ student.barcode }}" class="barcode" alt="" />
-        </div>
-        {% endif %}
-
-
-        <!-- Summary Box (New) -->
-        <div class="summary-box">
-            <div class="summary-row">
-                <div class="summary-item"><span class="summary-label">Batch:</span> {{ batch }}</div>
-                <div class="summary-item"><span class="summary-label">Session:</span> {{ session }}</div>
-                <div class="summary-item"><span class="summary-label">Course:</span> {{ course_name }}</div>
-                <div class="summary-item"><span class="summary-label">Discipline:</span> {{ student.department_name }}
-                </div>
-            </div>
-            <div class="summary-row">
-                <div class="summary-item"><span class="summary-label">Semester:</span> {{ semester }}</div>
-                <div class="summary-item"><span class="summary-label">Syllabus:</span> {{ syllabus }}</div>
-                <div class="summary-item"><span class="summary-label">Institute:</span> {{ college_name }}</div>
-            </div>
+        <div class="card-top">
+            {% if student.barcode %}
+            <img src="data:image/png;base64,{{ student.barcode }}" class="card-barcode" alt="barcode" />
+            {% endif %}
         </div>
 
         <!-- Student Info -->
@@ -244,25 +218,25 @@
 
             <div class="student-photo">
                 {% if student.photo %}
-                <img src="data:image/png;base64,{{ student.photo }}" alt="Student Photo" />
+                <img src="data:image/png;base64,{{ student.photo }}" alt="Photo" />
                 {% else %}
                 PHOTO
                 {% endif %}
             </div>
         </div>
 
-        <!-- Schedule Table -->
+        <!-- Table -->
         <table class="attendance-table">
             <thead>
                 <tr>
-                    <th style="width: 30px">Sl No.</th>
-                    <th style="width: 90px">Date of Exam</th>
-                    <th>Sitting / Time</th>
+                    <th style="width: 30px">Sl.</th>
+                    <th style="width: 80px">Exam Date</th>
+                    <th style="width: 150px">Sitting / Time</th>
                     <th class="subject-cell">Subject</th>
-                    <th>Paper Code</th>
-                    <th>A/B Sl. No.</th>
-                    <th>Examinee Signature</th>
-                    <th>Invigilator Signature</th>
+                    <th style="width: 60px">Paper</th>
+                    <th style="width: 50px">A/B No.</th>
+                    <th style="width: 110px">Examinee Sig.</th>
+                    <th style="width: 110px">Invigilator Sig.</th>
                 </tr>
             </thead>
             <tbody>
@@ -279,16 +253,19 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" style="text-align:center; padding: 12px; color: #888;">
-                        No exam schedule found for this student.
-                    </td>
+                    <td colspan="8" style="text-align:center; padding: 10px; color: #888;">No schedule found for this
+                        student.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
 
+        <!-- Signature section -->
         <div class="cs-signature-wrapper">
-            <div class="cs-signature">Controller of Examinations</div>
+            <div class="cs-signature-box">
+                <div class="sig-line"></div>
+                <div class="sig-text">C.S. Signature</div>
+            </div>
         </div>
     </div>
     {% empty %}

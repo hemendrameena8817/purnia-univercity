@@ -98,14 +98,12 @@ class Command(BaseCommand):
         }
         
         if sem_variants_int:
-            if is_year_range:
-                filters['session'] = exam.session
-                filters['sem__in'] = sem_variants_int
-            else:
-                filters['sem__in'] = sem_variants_int
-        else:
-            if is_year_range:
-                filters['session'] = exam.session
+            # Filter primarily by semester. 
+            # We don't strictly match session because registrations for the same exam
+            # might have different sessions (e.g. 2024-25 vs 2025-26).
+            filters['sem__in'] = sem_variants_int
+        elif is_year_range:
+            filters['session'] = exam.session
         
         if college_uids:
             colleges_found = College.objects.filter(uid__in=college_uids)
