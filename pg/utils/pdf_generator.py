@@ -707,6 +707,17 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
         return None
 
 
+def _roman_to_int(roman):
+    """Convert Roman numeral string to integer."""
+    roman_map = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100}
+    res = 0
+    for i in range(len(roman)):
+        if i > 0 and roman_map.get(roman[i], 0) > roman_map.get(roman[i-1], 0):
+            res += roman_map.get(roman[i], 0) - 2 * roman_map.get(roman[i-1], 0)
+        else:
+            res += roman_map.get(roman[i], 0)
+    return res
+
 def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     """
     Generates student-wise PG Attendance Sheet PDF.
@@ -950,8 +961,25 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
                             if s not in student_schedules_raw:
                                 student_schedules_raw.append(s)
                 
-            # Sort by date/time
-            student_schedules_raw.sort(key=lambda x: (x.exam_date or timezone.now().date(), x.exam_time or ""))
+            def _get_paper_sort_key(s):
+                code = (s.common_course_structure.course_code or "").upper().strip()
+                # 1. AECC always last
+                is_aecc = 1 if "AECC" in code else 0
+                
+                # 2. Extract Roman numeral (e.g., from 'CC-XIV' extract 'XIV')
+                roman_part = ""
+                if '-' in code:
+                    roman_part = code.split('-')[-1]
+                
+                roman_val = _roman_to_int(roman_part) if roman_part else 0
+                
+                # Fallback to date if Roman conversion fails
+                date_val = s.exam_date or timezone.now().date()
+                
+                return (is_aecc, roman_val, date_val)
+
+            # Sort by custom Roman sequence + push AECC last
+            student_schedules_raw.sort(key=_get_paper_sort_key)
 
             student_schedules = []
             for s in student_schedules_raw:
