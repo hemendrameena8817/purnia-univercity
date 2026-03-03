@@ -812,16 +812,17 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
     )
     if sem_variants:
         ese_filter['semester__in'] = sem_variants
-    assessments = PGStudentCourseAssessment.objects.filter(**ese_filter).values('student_id', 'course_code')
+    assessments = PGStudentCourseAssessment.objects.filter(**ese_filter).values('student_id', 'course_code', 'course_name')
 
-    student_ese_map = {}
+    student_ese_map = {}  # student_id -> { course_code_upper : course_name }
     for a in assessments:
         sid = a['student_id']
         code = (a['course_code'] or "").upper().strip()
+        name = a['course_name'] or ""
         if sid not in student_ese_map:
-            student_ese_map[sid] = set()
+            student_ese_map[sid] = {}
         if code:
-            student_ese_map[sid].add(code)
+            student_ese_map[sid][code] = name
 
     # ── University logo ──────────────────────────────────────────────────────
     def _find_logo():
@@ -929,7 +930,8 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
 
         for reg in batch_regs:
             student = reg.student
-            ese_codes_upper = student_ese_map.get(student.id, set())
+            student_paper_names = student_ese_map.get(student.id, {})
+            ese_codes_upper = set(student_paper_names.keys())
 
             # Filter schedules relevant to this student:
             # Must match both: 
@@ -951,16 +953,19 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
             # Sort by date/time
             student_schedules_raw.sort(key=lambda x: (x.exam_date or timezone.now().date(), x.exam_time or ""))
 
-            student_schedules = [
-                {
+            student_schedules = []
+            for s in student_schedules_raw:
+                code_upper = (s.common_course_structure.course_code or "").upper().strip()
+                # Prioritize name from assessment record, fallback to common structure name
+                name = student_paper_names.get(code_upper) or s.common_course_structure.course_name or '-'
+                
+                student_schedules.append({
                     'date': s.exam_date.strftime('%d-%m-%Y') if s.exam_date else '-',
                     'exam_time': s.exam_time or '',
                     'sitting': s.sitting or '',
-                    'subject_name': s.common_course_structure.course_name or '-',
+                    'subject_name': name,
                     'subject_code': s.common_course_structure.course_code or '-',
-                }
-                for s in student_schedules_raw
-            ]
+                })
 
             # Barcode
             barcode_text = (
