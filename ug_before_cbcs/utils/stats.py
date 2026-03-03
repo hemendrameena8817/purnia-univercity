@@ -6,26 +6,33 @@ from ..models import (
     UGBeforeCBCSStatistics
 )
 
-def calculate_and_save_ug_before_cbcs_stats():
+def get_course_stats(course_code):
     """
-    Recalculates all statistics and saves them to the UGBeforeCBCSStatistics model.
+    Calculates statistics for a specific course code (BA, BSC, BCOM).
     """
-    # 1. BA Part-wise statistics
-    ba_qs_part1 = UGBeforeCBCSStudentProfile.objects.filter(course_code='BA', results__exam__part='PART1')
-    ba_part1_students = ba_qs_part1.distinct().count()
-    ba_part1_assessments = UGBeforeCBCSStudentResult.objects.filter(student__course_code='BA', exam__part='PART1').count()
+    course_code = course_code.upper()
+    parts = ['PART1', 'PART2', 'PART3']
+    part_summary = {}
+    
+    for part in parts:
+        students = UGBeforeCBCSStudentProfile.objects.filter(
+            course_code=course_code, 
+            results__exam__part=part
+        ).distinct().count()
+        
+        assessments = UGBeforeCBCSStudentResult.objects.filter(
+            student__course_code=course_code, 
+            exam__part=part
+        ).count()
+        
+        part_summary[part.lower()] = {
+            "students": students, 
+            "assessments": assessments
+        }
 
-    ba_qs_part2 = UGBeforeCBCSStudentProfile.objects.filter(course_code='BA', results__exam__part='PART2')
-    ba_part2_students = ba_qs_part2.distinct().count()
-    ba_part2_assessments = UGBeforeCBCSStudentResult.objects.filter(student__course_code='BA', exam__part='PART2').count()
-
-    ba_qs_part3 = UGBeforeCBCSStudentProfile.objects.filter(course_code='BA', results__exam__part='PART3')
-    ba_part3_students = ba_qs_part3.distinct().count()
-    ba_part3_assessments = UGBeforeCBCSStudentResult.objects.filter(student__course_code='BA', exam__part='PART3').count()
-
-    # 2. BA Batch-wise Statistics
-    ba_batch_data = UGBeforeCBCSStudentResult.objects.filter(
-        student__course_code='BA'
+    # Batch-wise Statistics
+    batch_data = UGBeforeCBCSStudentResult.objects.filter(
+        student__course_code=course_code
     ).values(
         batch=F('exam__batch_code'),
         part=F('exam__part')
@@ -35,7 +42,7 @@ def calculate_and_save_ug_before_cbcs_stats():
     ).order_by('-batch', 'part')
 
     batch_summary = {}
-    for item in ba_batch_data:
+    for item in batch_data:
         b_name = item['batch'] or "Unknown"
         if b_name not in batch_summary:
             batch_summary[b_name] = {
@@ -51,23 +58,38 @@ def calculate_and_save_ug_before_cbcs_stats():
     final_batch_list = list(batch_summary.values())
     for b_item in final_batch_list:
         b_item["total_students"] = UGBeforeCBCSStudentProfile.objects.filter(
-            course_code='BA', 
+            course_code=course_code, 
             results__exam__batch_code=b_item["batch"]
         ).distinct().count()
+
+    return {
+        "part_summary": part_summary,
+        "batch_wise": final_batch_list,
+        "total_students": UGBeforeCBCSStudentProfile.objects.filter(course_code=course_code).count()
+    }
+
+def calculate_and_save_ug_before_cbcs_stats():
+    """
+    Recalculates all statistics and saves them to the UGBeforeCBCSStatistics model.
+    """
+    # Get all unique course codes from student profiles
+    courses = list(UGBeforeCBCSStudentProfile.objects.exclude(
+        course_code__isnull=True
+    ).exclude(
+        course_code=''
+    ).values_list('course_code', flat=True).distinct())
+    
+    course_counts = {}
+    
+    for course in courses:
+        course_counts[course.lower()] = get_course_stats(course)
 
     # 3. Compile final data
     data = {
         "counts": {
-            "ba": {
-                "part_summary": {
-                    "part1": {"students": ba_part1_students, "assessments": ba_part1_assessments},
-                    "part2": {"students": ba_part2_students, "assessments": ba_part2_assessments},
-                    "part3": {"students": ba_part3_students, "assessments": ba_part3_assessments}
-                },
-                "batch_wise": final_batch_list,
-                "total_students": UGBeforeCBCSStudentProfile.objects.filter(course_code='BA').count()
-            },
+            **course_counts,
             "global": {
+
                 "total_students": UGBeforeCBCSStudentProfile.objects.count(),
                 "total_exams": UGBeforeCBCSExam.objects.count(),
                 "total_result_entries": UGBeforeCBCSStudentResult.objects.count()
@@ -88,3 +110,4 @@ def calculate_and_save_ug_before_cbcs_stats():
         UGBeforeCBCSStatistics.objects.filter(pk__in=old_ids).delete()
     
     return stats_obj
+
