@@ -17,11 +17,24 @@
             padding: 0;
         }
 
+        .page {
+            width: 100%;
+            height: 287mm;
+            box-sizing: border-box;
+            page-break-after: always;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .page:last-child {
+            page-break-after: auto;
+        }
+
         /* ── Page Header (Repeats on every page) ── */
         .page-header {
             text-align: center;
-            margin-bottom: 1mm;
-            padding-bottom: 1mm;
+            margin-bottom: 2mm;
+            padding-bottom: 2mm;
             position: relative;
             height: 18mm;
             overflow: hidden;
@@ -54,19 +67,13 @@
             padding: 2mm 5mm;
             box-sizing: border-box;
             position: relative;
-            border-bottom: 1.5px dashed #888;
+            /* border-bottom: 1.5px dashed #888; */
             page-break-inside: avoid;
             overflow: hidden;
         }
 
-        .attendance-container:nth-child(2n) {
-            border-bottom: none;
-            page-break-after: always;
-        }
-
         .attendance-container:last-child {
             border-bottom: none;
-            page-break-after: auto;
         }
 
         /* ── Student Headers & Barcode ── */
@@ -176,98 +183,104 @@
 <body>
     {% for student in attendance_data %}
 
-    {# Show University Heading only for the first student of each page (every 2nd student card) #}
+    {# Start a new page every 2 students #}
     {% if forloop.counter0|divisibleby:2 %}
-    <div class="page-header">
-        {% if university_logo %}
-        <img src="data:image/png;base64,{{ university_logo }}" class="university-logo" alt="Logo" />
+    <div class="page">
+        <div class="page-header">
+            {% if university_logo %}
+            <img src="data:image/png;base64,{{ university_logo }}" class="university-logo" alt="Logo" />
+            {% endif %}
+            <h2>Purnea University, Purnia</h2>
+            <p>Attendance Sheet — {{ exam_header }}</p>
+        </div>
         {% endif %}
-        <h2>Purnea University, Purnia</h2>
-        <p>Attendance Sheet — {{ exam_header }}</p>
+
+        <div class="attendance-container">
+            <div class="card-top">
+                {% if student.barcode %}
+                <img src="data:image/png;base64,{{ student.barcode }}" class="card-barcode" alt="barcode" />
+                {% endif %}
+            </div>
+
+            <!-- Student Info -->
+            <div class="info-section">
+                <div class="student-details">
+                    <div class="detail-row">
+                        <span class="label">Name</span>
+                        <span class="value">: {{ student.name|upper }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Registration No.</span>
+                        <span class="value">: {{ student.registration_no }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Roll No.</span>
+                        <span class="value">: {{ student.roll_no }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Centre Name</span>
+                        <span class="value">: {{ center_name }}</span>
+                    </div>
+                </div>
+
+                <div class="student-photo">
+                    {% if student.photo %}
+                    <img src="data:image/png;base64,{{ student.photo }}" alt="Photo" />
+                    {% else %}
+                    PHOTO
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Table -->
+            <table class="attendance-table">
+                <thead>
+                    <tr>
+                        <th style="width: 30px">Sl.</th>
+                        <th style="width: 80px">Exam Date</th>
+                        <th style="width: 150px">Sitting / Time</th>
+                        <th class="subject-cell">Subject</th>
+                        <th style="width: 60px">Paper</th>
+                        <th style="width: 50px">A/B No.</th>
+                        <th style="width: 110px">Examinee Sig.</th>
+                        <th style="width: 110px">Invigilator Sig.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for schedule in student.schedules %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ schedule.date }}</td>
+                        <td>{{ schedule.exam_time }}{% if schedule.sitting %} — {{ schedule.sitting }}{% endif %}</td>
+                        <td class="subject-cell">{{ schedule.subject_name }}</td>
+                        <td>{{ schedule.subject_code }}</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" style="text-align:center; padding: 10px; color: #888;">No schedule found for
+                            this student.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Signature section -->
+            <div class="cs-signature-wrapper">
+                <div class="cs-signature-box">
+                    <div class="sig-line"></div>
+                    <div class="sig-text">C.S. Signature</div>
+                </div>
+            </div>
+        </div>
+
+        {# Close the page wrapper after 2 students or at the end #}
+        {% if forloop.counter|divisibleby:2 or forloop.last %}
     </div>
     {% endif %}
 
-    <div class="attendance-container">
-
-        <div class="card-top">
-            {% if student.barcode %}
-            <img src="data:image/png;base64,{{ student.barcode }}" class="card-barcode" alt="barcode" />
-            {% endif %}
-        </div>
-
-        <!-- Student Info -->
-        <div class="info-section">
-            <div class="student-details">
-                <div class="detail-row">
-                    <span class="label">Name</span>
-                    <span class="value">: {{ student.name|upper }}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">Registration No.</span>
-                    <span class="value">: {{ student.registration_no }}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">Roll No.</span>
-                    <span class="value">: {{ student.roll_no }}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="label">Centre Name</span>
-                    <span class="value">: {{ center_name }}</span>
-                </div>
-            </div>
-
-            <div class="student-photo">
-                {% if student.photo %}
-                <img src="data:image/png;base64,{{ student.photo }}" alt="Photo" />
-                {% else %}
-                PHOTO
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Table -->
-        <table class="attendance-table">
-            <thead>
-                <tr>
-                    <th style="width: 30px">Sl.</th>
-                    <th style="width: 80px">Exam Date</th>
-                    <th style="width: 150px">Sitting / Time</th>
-                    <th class="subject-cell">Subject</th>
-                    <th style="width: 60px">Paper</th>
-                    <th style="width: 50px">A/B No.</th>
-                    <th style="width: 110px">Examinee Sig.</th>
-                    <th style="width: 110px">Invigilator Sig.</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for schedule in student.schedules %}
-                <tr>
-                    <td>{{ forloop.counter }}</td>
-                    <td>{{ schedule.date }}</td>
-                    <td>{{ schedule.exam_time }}{% if schedule.sitting %} — {{ schedule.sitting }}{% endif %}</td>
-                    <td class="subject-cell">{{ schedule.subject_name }}</td>
-                    <td>{{ schedule.subject_code }}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="8" style="text-align:center; padding: 10px; color: #888;">No schedule found for this
-                        student.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
-        <!-- Signature section -->
-        <div class="cs-signature-wrapper">
-            <div class="cs-signature-box">
-                <div class="sig-line"></div>
-                <div class="sig-text">C.S. Signature</div>
-            </div>
-        </div>
-    </div>
     {% empty %}
     <div style="text-align:center; padding:40px;">No attendance data available.</div>
     {% endfor %}
