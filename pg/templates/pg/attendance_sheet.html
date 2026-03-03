@@ -241,10 +241,9 @@
                 <thead>
                     <tr>
                         <th style="width: 30px">Sl.</th>
-                        <th style="width: 80px">Exam Date</th>
-                        <th style="width: 150px">Sitting / Time</th>
-                        <th class="subject-cell">Subject</th>
-                        <th style="width: 60px">Paper</th>
+                        <th style="width: 100px">Exam Date</th>
+                        <th class="subject-cell">Subject </th>
+                        <th style="width: 70px">Paper</th>
                         <th style="width: 50px">A/B No.</th>
                         <th style="width: 110px">Examinee Sig.</th>
                         <th style="width: 110px">Invigilator Sig.</th>
@@ -255,7 +254,6 @@
                     <tr>
                         <td>{{ forloop.counter }}</td>
                         <td>{{ schedule.date }}</td>
-                        <td>{{ schedule.exam_time }}{% if schedule.sitting %} — {{ schedule.sitting }}{% endif %}</td>
                         <td class="subject-cell">{{ schedule.subject_name }}</td>
                         <td>{{ schedule.subject_code }}</td>
                         <td></td>
