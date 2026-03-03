@@ -114,7 +114,7 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
             return val  # Return as string (ABS, UFM, etc.)
 
     # Get discipline from student's discipline_code
-    student_discipline = student.discipline_code.upper() if student.discipline_code else ""
+    student_discipline = course_code or student.discipline_code.upper() if student.discipline_code else ""
 
     for result in results:
         sub_name = result.subject_name.upper() if result.subject_name else "UNKNOWN"
@@ -145,18 +145,25 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
             'obtained': paper_obt
         }
         
-        # Categorize the subject
+        # Categorize the subject using specific Part-based codes
         p_code = result.paper_code.upper() if result.paper_code else ""
         p_type = result.paper_type_code.upper() if result.paper_type_code else ""
         
+        # Suffixes based on part (e.g. Part 1 -> 101, Part 2 -> 201)
+        # We also check for the full code including Course (e.g. BSC101)
+        hons_suffix = f"{exam_part}01"
+        sub1_suffix = f"{exam_part}02"
+        sub2_suffix = f"{exam_part}03"
+        comp_suffixes = [f"{exam_part}04", f"{exam_part}05"]
+
         sub_type = 'subsidiary'
-        if '101' in p_code or p_type in ['HONS', 'HONOURS']:
+        if p_code.endswith(hons_suffix) or p_type in ['HONS', 'HON']:
             sub_type = 'honours'
-        elif p_code in ['BA104', 'BA105'] or p_type in ['RB', 'NRB']:
+        elif p_type in ['RB', 'NRB'] or any(p_code.endswith(s) for s in comp_suffixes):
             sub_type = 'composition'
-        elif '102' in p_code:
+        elif p_code.endswith(sub1_suffix):
             sub_type = 'subsidiary_1'
-        elif '103' in p_code:
+        elif p_code.endswith(sub2_suffix):
             sub_type = 'subsidiary_2'
         
         # General fallback
@@ -209,7 +216,7 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
             subsidiary_subjects.append(sub)
 
     # Sort Composition papers and assign display names
-    # BA104 (RB or NRB) and BA105 (MB if NRB)
+    # e.g. BA104 (RB or NRB) and BA105 (MB if NRB)
     final_composition_papers = []
     comp_papers_raw = sorted(composition_papers, key=lambda x: x['paper_code'])
     for p in comp_papers_raw:
@@ -217,10 +224,10 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         p_type = res_obj.paper_type_code.upper() if res_obj and res_obj.paper_type_code else ""
         p_code = p['paper_code'].upper() if p['paper_code'] else ""
         
-        if p_type == 'RB':
+        if p_type == 'RB' or 'RBH' in p_code or 'R.B' in p_code:
             p['display_name'] = "Rastrabhasha hindi"
-        elif p_type == 'NRB':
-            if '104' in p_code:
+        elif p_type == 'NRB' or 'Non-Hindi' in p['name']:
+            if any(s in p_code for s in ['104', '204']):
                 p['display_name'] = "Non-Hindi"
             else:
                 p['display_name'] = f"MB: {p['name'].title()}"
@@ -240,17 +247,30 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     has_hons_practical = any(p['status'] == 'LAB' for p in honours_papers)
     is_honours_with_practical = has_hons_practical
 
+    # Determine paper codes based on Course and Part (e.g. BSC101, BA201)
+    specific_hons_code = f"{course_code.upper()}{exam_part}01" if course_code else None
+    generic_hons_suffix = f"{exam_part}01"
+
+    # Determine paper names based on part
+    p1_name = 'Paper-I' if str(exam_part) == '1' else 'Paper-III'
+    p2_name = 'Paper-II' if str(exam_part) == '1' else 'Paper-IV'
+
     for p in honours_papers:
-        if '101' in p['paper_code']:
+        # Check for specific Course code or fallback to numeric suffix
+        is_hons_paper = (specific_hons_code and specific_hons_code in p['paper_code']) or \
+                        (not specific_hons_code and generic_hons_suffix in p['paper_code']) or \
+                        p['paper_code'].endswith(generic_hons_suffix)
+
+        if is_hons_paper:
             if p['status'] == 'END_TERM':
                 paper1 = p
-                paper1['name'] = 'Paper-I'
+                paper1['name'] = p1_name
                 if has_hons_practical:
                     paper1['max_marks'] = 75
-                    paper1['pass_marks'] = 33 # Usually combined 67 for theory in some rules, but individual pass marks are often ignored in Hons
+                    paper1['pass_marks'] = 33 
             elif p['status'] == 'END2_TERM':
                 paper2 = p
-                paper2['name'] = 'Paper-II'
+                paper2['name'] = p2_name
                 if has_hons_practical:
                     paper2['max_marks'] = 75
             elif p['status'] == 'LAB':
@@ -375,6 +395,7 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
 
     # Prepare Context
     context = {
+        'exam_part': str(exam_part),
         'is_honours_with_practical': is_honours_with_practical,
         'student': student,
         'exam_name': exam.name or f"Part {exam_part} Examination",
@@ -455,13 +476,8 @@ def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, co
     if not context:
         return None
 
-    # Render template
-    if student.discipline_code and 'HONS' in student.discipline_code.upper():
-        template_name = f"ug_before_cbcs/ba_hons_marksheet_part{exam_part.lower()}.html"
-    else:
-        # Fallback for other courses if needed in the future
-        template_name = f"ug_before_cbcs/ba_hons_marksheet_part{exam_part.lower()}.html"
-        
+    template_name = f"ug_before_cbcs/ba_hons_marksheet_part1.html"
+    
     html_string = get_template(template_name).render(context)
     
     try:
