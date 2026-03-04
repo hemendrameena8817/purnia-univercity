@@ -170,7 +170,7 @@ class Command(BaseCommand):
         self.stdout.write("=" * 100)
 
     def ensure_back_registration(self, student, sem_int, session, dry_run, stats):
-        from pg.services.create_exam_registration_from_result import REGISTRATION_START, REGISTRATION_END
+        from pg.services.create_exam_registration_from_result import  REGISTRATION_END
         
         reg_exists = PGExamRegistration.objects.filter(
             student=student,
@@ -190,7 +190,7 @@ class Command(BaseCommand):
                 sem=sem_int,
                 session=session,
                 exam_type='BACK',
-                status='OPEN',
+                status='PENDING',
                 is_open=True,
                 start_date=REGISTRATION_START,
                 end_date=REGISTRATION_END
