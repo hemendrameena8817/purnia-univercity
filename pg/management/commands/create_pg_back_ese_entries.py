@@ -192,7 +192,6 @@ class Command(BaseCommand):
                 exam_type='BACK',
                 status='PENDING',
                 is_open=True,
-                start_date=REGISTRATION_START,
                 end_date=REGISTRATION_END
             )
             self.stdout.write(self.style.SUCCESS(f"  [Reg] Created BACK registration"))
