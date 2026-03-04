@@ -1,13 +1,14 @@
 from django.core.management.base import BaseCommand
 from pg.models import PGExamRegistration, PGStudentCourseAssessment, PGStudentProfile, PGBatch, PGExamResult
 from django.db import transaction
+from pg.services.create_exam_registration_from_result import SEMESTER_STR_TO_INT
 
 """
 Usage:
     # Dry Run
     python manage.py create_pg_back_ese_entries \
-        --batch 2023-25 \
-        --source-session 2024-25    \
+        --batch 2024-26 \
+        --source-session 2024-25 \
         --source-semester 1 \
         --target-session 2025-26 \
         --target-semester 1 \
@@ -61,6 +62,15 @@ class Command(BaseCommand):
         execute = options['execute']
         dry_run = options['dry_run'] or not execute
 
+        # 1. Get sem_int for registration creation
+        target_sem_label = str(target_semester)
+        if target_sem_label == '1': target_sem_label = '1ST'
+        elif target_sem_label == '2': target_sem_label = '2ND'
+        elif target_sem_label == '3': target_sem_label = '3RD'
+        elif target_sem_label == '4': target_sem_label = '4TH'
+        
+        sem_int = SEMESTER_STR_TO_INT.get(target_sem_label)
+
         self.stdout.write("=" * 100)
         self.stdout.write("CREATE BLANK ESE ENTRIES FOR FAILED/PROMOTED STUDENTS (BACK)")
         self.stdout.write("=" * 100)
@@ -113,7 +123,10 @@ class Command(BaseCommand):
             student = res.student
             self.stdout.write(f"\nProcessing [{student.registration_no}] {student.get_full_name()} | Result: {res.semester_result}")
 
-            # 4. Scan source assessments to identify failed papers
+            # 4. Create BACK Registration if missing
+            self.ensure_back_registration(student, sem_int, target_session, dry_run, stats)
+
+            # 5. Scan source assessments to identify failed papers
             source_ese_assessments = PGStudentCourseAssessment.objects.filter(
                 student=student,
                 semester__in=source_sem_variants,
@@ -141,7 +154,7 @@ class Command(BaseCommand):
                     self.stdout.write(f"    [Pass] {paper_code} - Assessment marked as pass")
                     continue
 
-                # 5. Create blank ESE entry in target
+                # 6. Create blank ESE entry in target
                 self.create_back_entry(prev_ese, target_session, target_sem_label, dry_run, stats)
             
             stats['processed'] += 1
@@ -150,10 +163,43 @@ class Command(BaseCommand):
         self.stdout.write("SUMMARY")
         self.stdout.write("=" * 100)
         self.stdout.write(f"Students Processed   : {stats['processed']}")
-        self.stdout.write(f"Entries Created      : {stats['entries_created']}")
+        self.stdout.write(f"Reg Created/Exists   : {stats.get('reg_created', 0)} / {stats.get('reg_existed', 0)}")
+        self.stdout.write(f"ESE Entries Created  : {stats['entries_created']}")
         self.stdout.write(f"Already Existed      : {stats['already_existed']}")
         self.stdout.write(f"Skipped (No Source)  : {stats['no_source_data']}")
         self.stdout.write("=" * 100)
+
+    def ensure_back_registration(self, student, sem_int, session, dry_run, stats):
+        from pg.services.create_exam_registration_from_result import REGISTRATION_START, REGISTRATION_END
+        
+        reg_exists = PGExamRegistration.objects.filter(
+            student=student,
+            sem=sem_int,
+            session=session,
+            exam_type='BACK'
+        ).exists()
+
+        if reg_exists:
+            self.stdout.write(f"  [Reg] Already exists")
+            stats['reg_existed'] = stats.get('reg_existed', 0) + 1
+            return
+
+        if not dry_run:
+            PGExamRegistration.objects.create(
+                student=student,
+                sem=sem_int,
+                session=session,
+                exam_type='BACK',
+                status='OPEN',
+                is_open=True,
+                start_date=REGISTRATION_START,
+                end_date=REGISTRATION_END
+            )
+            self.stdout.write(self.style.SUCCESS(f"  [Reg] Created BACK registration"))
+        else:
+            self.stdout.write(f"  [Reg] Would Create BACK registration")
+        
+        stats['reg_created'] = stats.get('reg_created', 0) + 1
 
     def create_back_entry(self, prev, target_session, target_sem, dry_run, stats):
         # Check if already exists
