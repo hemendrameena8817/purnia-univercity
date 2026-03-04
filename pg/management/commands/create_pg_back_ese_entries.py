@@ -1,154 +1,202 @@
 from django.core.management.base import BaseCommand
-from pg.models import PGExamRegistration, PGStudentCourseAssessment, PGStudentProfile
-# python manage.py create_pg_back_ese_entries 3 "2024-26" --dry-run
+from pg.models import PGExamRegistration, PGStudentCourseAssessment, PGStudentProfile, PGBatch, PGExamResult
+from django.db import transaction
+
+"""
+Usage:
+    # Dry Run
+    python manage.py create_pg_back_ese_entries \
+        --batch 2023-25 \
+        --source-session 2024-25    \
+        --source-semester 1 \
+        --target-session 2025-26 \
+        --target-semester 1 \
+        --dry-run
+
+    # Execute
+    python manage.py create_pg_back_ese_entries \
+        --batch 2024-26 \
+        --source-session 2024-25 \
+        --source-semester 1 \
+        --target-session 2025-26 \
+        --target-semester 1 \
+        --execute
+"""
+
 class Command(BaseCommand):
     help = 'Create blank ESE entries for PG Back students'
 
     def add_arguments(self, parser):
-        parser.add_argument('sem', type=int, help='Semester (e.g., 3)')
-        parser.add_argument('session', type=str, help='Session for Back Exam (e.g., 2024-26)')
-        parser.add_argument(
-            '--dry-run',
-            action='store_true',
-            help='Simulate execution without creating database entries',
-        )
+        parser.add_argument('--batch', required=True, help='Batch name (e.g. 2023-25)')
+        parser.add_argument('--source-session', required=True, help='Session where student failed (e.g. 2024-25)')
+        parser.add_argument('--source-semester', required=True, help='Semester number where student failed (1, 2, 3, or 4)')
+        parser.add_argument('--target-session', required=True, help='Session for new back entries (e.g. 2025-26)')
+        parser.add_argument('--target-semester', required=True, help='Semester number for new entries (1, 2, 3, or 4)')
+        parser.add_argument('--registration-no', help='Filter for single student')
+        parser.add_argument('--dry-run', action='store_true', default=False, help='Dry run')
+        parser.add_argument('--execute', action='store_true', help='Actually save to DB')
+
+    def get_semester_variants(self, sem):
+        """Return common variants for semester filtering."""
+        sem_str = str(sem).upper()
+        variants = [sem_str]
+        if sem_str == '1' or sem_str == '1ST' or sem_str == 'FIRST':
+            variants.extend(['1', '1ST', 'I', 'FIRST'])
+        elif sem_str == '2' or sem_str == '2ND' or sem_str == 'SECOND':
+            variants.extend(['2', '2ND', 'II', 'SECOND'])
+        elif sem_str == '3' or sem_str == '3RD' or sem_str == 'THIRD':
+            variants.extend(['3', '3RD', 'III', 'THIRD'])
+        elif sem_str == '4' or sem_str == '4TH' or sem_str == 'FOURTH':
+            variants.extend(['4', '4TH', 'IV', 'FOURTH'])
+        return list(set(variants))
 
     def handle(self, *args, **options):
-        sem = options['sem']
-        target_session = options['session']
-        dry_run = options['dry_run']
+        batch_name = options['batch']
+        source_session = options['source_session']
+        source_semester = options['source_semester']
+        target_session = options['target_session']
+        target_semester = options['target_semester']
+        registration_no = options.get('registration_no')
         
-        if dry_run:
-            self.stdout.write(self.style.WARNING("RUNNING IN DRY-RUN MODE. NO CHANGES WILL BE SAVED."))
+        execute = options['execute']
+        dry_run = options['dry_run'] or not execute
 
-        # 1. Get Back Registrations for the semester and session
-        registrations = PGExamRegistration.objects.filter(
-            sem=sem,
-            session=target_session,
-            exam_type='BACK' 
+        self.stdout.write("=" * 100)
+        self.stdout.write("CREATE BLANK ESE ENTRIES FOR FAILED/PROMOTED STUDENTS (BACK)")
+        self.stdout.write("=" * 100)
+        self.stdout.write(f"Batch            : {batch_name}")
+        self.stdout.write(f"Source Session   : {source_session}")
+        self.stdout.write(f"Source Semester  : {source_semester}")
+        self.stdout.write(f"Target Session   : {target_session}")
+        self.stdout.write(f"Target Semester  : {target_semester}")
+        self.stdout.write(f"Mode             : {'DRY RUN' if dry_run else 'EXECUTE'}")
+        self.stdout.write("=" * 100)
+
+        # 1. Get variants for semester filtering
+        source_sem_variants = self.get_semester_variants(source_semester)
+        
+        # 2. Identify Students to process (those with 'PROMOTED' status)
+        # As requested: "only for promoted"
+        target_statuses = ['PROMOTED']
+        
+        result_qs = PGExamResult.objects.filter(
+            student__batch__iexact=batch_name,
+            session=source_session,
+            semester__in=source_sem_variants,
+            semester_result__in=target_statuses
         )
 
-        if not registrations.exists():
-            self.stdout.write(self.style.WARNING(f"No BACK registrations found for Sem {sem}, Session {target_session}"))
+        if registration_no:
+            result_qs = result_qs.filter(student__registration_no=registration_no)
+
+        if not result_qs.exists():
+            self.stdout.write(self.style.WARNING(f"No non-PASS (FAIL/PROMOTED etc.) results found for Batch {batch_name}, Sem {source_semester}, Session {source_session}"))
             return
 
-        self.stdout.write(f"Found {registrations.count()} BACK registrations.")
+        self.stdout.write(f"Found {result_qs.count()} students with backlogs/failures.")
 
-        for reg in registrations:
-            student = reg.student
-            # self.stdout.write(f"Processing student: {student.registration_no}")
+        stats = {
+            'processed': 0,
+            'entries_created': 0,
+            'already_existed': 0,
+            'no_source_data': 0
+        }
 
-            # Map sem int to string (1 -> 1ST, 2 -> 2ND, etc.) matching DB typical values
-            sem_map = {1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH'}
-            sem_str = sem_map.get(sem, str(sem)) 
-            
-            # Find ALL assessments for this semester (Regular + existing Backs) to check historical status
-            all_sem_assessments = PGStudentCourseAssessment.objects.filter(
+        # 3. Semester label for new entries
+        target_sem_label = str(target_semester)
+        if target_sem_label == '1': target_sem_label = '1ST'
+        elif target_sem_label == '2': target_sem_label = '2ND'
+        elif target_sem_label == '3': target_sem_label = '3RD'
+        elif target_sem_label == '4': target_sem_label = '4TH'
+
+        for res in result_qs.select_related('student'):
+            student = res.student
+            self.stdout.write(f"\nProcessing [{student.registration_no}] {student.get_full_name()} | Result: {res.semester_result}")
+
+            # 4. Scan source assessments to identify failed papers
+            source_ese_assessments = PGStudentCourseAssessment.objects.filter(
                 student=student,
-                semester=sem_str
+                semester__in=source_sem_variants,
+                session=source_session,
+                label__icontains='ESE'
             )
 
-            if not all_sem_assessments.exists():
-                 # Try alternative semester formats
-                suffix_map = {1: 'st', 2: 'nd', 3: 'rd', 4: 'th'}
-                sem_str_alt = f"{sem}{suffix_map.get(sem, 'th')}"
-                all_sem_assessments = PGStudentCourseAssessment.objects.filter(
-                    student=student,
-                    semester__iexact=sem_str_alt
-                )
-            
-            # 1. Identify Passed Subjects (Paper Codes)
-            # We ONLY care if they passed the ESE component if we are creating back for ESE.
-            # Passing CIA does NOT mean they passed ESE.
-            passed_ese_paper_codes = set()
-            for assessment in all_sem_assessments:
-                 # Check if passed ESE
-                if 'ESE' in assessment.label.upper():
-                    is_pass = False
-                    if assessment.ind_is_pass:
-                        is_pass = True
-                    elif assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
-                         if assessment.ind_marks_obtained >= assessment.ind_pass_marks:
-                             is_pass = True
-                             
-                    if is_pass:
-                        passed_ese_paper_codes.add(assessment.paper_code)
+            if not source_ese_assessments.exists():
+                self.stdout.write(f"  ⚠️ No ESE assessments found in session {source_session}")
+                stats['no_source_data'] += 1
+                continue
 
-            # 2. Identify Subjects that need Back Entry
-            assessments_by_code = {}
-            for assessment in all_sem_assessments:
-                if assessment.paper_code not in assessments_by_code:
-                    assessments_by_code[assessment.paper_code] = []
-                assessments_by_code[assessment.paper_code].append(assessment)
-            
-            for paper_code, assessments in assessments_by_code.items():
-                if paper_code in passed_ese_paper_codes:
-                    # They already passed the ESE for this paper code in some attempt.
-                    continue 
+            for prev_ese in source_ese_assessments:
+                paper_code = prev_ese.paper_code
                 
-                # Look for an ESE assessment in the list.
-                ese_assessment = None
-                for assessment in assessments:
-                    if 'ESE' in assessment.label.upper():
-                        # We take the LATEST ESE attempt to check failure on?
-                        # Or just find ANY ESE attempt?
-                        # Usually latest is best to copy metadata from.
-                        # Assuming iterating gives order or just take one.
-                        ese_assessment = assessment
-                        # Don't break immediately if we want to find specific fail?
-                        # But we checked passed_ese_paper_codes above. So if they haven't passed, 
-                        # any ESE record is a candidate for checking failure.
-                        break 
+                # Check for failure in this paper
+                is_failed = False
+                if prev_ese.ind_is_pass is False:
+                    is_failed = True
+                elif prev_ese.ind_marks_obtained is not None and prev_ese.ind_pass_marks is not None:
+                    if prev_ese.ind_marks_obtained < prev_ese.ind_pass_marks:
+                        is_failed = True
                 
-                if ese_assessment:
-                    # Specific check requested: "ind is pass the is false"
-                    if ese_assessment.ind_is_pass is False:
-                         self.create_back_entry(ese_assessment, target_session, reg.exam_type, dry_run)
+                if not is_failed:
+                    self.stdout.write(f"    [Pass] {paper_code} - Assessment marked as pass")
+                    continue
 
-    def create_back_entry(self, prev_assessment, target_session, exam_type, dry_run):
+                # 5. Create blank ESE entry in target
+                self.create_back_entry(prev_ese, target_session, target_sem_label, dry_run, stats)
+            
+            stats['processed'] += 1
+
+        self.stdout.write("\n" + "=" * 100)
+        self.stdout.write("SUMMARY")
+        self.stdout.write("=" * 100)
+        self.stdout.write(f"Students Processed   : {stats['processed']}")
+        self.stdout.write(f"Entries Created      : {stats['entries_created']}")
+        self.stdout.write(f"Already Existed      : {stats['already_existed']}")
+        self.stdout.write(f"Skipped (No Source)  : {stats['no_source_data']}")
+        self.stdout.write("=" * 100)
+
+    def create_back_entry(self, prev, target_session, target_sem, dry_run, stats):
         # Check if already exists
         exists = PGStudentCourseAssessment.objects.filter(
-            student=prev_assessment.student,
-            semester=prev_assessment.semester,
-            paper_code=prev_assessment.paper_code,
-            label=prev_assessment.label,
+            student=prev.student,
+            semester=target_sem,
+            paper_code=prev.paper_code,
+            label=prev.label,
             session=target_session,
             exam_type='BACK'
         ).exists()
 
         if exists:
-            # self.stdout.write(f"  - Skipping {prev_assessment.course_name} (Already exists)")
+            self.stdout.write(f"    [Skip] {prev.paper_code} | {prev.label} - Already exists")
+            stats['already_existed'] += 1
             return
 
-        if dry_run:
-            self.stdout.write(self.style.SUCCESS(f"[DRY RUN] Would create Back Entry for: {prev_assessment.student.registration_no} - {prev_assessment.course_name} ({prev_assessment.paper_code})"))
-            return
-
-        # Create new entry
-        PGStudentCourseAssessment.objects.create(
-            student=prev_assessment.student,
-            course_name=prev_assessment.course_name,
-            course_short_name=prev_assessment.course_short_name,
-            course_type=prev_assessment.course_type,
-            course_code=prev_assessment.course_code,
-            paper_code=prev_assessment.paper_code,
-            semester=prev_assessment.semester,
-            label=prev_assessment.label,
-            department=prev_assessment.department,
-            degree=prev_assessment.degree,
-            batch=prev_assessment.batch, 
-            college_code=prev_assessment.college_code,
-            
-            session=target_session,
-            exam_type='BACK',
-            
-            ind_max_marks=prev_assessment.ind_max_marks,
-            ind_pass_marks=prev_assessment.ind_pass_marks,
-            ind_marks_obtained=None, 
-            ind_is_absent=False, 
-            ind_is_pass=None,
-            
-            is_cia_fill=False,
-            is_ese_fill=False,
-        )
-        self.stdout.write(self.style.SUCCESS(f"  + Created Back Entry: {prev_assessment.course_name}"))
+        if not dry_run:
+            PGStudentCourseAssessment.objects.create(
+                student=prev.student,
+                course_name=prev.course_name,
+                course_short_name=prev.course_short_name,
+                course_type=prev.course_type,
+                course_code=prev.course_code,
+                paper_code=prev.paper_code,
+                semester=target_sem,
+                label=prev.label,
+                department=prev.department,
+                degree=prev.degree,
+                batch=prev.batch, 
+                college_code=prev.college_code,
+                session=target_session,
+                exam_type='BACK',
+                ind_max_marks=prev.ind_max_marks,
+                ind_pass_marks=prev.ind_pass_marks,
+                ind_marks_obtained=None, 
+                ind_is_absent=False, 
+                ind_is_pass=None,
+                is_cia_fill=False,
+                is_ese_fill=False,
+            )
+            self.stdout.write(self.style.SUCCESS(f"    [Created] {prev.paper_code} | {prev.label}"))
+        else:
+            self.stdout.write(f"    [Would Create] {prev.paper_code} | {prev.label} | Type: BACK")
+        
+        stats['entries_created'] += 1
