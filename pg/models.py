@@ -632,6 +632,14 @@ class PGExamRegistration(models.Model):
     sem = models.IntegerField(null=True, blank=True, help_text="Semester")
     status = models.CharField(max_length=15, choices=REGISTRATION_STATUS_CHOICES, default='PENDING', help_text="Registration Status")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
+    exam = models.ForeignKey(
+        'pg.PGExam',
+        on_delete=models.SET_NULL,
+        related_name='exam_registrations',
+        null=True,
+        blank=True,
+        help_text="Linked Exam"
+    )
     exam_type = models.CharField(max_length=20, choices=EXAM_TYPE_CHOICES, default='REGULAR', help_text="Exam Type",null=True,blank=True)
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")

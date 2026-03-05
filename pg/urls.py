@@ -15,6 +15,10 @@ from .views import (
     PGRegistrationCardPDFView,
     PGRollSheetPDFView,
     PGAttendanceSheetPDFView,
+    PGCenterAttachedCollegesView,
+    PGStudentAttendanceListView,
+    PGAttendanceMarkView,
+
 )
 
 urlpatterns = [
@@ -36,4 +40,10 @@ urlpatterns = [
     path('<uuid:uid>/status/', PGRegistrationStatusView.as_view(), name='pg-registration-status'),
     path('roll-sheet/pdf/', PGRollSheetPDFView.as_view(), name='pg-roll-sheet-pdf'),
     path('attendance-sheet/pdf/', PGAttendanceSheetPDFView.as_view(), name='pg-attendance-sheet-pdf'),
+
+
+    ##center api for attendence sheet
+    path('center/attached-colleges/', PGCenterAttachedCollegesView.as_view(), name='pg-center-attached-colleges'),
+    path('student-attendance/list/', PGStudentAttendanceListView.as_view(), name='pg-student-attendance-list'),
+    path('student-attendance/mark/', PGAttendanceMarkView.as_view(), name='pg-student-attendance-mark'),
 ]
