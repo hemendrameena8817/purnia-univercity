@@ -404,8 +404,8 @@ class StudentCourseAssessment(models.Model):
     sem_max_credit = models.IntegerField(null=True, blank=True, help_text="Semester MAX CREDIT")
     sem_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester CREDIT OBTAINED")
     sgpa = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRADE POINT")
-    sem_result = models.CharField(max_length=10, null=True, blank=True, help_text="Semester Result eg: pass/fail/promoted")
-    next_sem_status = models.CharField(max_length=10, null=True, blank=True, help_text="Next Semester Status eg: eligible/not eligible")
+    sem_result = models.CharField(max_length=25, null=True, blank=True, help_text="Semester Result eg: PASS/FAIL/PROMOTED/QUALIFIED/DISQUALIFIED")
+    next_sem_status = models.CharField(max_length=20, null=True, blank=True, help_text="Next Semester Status eg: ELIGIBLE/NOT_ELIGIBLE")
     sem_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRACE MARKS OBTAINED")
     ####semester####
 
@@ -444,6 +444,12 @@ class StudentCourseAssessment(models.Model):
             # Includes exam_type to differentiate regular vs back exams
             models.Index(fields=['student', 'semester', 'session', 'paper_code', 'label', 'exam_type'], 
                         name='idx_reg_dup_check'),
+            
+            # Session-based queries (for session-wise result processing)
+            models.Index(fields=['session', 'semester', 'exam_type'], name='idx_session_sem_exam'),
+            
+            # Student + semester + exam_type (for back exam lookups per student)
+            models.Index(fields=['student', 'semester', 'exam_type'], name='idx_stud_sem_exam'),
         ]
 
 

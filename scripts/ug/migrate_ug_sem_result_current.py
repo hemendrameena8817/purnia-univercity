@@ -181,7 +181,6 @@ def migrate_data(limit=None, clear_existing=False):
     stats = {'processed': 0, 'created': 0, 'duplicates': 0, 'skipped': 0}
     batch_assessments = []
     staging_ids_to_mark = []
-    profile_updates = {} # student_id -> {field: value}
     
     start_time = datetime.now()
     
@@ -267,6 +266,7 @@ def migrate_data(limit=None, clear_existing=False):
                 # Semester-level fields (EXACT USER MAPPING)
                 sem_max_credit=safe_int(staging.total_ca),  # total_ca -> sem_max_credit
                 sem_credit_obtained=safe_decimal(staging.total_ce),  # total_ce -> sem_credit_obtained
+                sgpa=safe_decimal(staging.gpa),  # gpa -> sgpa
                 sem_result=staging.final_result,  # final_result -> sem_result
                 
                 # Temp field
@@ -283,12 +283,6 @@ def migrate_data(limit=None, clear_existing=False):
             existing_keys.add(key)
             staging_ids_to_mark.append(staging.id)
             
-            # Track profile updates
-            if c_type in ['MJC', 'MIC', 'MDC']:
-                field = {'MJC': 'major_course', 'MIC': 'minor_course', 'MDC': 'mdc_course'}[c_type]
-                if student_id not in profile_updates: profile_updates[student_id] = {}
-                profile_updates[student_id][field] = staging.subject_name
-
             if len(batch_assessments) >= BATCH_SIZE:
                 with transaction.atomic():
                     StudentCourseAssessment.objects.bulk_create(batch_assessments, ignore_conflicts=True)
@@ -312,20 +306,6 @@ def migrate_data(limit=None, clear_existing=False):
             StudentCourseAssessment.objects.bulk_create(batch_assessments, ignore_conflicts=True)
             UGSemResultCurrent.objects.filter(id__in=staging_ids_to_mark).update(is_migrated=True)
         stats['created'] += len(batch_assessments)
-
-    # Bulk profile updates
-    if profile_updates:
-        print(f"\n🆙 Bulk updating {len(profile_updates):,} student profiles...")
-        p_ids = list(profile_updates.keys())
-        p_chunk = 5000 # Increased chunk size
-        for i in range(0, len(p_ids), p_chunk):
-            chunk = p_ids[i:i+p_chunk]
-            profiles = list(UGStudentProfile.objects.filter(id__in=chunk))
-            for p in profiles:
-                for f, v in profile_updates[p.id].items(): 
-                    setattr(p, f, v)
-            UGStudentProfile.objects.bulk_update(profiles, ['major_course', 'minor_course', 'mdc_course'])
-            print(f"   Updated profiles: {min(i+p_chunk, len(p_ids)):,} / {len(p_ids):,}")
 
     duration = (datetime.now() - start_time).total_seconds()
     print(f"\n🏁 Done in {duration:.1f}s | Avg Rate: {stats['processed']/duration:.0f}/s")
