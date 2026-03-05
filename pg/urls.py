@@ -27,6 +27,7 @@ urlpatterns = [
     path('departments/', PGDepartmentDropdownView.as_view(), name='departments'),
     path('subjects/', PGSubjectDropdownView.as_view(), name='subjects'),
     path('students/filter/', PGStudentFilterView.as_view(), name='pg-student-filter'),
+    #student exam registrations
     path('exam-registration/', PGExamRegistrationDetailView.as_view(), name='pg-exam-registration'),
     path('admit-card/', PGAdmitCardPDFView.as_view(), name='pg-admit-card'),
     path('registration-card/', PGRegistrationCardPDFView.as_view(), name='pg-registration-card'),

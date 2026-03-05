@@ -46,6 +46,7 @@ class PGStudentProfileSerializer(serializers.ModelSerializer):
         fields = [
             'uid',
             'first_name', 'last_name', 'hindi_name',
+            'profile_image','signature',
             'registration_no', 'roll_no',
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
