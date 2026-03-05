@@ -412,6 +412,10 @@ class StudentCourseAssessment(models.Model):
     #####temp#####
     temp_total_gp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
     #####temp#####
+    
+    is_cia_filled = models.BooleanField(default=False)
+    cia_filled_on = models.DateTimeField(null=True, blank=True)
+
 
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
@@ -450,6 +454,9 @@ class StudentCourseAssessment(models.Model):
             
             # Student + semester + exam_type (for back exam lookups per student)
             models.Index(fields=['student', 'semester', 'exam_type'], name='idx_stud_sem_exam'),
+
+            # Optimization for CIA entry (College + Session + Sem + Type)
+            models.Index(fields=['college_code', 'session', 'semester', 'course_type'], name='idx_college_cia_entry'),
         ]
 
 
