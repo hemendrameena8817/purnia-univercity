@@ -148,10 +148,32 @@ class UGOldMarksheetPDFView(View):
         else:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
+        # Check if it's BA Hons Part 1 or 2 by looking at their results
+        # (BA students with HON/HONS papers)
+        from .models import UGBeforeCBCSStudentResult
+        
+        has_honours_papers = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=f"PART{part}",
+            paper_type_code__iexact='HON'
+        ).exists() or UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=f"PART{part}",
+            paper_type_code__iexact='HONS'
+        ).exists()
+
+        is_ug_old_hons_part_1_or_2 = (
+            (str(part) == '1' or str(part) == '2') and 
+            has_honours_papers
+        )
+
+        if not is_ug_old_hons_part_1_or_2:
+             return HttpResponse("Invalid course_code or part", status=400)
+
         # Call the PDF generator utility
         from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
         pdf_content = generate_ug_old_ba_hons_part1_pdf(
-            student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+            student, exam_part=part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
         )
         
         if not pdf_content:
@@ -189,11 +211,30 @@ class UGOldMarksheetJSONView(APIView):
         else:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
-        # Get marksheet context data
-        from .utils.pdf_generator import get_ug_old_ba_hons_part1_context
-        context_data = get_ug_old_ba_hons_part1_context(
-            student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+        # Get marksheet context data based on Course and Part
+        from .utils.pdf_generator import (
+            get_ug_old_ba_hons_part1_context,
         )
+        
+        # Check if it's BA Hons Part 1 or 2 by looking at their results
+        # (BA students with HON/HONS papers)
+        from .models import UGBeforeCBCSStudentResult
+        
+        has_honours_papers = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=f"PART{part}",
+            paper_type_code__iexact='HON'
+        ).exists()
+
+        if has_honours_papers:
+            context_data = get_ug_old_ba_hons_part1_context(
+                student, exam_type=exam_type, course_code=course_code, batch_code=batch_code, exam_part=part
+            )
+        else:
+            return Response(
+                {"error": "Invalid course_code or part"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         if not context_data:
             return Response(
@@ -214,7 +255,7 @@ class UGOldMarksheetJSONView(APIView):
                 'mothers_name': student_obj.mothers_name,
                 'gender': student_obj.gender,
                 'dob': student_obj.dob,
-                'course_code': student_obj.course_code,
+                'course_code': course_code,
                 'discipline_code': student_obj.discipline_code,
                 'college_name': student_obj.college.name if student_obj.college else None,
             }

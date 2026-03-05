@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Statement of Marks - Part I</title>
+    <title>
+      Statement of Marks 
+    </title>
     <style>
       @page {
         size: A4;
@@ -372,7 +374,7 @@
               <tr>
                 <td rowspan="3">1</td>
                 <td rowspan="3" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
-                <td>Paper-I</td>
+                <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
                 <td>{{ subjects.honours.papers.0.max_marks|default:"75" }}</td>
                 <td rowspan="2" colspan="2" style="vertical-align: middle">67</td>
                 <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
@@ -381,7 +383,7 @@
                 </td>
               </tr>
               <tr>
-                <td>Paper-II</td>
+                <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
                 <td>{{ subjects.honours.papers.1.max_marks|default:"75" }}</td>
                 <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
               </tr>
@@ -397,7 +399,7 @@
               <tr>
                 <td rowspan="2">1</td>
                 <td rowspan="2" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
-                <td>Paper-I</td>
+                <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
                 <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
                 <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"90" }}</td>
                 <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
@@ -406,7 +408,7 @@
                 </td>
               </tr>
               <tr>
-                <td>Paper-II</td>
+                <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
                 <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
                 <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
               </tr>
