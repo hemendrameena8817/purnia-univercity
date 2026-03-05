@@ -329,12 +329,12 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
     # Only FK / indexed / low-cardinality fields as filters
     list_filter = (
-        'semester', 'session', 'exam_type', 'label',
+        'semester', 'batch__name','session', 'exam_type', 'label',
         'ind_is_absent', 'sem_result',
         'is_cia_fill', 'is_ese_fill',
         'department',
         'college_code',
-        'course_code',
+        'course_code'
     )
 
     # Search on indexed fields only
@@ -595,8 +595,8 @@ class PGExamRegistrationResource(resources.ModelResource):
 @admin.register(PGExamRegistration)
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
-    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
-    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'student__department')
+    list_display = ('student', 'exam', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'start_date', 'end_date',)
+    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'exam', 'student__department')
     search_fields = (
         'student__registration_no',
         'student__roll_no',
@@ -606,13 +606,13 @@ class PGExamRegistrationAdmin(ImportExportModelAdmin):
         'student__mobile_no',
         'session',
     )
-    raw_id_fields = ('student',)
+    raw_id_fields = ('student', 'exam')
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'student', 'sem', 'session', 'exam_type')
+            'fields': ('uid', 'student', 'exam', 'sem', 'session', 'exam_type')
         }),
         ('Registration Period', {
             'fields': ('start_date', 'end_date', 'is_open', 'status')
@@ -719,13 +719,13 @@ class PGExamResultAdmin(ImportExportModelAdmin):
     list_filter = (
         'semester',
         'session',
+         'student__batch',
         'cia_pass',
         'ese_pass',
         'semester_result',
         'next_sem_status',
         'is_legacy',
         'student__department',
-        'student__batch'
     )
     
     # Optimized search fields

@@ -32,11 +32,12 @@ class FinalResultProcessingService:
     Step 2: Final Result Processing
     """
     
-    def __init__(self, batch: str, semester: str, session: str, registration_no: Optional[str] = None):
+    def __init__(self, batch: str, semester: str, session: str, registration_no: Optional[str] = None, exam_type: str = 'REGULAR'):
         self.batch = batch
         self.semester = semester
         self.session = session
         self.registration_no = registration_no
+        self.exam_type = exam_type.upper()
         # Add internal resume tracking
         self.resume = False 
         self.stats = {
@@ -45,6 +46,9 @@ class FinalResultProcessingService:
             'passed': 0,
             'promoted': 0,
             'failed': 0,
+            'qualified': 0,
+            'disqualified': 0,
+            'overall_updated': 0,
             'registrations_created': 0,
         }
         
@@ -53,8 +57,18 @@ class FinalResultProcessingService:
         self._load_course_map()
 
     def _load_course_map(self):
-        """Load CourseStructure for batch/semester into memory to avoid N+1 queries"""
-        # ... existing implementation
+        """Load CourseStructure into memory to avoid N+1 queries"""
+        from ug.models import CourseStructure
+        import re
+        
+        all_courses = CourseStructure.objects.all()
+        for cs in all_courses:
+            self.course_map[cs.paper_code] = cs
+        
+        # Also build reverse mapping: for assessment paper codes like 'BA1005',
+        # map to the numeric-only CourseStructure '1005'
+        # We'll add these as we encounter them in processing
+        print(f"  📦 Loaded {len(self.course_map)} courses into cache")
 
     def process(self, dry_run: bool = False, resume: bool = False) -> Dict:
         """Main processing method"""
@@ -63,22 +77,30 @@ class FinalResultProcessingService:
         
         if self.registration_no:
             # Process single student
-            students = UGStudentProfile.objects.filter(
-                batch__name=self.batch, 
-                registration_no=self.registration_no
-            )
+            filters = {'registration_no': self.registration_no}
+            if self.batch:
+                filters['batch__name'] = self.batch
+            students = UGStudentProfile.objects.filter(**filters)
             print(f"\n🔍 Processing SINGLE student: {self.registration_no}")
         else:
-            # Process entire batch
-            # Optimization: 
+            # Process by session
             active_ids = StudentCourseAssessment.objects.filter(
-                semester=self.semester
+                session=self.session,
+                semester=self.semester,
+                exam_type=self.exam_type
             ).values_list('student_id', flat=True).distinct()
             
-            students = UGStudentProfile.objects.filter(
-                id__in=active_ids,
-                batch__name=self.batch
-            ).order_by('registration_no')
+            if self.batch:
+                # Filter to specific batch
+                students = UGStudentProfile.objects.filter(
+                    id__in=active_ids,
+                    batch__name=self.batch
+                ).order_by('registration_no')
+            else:
+                # All batches in this session
+                students = UGStudentProfile.objects.filter(
+                    id__in=active_ids
+                ).order_by('registration_no')
             
             # --- RESUME LOGIC ---
             if self.resume:
@@ -149,14 +171,30 @@ class FinalResultProcessingService:
         """Process individual student result through all levels"""
         self.stats['processed'] += 1
         
-        # Optimization: Fetch ALL assessments for this student & semester ONCE
+        # Optimization: Fetch assessments for this student + semester + session + exam_type
         assessments_qs = StudentCourseAssessment.objects.filter(
-            student=student, semester=self.semester
+            student=student, 
+            semester=self.semester,
+            session=self.session,
+            exam_type=self.exam_type
         )
         all_assessments = list(assessments_qs)
         
         if not all_assessments:
             return
+
+        # 0. RECALCULATE ind_is_pass for every assessment (migrated data may have wrong values)
+        pass_fixes = []
+        for a in all_assessments:
+            correct_pass = UGResultCalculator.check_individual_pass(a)
+            if a.ind_is_pass != correct_pass:
+                a.ind_is_pass = correct_pass
+                pass_fixes.append(a)
+        
+        if pass_fixes and not dry_run:
+            StudentCourseAssessment.objects.bulk_update(
+                pass_fixes, ['ind_is_pass'], batch_size=500
+            )
 
         # 1. Individual Level - Apply Grace Marks (NEW: Automatic calculation)
         # Must happen BEFORE combined/course processing so grace is included in all calculations
@@ -305,46 +343,33 @@ class FinalResultProcessingService:
             comb_grace_obtained=total_grace,  # Track grace at combined level
         )
         
-        # STEP 2: Always recalculate credits based on comb_marks_obtained (includes grace)
-        # This ensures grace marks are properly reflected in credits
+        # STEP 2: Always recalculate credits and grades from raw marks
         if not component_list:
             return
         
-        # Check if we should recalculate credits and grades
-        # For legacy data: preserve grade_point but recalculate credits (for grace)
-        has_any_existing_values = False
-        for comp in component_list:
-            comp.refresh_from_db()
-            if comp.comb_max_credits and Decimal(comp.comb_max_credits) > 0:
-                if comp.comb_grade_point and Decimal(comp.comb_grade_point) > 0:
-                    # At least one component has valid values
-                    has_any_existing_values = True
-                    break
-        
-        # STEP 3: Calculate values
-        # For legacy: use existing comb_max_credits; for new: calculate based on course split
-        if has_any_existing_values:
-            # Use existing comb_max_credits from first component
-            component_max_credit = component_list[0].comb_max_credits or 0
+        # Calculate component-specific max_credit from course structure
+        component_max_credit = 0
+        if course_max_credit and has_both_components:
+            # Split credits based on component type
+            if course_max_credit == 6:
+                component_max_credit = 4 if type_str == 'Theory' else 2
+            elif course_max_credit == 5:
+                component_max_credit = 3 if type_str == 'Theory' else 2
+            elif course_max_credit == 4:
+                component_max_credit = 3 if type_str == 'Theory' else 1
+            elif course_max_credit == 3:
+                component_max_credit = 2 if type_str == 'Theory' else 1
+            else:
+                component_max_credit = int(course_max_credit * (2/3) if type_str == 'Theory' else course_max_credit * (1/3))
+        elif course_max_credit:
+            # Only one component, use full credit
+            component_max_credit = course_max_credit
         else:
-            # Calculate component-specific max_credit for new data
-            component_max_credit = 0
-            if course_max_credit and has_both_components:
-                # Split credits based on component type
-                if course_max_credit == 6:
-                    component_max_credit = 4 if type_str == 'Theory' else 2
-                elif course_max_credit == 5:
-                    component_max_credit = 3 if type_str == 'Theory' else 2
-                elif course_max_credit == 4:
-                    component_max_credit = 3 if type_str == 'Theory' else 1
-                elif course_max_credit == 3:
-                    component_max_credit = 2 if type_str == 'Theory' else 1
-                else:
-                    # Default split: roughly 2/3 for theory, 1/3 for practical
-                    component_max_credit = int(course_max_credit * (2/3) if type_str == 'Theory' else course_max_credit * (1/3))
-            elif course_max_credit:
-                # Only one component, use full credit
-                component_max_credit = course_max_credit
+            # Fallback: check existing comb_max_credits from first component
+            for comp in component_list:
+                if comp.comb_max_credits and Decimal(comp.comb_max_credits) > 0:
+                    component_max_credit = comp.comb_max_credits
+                    break
         
         # Calculate component grade
         component_grade, component_numeric_grade = UGResultCalculator.calculate_grade(
@@ -358,22 +383,17 @@ class FinalResultProcessingService:
         # Calculate credits earned
         component_credit_obtained = Decimal(component_max_credit) if component_passed else Decimal(0)
         
-        # For legacy data, preserve existing grade_point; for new data, calculate it
-        if has_any_existing_values:
-            # Legacy: Update credits only (preserve existing grade_point)
-            base_qs.filter(paper_code=paper_code).filter(filters).update(
-                comb_credit_obtained=component_credit_obtained,  # Recalculate with grace
-            )
-        else:
-            # New data: Calculate and update everything
-            component_grade_point = Decimal(component_numeric_grade) * Decimal(component_max_credit)
-            
-            base_qs.filter(paper_code=paper_code).filter(filters).update(
-                comb_max_credits=component_max_credit,
-                comb_numeric_grade=component_numeric_grade,
-                comb_credit_obtained=component_credit_obtained,
-                comb_grade_point=component_grade_point,
-            )
+        # Calculate weighted grade point (grade × credit)
+        component_grade_point = Decimal(component_numeric_grade) * Decimal(component_max_credit)
+        
+        # ALWAYS update everything from calculated values
+        base_qs.filter(paper_code=paper_code).filter(filters).update(
+            comb_max_credits=component_max_credit,
+            comb_numeric_grade=component_numeric_grade,
+            comb_letter_grade=component_grade,
+            comb_credit_obtained=component_credit_obtained,
+            comb_grade_point=component_grade_point,
+        )
 
     ################################################################################
     # #### Course Level ####
@@ -410,66 +430,44 @@ class FinalResultProcessingService:
                 # Update 'course_' fields on ALL rows for this paper
                 base_qs_filtered = assessments_qs.filter(paper_code=paper_code)
                 
-                # Check if we should preserve existing grades (Legacy Trust)
-                # We assume if comb_numeric_grade is set, it's correct (from migration)
-                # But we ALWAYS update marks/credits/max_marks if they are calculated
-                
                 paper_assessments_list = [a for a in all_assessments_list if a.paper_code == paper_code]
                 
-                # Fetch first to check existing
-                existing_rec = paper_assessments_list[0] if paper_assessments_list else None
-                existing_grade = existing_rec.comb_numeric_grade if existing_rec else None
-                 
+                # Calculate total pass marks and grace for course level
+                total_pass_marks = sum(a.ind_pass_marks or 0 for a in paper_assessments_list)
+                total_grace = sum(a.ind_grace_obtained or 0 for a in paper_assessments_list)
+                
+                # Always use freshly calculated grade
+                final_grade_point = result_data['grade_point']       # numeric: 0-10
+                final_letter_grade = result_data['final_grade']      # letter: O, A+, A, etc.
+                weighted_grade_point = Decimal(final_grade_point) * Decimal(result_data['max_credit'])
+                
                 update_payload = {
+                    # Course level fields
                     'course_final_marks_obtained': result_data['total_marks'],
+                    'course_marks_obtained': result_data['total_marks'],
                     'course_credit_obtained': result_data['credits_earned'],
-                    # 'course_grade_point': result_data['grade_point'], # Conditional
+                    'course_grade_point': weighted_grade_point,
                     'course_max_credits': result_data['max_credit'],
                     'course_max_marks': result_data['total_max_marks'],
-                    'comb_final_marks_obtained': result_data['total_marks']
+                    'course_pass_marks': total_pass_marks,
+                    'course_grace_obtained': total_grace if total_grace > 0 else 0,
+                    # NOTE: Do NOT overwrite comb_numeric_grade / comb_letter_grade here!
+                    # Those are COMPONENT-level grades (Theory, Practical) set by _update_combined_stats_db
+                    'comb_final_marks_obtained': result_data['total_marks'],
                 }
-                
-                # CONDITIONAL GRADE UPDATE (LEGACY TRUST)
-                # If existing grade > 0, trust it. Else use calculated.
-                final_grade_point = result_data['grade_point']
-                
-                if existing_grade is not None and Decimal(existing_grade) > 0:
-                    # Preserve existing (Legacy Trust)
-                    final_grade_point = existing_grade
-                else:
-                    # Use calculated
-                    update_payload['comb_numeric_grade'] = final_grade_point
-
-                # USER REQUIREMENT (2026-01-30):
-                # DO NOT UPDATE comb_grade_point for legacy data!
-                # Legacy has individual subject_gp per assessment row (CIA-Theory, ESE-Theory, etc.)
-                # My bulk update would overwrite these with a single course-level value
-                # SGPA = Sum(ALL individual subject_gp rows) / earned_credits
-                
-                # For in-memory SGPA calculation, we need the weighted point
-                # But we use existing values from DB, not recalculated
-                weighted_point_for_memory = Decimal(final_grade_point) * Decimal(result_data['credits_earned'])
 
                 base_qs_filtered.update(**update_payload)
                 
-                # CRITICAL: Update In-Memory Objects with FINAL values
-                # For comb_grade_point: DO NOT update DB, but update memory for current calculation
-                paper_assessments_list = [a for a in all_assessments_list if a.paper_code == paper_code]
+                # Update In-Memory Objects with calculated values
                 for a in paper_assessments_list:
                     a.course_final_marks_obtained = result_data['total_marks']
+                    a.course_marks_obtained = result_data['total_marks']
                     a.course_credit_obtained = result_data['credits_earned']
-                    
-                    a.comb_numeric_grade = final_grade_point # 0-10
-                    # Keep existing comb_grade_point from DB (don't overwrite)
-                    # a.comb_grade_point stays as-is from migration
-                    
+                    a.course_grade_point = weighted_grade_point
                     a.course_max_credits = result_data['max_credit']
                     a.course_max_marks = result_data['total_max_marks']
-                    
-                    # Also update 'comb_' fields in memory
-                    a.comb_numeric_grade = final_grade_point # Use determined final
-                    a.comb_credit_obtained = result_data['credits_earned']
-                    a.comb_max_credits = result_data['max_credit']
+                    a.course_pass_marks = total_pass_marks
+                    # Do NOT overwrite a.comb_numeric_grade / a.comb_letter_grade
                     a.comb_final_marks_obtained = result_data['total_marks']
 
     ################################################################################
@@ -487,36 +485,60 @@ class FinalResultProcessingService:
         3. THEN check promotion eligibility (reads fresh credits from DB)
         4. Update next_sem_status and create registration
         """
-        # OPTIMIZATION: Pass cached data
-        # 1. Calculate SGPA (Pure Memory)
+        # IMPORTANT: Re-fetch assessments from DB because combined-level and course-level
+        # updates used .update() which writes to DB but does NOT update in-memory objects.
+        # We need fresh comb_grade_point, comb_max_credits etc. for SGPA calculation.
+        fresh_assessments = list(StudentCourseAssessment.objects.filter(
+            student=student,
+            semester=self.semester,
+            session=self.session,
+            exam_type=self.exam_type
+        ))
+        
+        # 1. Calculate SGPA from fresh DB values
         sgpa = UGResultCalculator.calculate_sgpa(
             student.id, 
             self.semester,
-            assessments=all_assessments_list,
+            assessments=fresh_assessments,
             course_map=self.course_map
         ) or Decimal('0.00')
         
-        # 2. Determine Result Status (Pure Memory)
-        sem_result_status = UGResultCalculator.determine_semester_result(
-            student.id, 
-            self.semester,
-            assessments=all_assessments_list
-        )
+        # 2. Determine Result Status
+        if self.exam_type == 'BACK':
+            # For BACK exams: QUALIFIED or DISQUALIFIED
+            sem_result_status = UGResultCalculator.determine_back_result(
+                student.id,
+                self.semester,
+                back_assessments=fresh_assessments
+            )
+        else:
+            # For REGULAR: PASS / PROMOTED / FAIL
+            sem_result_status = UGResultCalculator.determine_semester_result(
+                student.id, 
+                self.semester,
+                assessments=fresh_assessments
+            )
         
         # Update Stats
-        if sem_result_status == 'PASS':
-            self.stats['passed'] += 1
-        elif sem_result_status == 'PROMOTED':
-            self.stats['promoted'] += 1
+        if self.exam_type == 'BACK':
+            if sem_result_status == 'QUALIFIED':
+                self.stats['qualified'] += 1
+            else:
+                self.stats['disqualified'] += 1
         else:
-            self.stats['failed'] += 1
+            if sem_result_status == 'PASS':
+                self.stats['passed'] += 1
+            elif sem_result_status == 'PROMOTED':
+                self.stats['promoted'] += 1
+            else:
+                self.stats['failed'] += 1
 
         if not dry_run:
             # Check if we should proceed (must have CIA data or existing result)
             has_cia = any('CIA' in (a.label or '') for a in all_assessments_list)
             
             existing_result_exists = UGExamResult.objects.filter(
-                student=student, semester=self.semester, session=self.session
+                student=student, semester=self.semester
             ).exists()
             
             if not has_cia and not existing_result_exists:
@@ -529,19 +551,39 @@ class FinalResultProcessingService:
             # Update Semester Fields on Assessments
             self._update_assessment_semester_fields_db(student, sgpa, sem_result_status)
             
-            # 4. NOW check promotion eligibility (reads fresh credits from DB)
-            is_eligible, eligibility_reason = UGResultCalculator.check_promotion_eligibility(
-                student.id, self.semester, current_result_status=sem_result_status
-            )
+            # 4. For BACK exams: recalculate overall semester result (REGULAR + BACK combined)
+            if self.exam_type == 'BACK':
+                overall = UGResultCalculator.recalculate_overall_semester_result(
+                    student.id, self.semester
+                )
+                new_overall_result = overall['result']
+                
+                # Update the original UGExamResult with new overall result
+                UGExamResult.objects.filter(
+                    student=student,
+                    semester=self.semester,
+                ).update(
+                    semester_result=new_overall_result
+                )
+                
+                if new_overall_result != sem_result_status:
+                    self.stats['overall_updated'] += 1
+                    print(f"      🔄 Overall result updated to {new_overall_result} for {student.registration_no}")
             
-            # 5. Update next_sem_status on exam result
-            UGExamResult.objects.filter(
-                student=student, semester=self.semester, session=self.session
-            ).update(next_sem_status='ELIGIBLE' if is_eligible else 'NOT_ELIGIBLE')
-            
-            # 6. Create Next Sem Registration
-            if is_eligible:
-                self._create_next_sem_registration(student)
+            # 5. NOW check promotion eligibility (only for REGULAR)
+            if self.exam_type == 'REGULAR':
+                is_eligible, eligibility_reason = UGResultCalculator.check_promotion_eligibility(
+                    student.id, self.semester, current_result_status=sem_result_status
+                )
+                
+                # Update next_sem_status on exam result
+                UGExamResult.objects.filter(
+                    student=student, semester=self.semester
+                ).update(next_sem_status='ELIGIBLE' if is_eligible else 'NOT_ELIGIBLE')
+                
+                # Create Next Sem Registration
+                if is_eligible:
+                    self._create_next_sem_registration(student)
 
     def _update_exam_result_db(self, student, sgpa, status, all_assessments_list):
         """Update UGExamResult table (credits and result, next_sem_status set separately)"""
@@ -570,14 +612,14 @@ class FinalResultProcessingService:
             
             sem_max_credits += Decimal(result_data['max_credit'] or 0)
             
-            # FIXED: Refresh assessments from DB to get updated comb_credit_obtained (with grace)
+            # Use COURSE-level credits (handles Theory+Practical correctly)
             from ug.models import StudentCourseAssessment
-            paper_assessments_fresh = StudentCourseAssessment.objects.filter(
+            paper_assessment = StudentCourseAssessment.objects.filter(
                 student=student,
                 semester=self.semester,
                 paper_code=paper_code
-            )
-            paper_credits_earned = max((a.comb_credit_obtained or 0) for a in paper_assessments_fresh) if paper_assessments_fresh else Decimal(0)
+            ).first()
+            paper_credits_earned = Decimal(paper_assessment.course_credit_obtained or 0) if paper_assessment else Decimal(0)
             sem_credits_earned += paper_credits_earned
 
         # OFFICIAL RULE: SGPA only for PASS students
@@ -586,8 +628,8 @@ class FinalResultProcessingService:
         UGExamResult.objects.update_or_create(
             student=student,
             semester=self.semester,
-            session=self.session,
             defaults={
+                'session': self.session,
                 'sgpa': final_sgpa,
                 'semester_result': status,
                 'semester_credit_earned': sem_credits_earned,
@@ -602,7 +644,7 @@ class FinalResultProcessingService:
         # Or calculate again? Database read is safer for consistency.
         # It's one read.
         exam_result = UGExamResult.objects.filter(
-            student=student, semester=self.semester, session=self.session
+            student=student, semester=self.semester
         ).first()
         
         sem_max = exam_result.semester_max_credit if exam_result else 0
@@ -626,10 +668,12 @@ class FinalResultProcessingService:
         next_sem = self._get_next_semester(self.semester)
         if next_sem:
             # Check if exists (avoid MultipleObjectsReturned if duplicates exist)
+            # DONT filter by session here, because a student can only register
+            # for a semester once. If we filter by session and it was created
+            # in a different session, it will create a duplicate!
             existing_qs = SemesterRegistration.objects.filter(
                 student=student,
-                sem=next_sem,
-                session=self.session
+                sem=next_sem
             )
             
             if not existing_qs.exists():
@@ -663,9 +707,10 @@ class FinalResultProcessingService:
         print("\n" + "="*100)
         print("📊 STEP 2: FINAL RESULT PROCESSING (POST-ESE)")
         print("="*100)
-        print(f"Batch:    {self.batch}")
-        print(f"Semester: {self.semester}")
-        print(f"Session:  {self.session}")
+        print(f"Batch:     {self.batch}")
+        print(f"Semester:  {self.semester}")
+        print(f"Session:   {self.session}")
+        print(f"Exam Type: {self.exam_type}")
         print("="*100)
 
     def _print_summary(self):
@@ -674,12 +719,17 @@ class FinalResultProcessingService:
         print("="*100)
         print(f"Total Students:        {self.stats['total_students']:,}")
         print(f"Processed:             {self.stats['processed']:,}")
-        print(f"✅ PASSED:              {self.stats['passed']:,}")
-        print(f"⚠️ PROMOTED:            {self.stats['promoted']:,}")
-        print(f"❌ FAILED:              {self.stats['failed']:,}")
+        if self.exam_type == 'REGULAR':
+            print(f"✅ PASSED:              {self.stats['passed']:,}")
+            print(f"⚠️ PROMOTED:            {self.stats['promoted']:,}")
+            print(f"❌ FAILED:              {self.stats['failed']:,}")
+        else:
+            print(f"✅ QUALIFIED:           {self.stats['qualified']:,}")
+            print(f"❌ DISQUALIFIED:        {self.stats['disqualified']:,}")
+            print(f"🔄 Overall Updated:     {self.stats['overall_updated']:,}")
         print(f"📋 Next Sem Registers:  {self.stats['registrations_created']:,}")
         print("="*100)
 
-def run_final_processing(batch: str, semester: str, session: str, registration_no: Optional[str] = None, dry_run: bool = False, resume: bool = False) -> Dict:
-    service = FinalResultProcessingService(batch, semester, session, registration_no)
+def run_final_processing(batch: str, semester: str, session: str, registration_no: Optional[str] = None, exam_type: str = 'REGULAR', dry_run: bool = False, resume: bool = False) -> Dict:
+    service = FinalResultProcessingService(batch, semester, session, registration_no, exam_type)
     return service.process(dry_run=dry_run, resume=resume)
