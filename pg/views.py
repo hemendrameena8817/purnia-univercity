@@ -1001,7 +1001,7 @@ class PGPaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             uid = str(payment.registration.uid)
             redirect_url = (
-                f"{frontend_url}/pg-registration/"
+                f"{frontend_url}/pg-exam-registration/pg-examformback-1st"
                 f"?uid={uid}"
                 f"&payment_status={payment.payment_status.lower()}"
                 f"&order_id={order_id}"
@@ -1011,7 +1011,7 @@ class PGPaymentResponseView(APIView):
         except Exception as e:
             logger.exception("Error processing PG payment response")
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
-            return django_redirect(f"{frontend_url}/pg/payment-status?error={str(e)[:100]}")
+            return django_redirect(f"{frontend_url}/pg-exam-registration/pg-examformback-1st?error={str(e)[:100]}")
 
 
 class PGStudentUploadView(APIView):
