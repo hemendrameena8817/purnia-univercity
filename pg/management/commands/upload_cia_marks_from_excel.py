@@ -10,13 +10,13 @@ Usage examples:
 
 # Dry run (no changes):
 python manage.py upload_cia_marks_from_excel \\
-    --file courses_data/cia_pg_1_mark.ods \\
+    --file cia_pg_1_mark.xlsx \\
     --session 2025-26 --semester 1ST \\
     --exam-type BACK --no-header --dry-run
 
 # Execute (save to DB):
 python manage.py upload_cia_marks_from_excel \\
-    --file courses_data/cia_pg_1_mark.ods \\
+    --file cia_pg_1_mark.ods \\
     --session 2025-26 --semester 1ST \\
     --exam-type BACK --no-header --execute
 """
@@ -122,12 +122,13 @@ class Command(BaseCommand):
                 stats['not_found'] += 1
                 continue
 
-            # 3. Parse Marks
+            # 3. Parse Marks (absent = 0 marks + is_absent flag)
             is_absent = False
             marks_obtained = None
 
             if marks_raw in ['A', 'ABSENT', 'NAN', '']:
-                is_absent = True
+                marks_obtained = Decimal('0')   # Absent → 0 marks
+                is_absent = True                # Also flag as absent
             else:
                 try:
                     marks_obtained = Decimal(marks_raw)
