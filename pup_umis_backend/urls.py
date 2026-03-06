@@ -24,6 +24,7 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from voc_new_registration.views import CaptchaView
+from .views import CommonOptionsView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -65,6 +66,7 @@ urlpatterns = [
     path('api/staging/', include('staging.urls')),
     path('api/ug_before_cbcs/', include('ug_before_cbcs.urls')),
     path('api/captcha/', CaptchaView.as_view(), name='common-captcha'),
+    path('api/app-options/', CommonOptionsView.as_view(), name='app-options'),
     path('api/mba_sem/', include('mba_sem.urls')),
 ]
 if settings.DEBUG:
