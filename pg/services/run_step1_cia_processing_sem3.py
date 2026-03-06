@@ -1,17 +1,18 @@
 """
-Step 1: Specialized PG CIA Result Processing for SEMESTER 3
+Step 1: Dynamic PG CIA Result Processing (Ignore Eligibility)
 
-This script enforces students must clear both 1ST and 2ND semesters.
+This script allows processing any semester while ignoring previous 
+semester result/eligibility checks.
 
 Usage Examples:
-    # Dry run
-    python pg/services/run_step1_cia_processing_sem3.py --session 2024-25 --dry-run
+    # Dry run for 1st Semester
+    python pg/services/run_step1_cia_processing_sem3.py --semester 1ST --session 2025-26 --dry-run
     
-    # Production run
-    python pg/services/run_step1_cia_processing_sem3.py --session 2024-25
+    # Production run for 3rd Semester
+    python pg/services/run_step1_cia_processing_sem3.py --semester 3RD --session 2024-25
     
     # SINGLE STUDENT - Dry run
-    python pg/services/run_step1_cia_processing_sem3.py --session 2024-25 --registration-no PU2024001 --dry-run
+    python pg/services/run_step1_cia_processing_sem3.py --semester 1ST --session 2025-26 --registration-no PU2024001 --dry-run
 """
 
 import os
@@ -35,7 +36,7 @@ def main():
     """Main entry point"""
     
     parser = argparse.ArgumentParser(
-        description='Step 1: Process PG CIA results ONLY for 3RD SEMESTER',
+        description='Step 1: Process PG CIA results (Simplified/Ignore Eligibility)',
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
@@ -46,6 +47,13 @@ def main():
         help='Batch code (e.g., 2023-25, 2024-26)'
     )
     
+    parser.add_argument(
+        '--semester',
+        type=str,
+        default='1ST',
+        help='Semester code (e.g., 1ST, 2ND, 3RD, 4TH) - Default: 1ST'
+    )
+
     parser.add_argument(
         '--session',
         type=str,
@@ -85,14 +93,14 @@ def main():
     ################################################################################
     
     if not args.dry_run:
-        print(f"\n⚠️  PRODUCTION MODE - SPECIALIZED 3RD SEMESTER PROCESSING")
-        print(f"Policy: Directly processing Semester 3 (Ignoring previous semesters).")
+        print(f"\n⚠️  PRODUCTION MODE - DYNAMIC CIA PROCESSING (IGNORE ELIGIBILITY)")
+        print(f"Policy: Directly processing {args.semester} (Ignoring previous semesters).")
             
         if args.registration_no:
             print(f"  Student:  {args.registration_no} (Single Student)")
         else:
             print(f"  Batch:    {args.batch if args.batch else 'ALL BATCHES (Session Wise)'}")
-        print(f"  Semester: 3RD (Fixed)")
+        print(f"  Semester: {args.semester}")
         print(f"  Session:  {args.session}")
         response = input("\nContinue? (yes/no): ")
         if response.lower() != 'yes':
@@ -105,6 +113,7 @@ def main():
     
     stats = run_cia_processing_sem3(
         batch=args.batch,
+        semester=args.semester,
         session=args.session,
         dry_run=args.dry_run,
         include_all_batches=args.include_all_batches,
@@ -112,7 +121,7 @@ def main():
         ignore_eligibility=args.ignore_eligibility
     )
     
-    print("\n✅ Step 1 (Sem 3) Complete!")
+    print(f"\n✅ Step 1 ({args.semester}) Complete!")
     
     if args.dry_run:
         print("\n💡 This was a DRY RUN. No database changes were made.")
