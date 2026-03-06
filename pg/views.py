@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from .permissions import IsExamCenterUser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import transaction
@@ -1000,7 +1001,7 @@ class PGPaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             uid = str(payment.registration.uid)
             redirect_url = (
-                f"{frontend_url}/pg-registration/"
+                f"{frontend_url}/pg-exam-registration/pg-examformback-1st"
                 f"?uid={uid}"
                 f"&payment_status={payment.payment_status.lower()}"
                 f"&order_id={order_id}"
@@ -1010,7 +1011,7 @@ class PGPaymentResponseView(APIView):
         except Exception as e:
             logger.exception("Error processing PG payment response")
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
-            return django_redirect(f"{frontend_url}/pg/payment-status?error={str(e)[:100]}")
+            return django_redirect(f"{frontend_url}/pg-exam-registration/pg-examformback-1st?error={str(e)[:100]}")
 
 
 class PGStudentUploadView(APIView):
@@ -1226,3 +1227,351 @@ class PGRegistrationStatusView(APIView):
         )
 
         return Response(registration_data, status=status.HTTP_200_OK)
+
+class PGCenterAttachedCollegesView(APIView):
+    """
+    API View to get colleges attached to the logged-in center user's college for a specific exam.
+    Only accessible by college users (exam center).
+    Example: GET /api/pg/center/attached-colleges/?exam_uid=<uid>
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def get(self, request):
+        try:
+            center_college = request.user.college_profile.college
+        except AttributeError:
+            return Response({"error": "Center college profile not found."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # exam_uid = request.query_params.get('exam_uid')
+        # if not exam_uid:
+        #     return Response({"error": "exam_uid is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from .models import PGExamCenterMapping, PGExam
+        # exam = get_object_or_404(PGExam, uid=exam_uid)
+        
+        # Find mapping where this college is the center
+        mapping = PGExamCenterMapping.objects.filter(center=center_college).first()
+        if not mapping:
+            return Response({"colleges": [], "total": 0}, status=status.HTTP_200_OK)
+            
+        attached_colleges = mapping.attached_colleges.all().order_by('name')
+        data = [{"uid": str(c.uid), "name": c.name} for c in attached_colleges]
+        
+        return Response({"colleges": data, "total": len(data)}, status=status.HTTP_200_OK)
+
+
+class PGStudentAttendanceListView(APIView):
+    """
+    GET /api/pg/student-attendance/list/?college_uid=<uid>&department_uid=<uid>
+
+    Auto-detects today's date and currently active exam slot from PGExamSchedule.
+    Returns all REGISTERED students (via PGExamRegistration) for the given
+    college + department, along with their ind_is_absent status.
+
+    Returns attendance_open=False if no exam is scheduled today or no slot
+    is currently active.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def get(self, request):
+        from .models import PGExamSchedule, PGStudentCourseAssessment, PGExamRegistration
+        from colleges.models import College
+        from django.db.models import Q
+        from datetime import datetime
+        import re
+
+        college_uid = request.query_params.get('college_uid')
+        department_uid = request.query_params.get('department_uid')
+
+        if not all([college_uid, department_uid]):
+            return Response(
+                {"error": "college_uid and department_uid are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        college = get_object_or_404(College, uid=college_uid)
+        department = get_object_or_404(PGDepartment, uid=department_uid)
+
+        # ── Step 1: Auto-detect today's date and current time ──────────────
+        now_local = timezone.localtime(timezone.now())
+        today = now_local.date()
+        current_time = now_local.time()
+
+        # ── Step 2: Find exam schedules for today for this department ───────
+        todays_schedules = PGExamSchedule.objects.filter(
+            exam_date=today
+        ).filter(
+            Q(group__isnull=True) | Q(group__department=department)
+        ).select_related('exam', 'common_course_structure').order_by('exam_time')
+
+        if not todays_schedules.exists():
+            return Response({
+                "attendance_open": False,
+                "message": "No exam scheduled today for this department.",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 3: Find currently active slot based on exam_time ────────────
+        # exam_time format: "10:00AM-01:00PM" or "10:00 AM - 01:00 PM"
+        def parse_exam_time_window(exam_time_str):
+            """Parse 'HH:MMAM-HH:MMPM' into (start_time, end_time)."""
+            try:
+                # Normalize: remove spaces around dash, uppercase
+                cleaned = exam_time_str.replace(' ', '').upper()
+                parts = cleaned.split('-')
+                if len(parts) < 2:
+                    return None, None
+                # Rejoin last two parts if split produced 3 (e.g. 10:00AM-01:00PM → fine)
+                start_str = parts[0]
+                end_str = '-'.join(parts[1:])
+                start = datetime.strptime(start_str, '%I:%M%p').time()
+                end = datetime.strptime(end_str, '%I:%M%p').time()
+                return start, end
+            except Exception:
+                return None, None
+
+        active_schedules = []
+        active_exam_time = None
+        for sched in todays_schedules:
+            if not sched.exam_time:
+                continue
+            start_t, end_t = parse_exam_time_window(sched.exam_time)
+            if start_t and end_t:
+                if start_t <= current_time <= end_t:
+                    active_schedules.append(sched)
+                    active_exam_time = sched.exam_time
+
+        if not active_schedules:
+            # Return today's scheduled slots for info but mark not open
+            slot_info = list(
+                todays_schedules.values_list('exam_time', flat=True).distinct()
+            )
+            return Response({
+                "attendance_open": False,
+                "message": f"No active slot right now. Today's slots: {slot_info}",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 4: Extract exam and paper codes from active schedules ───────
+        active_exam = active_schedules[0].exam
+        relevant_paper_codes = [
+            s.common_course_structure.course_code.upper().strip()
+            for s in active_schedules
+            if s.common_course_structure and s.common_course_structure.course_code
+        ]
+
+        if not relevant_paper_codes:
+            return Response({
+                "attendance_open": True,
+                "message": "Active slot found but no paper codes configured.",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 5: Get REGISTERED students for this college + department ────
+        # Determine semester number:
+        # - First try active_exam.year (the semester field)
+        # - Fallback: extract from exam name e.g. "PG 3rd sem exam" → 3
+        sem_number = active_exam.year
+        if not sem_number and active_exam.name:
+            ordinal_map = {
+                '1st': 1, 'first': 1,
+                '2nd': 2, 'second': 2,
+                '3rd': 3, 'third': 3,
+                '4th': 4, 'fourth': 4,
+                '5th': 5, 'fifth': 5,
+                '6th': 6, 'sixth': 6,
+            }
+            name_lower = active_exam.name.lower()
+            for word, num in ordinal_map.items():
+                if word in name_lower:
+                    sem_number = num
+                    break
+            if not sem_number:
+                # fallback: first bare digit in name
+                m = re.search(r'\b(\d+)\b', active_exam.name)
+                if m:
+                    sem_number = int(m.group(1))
+
+        # Build Q filter: match by exam FK, or by session+sem
+        q_filter = Q(exam=active_exam)
+        if sem_number and active_exam.session:
+            q_filter |= Q(session=active_exam.session, sem=sem_number)
+        elif active_exam.session:
+            q_filter |= Q(session=active_exam.session)
+
+        registered_student_ids = PGExamRegistration.objects.filter(
+            q_filter,
+            student__college=college,
+            student__department=department,
+            status='REGISTERED'
+        ).values_list('student_id', flat=True).distinct()
+
+        if not registered_student_ids:
+            return Response({
+                "attendance_open": True,
+                "exam_time": active_exam_time,
+                "exam_date": str(today),
+                "message": "No registered students found for this college and department.",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 6: Get ESE assessments for these students + papers ──────────
+        student_assessments = PGStudentCourseAssessment.objects.filter(
+            student_id__in=registered_student_ids,
+            course_code__in=relevant_paper_codes,
+            label__iregex=r'^ESE'
+        ).select_related('student').order_by(
+            'student__roll_no', 'student__registration_no'
+        )
+
+        # ── Step 7: Paginate and return ───────────────────────────────────────
+        from .serializers import PGAttendanceStudentSerializer
+        from .pagination import StandardResultsSetPagination
+
+        paginator = StandardResultsSetPagination()
+        paginated_qs = paginator.paginate_queryset(student_assessments, request)
+        serializer = PGAttendanceStudentSerializer(paginated_qs, many=True)
+
+        paginated_response = paginator.get_paginated_response(serializer.data)
+        # Merge extra context into the paginated response
+        paginated_response.data.update({
+            "attendance_open": True,
+            "exam_date": str(today),
+            "exam_time": active_exam_time,
+        })
+        return paginated_response
+
+
+
+class PGAttendanceMarkView(APIView):
+    """
+    POST /api/pg/student-attendance/mark/
+
+    Marks attendance (ind_is_absent) for a student's ESE assessment.
+    Only allowed during an active exam slot (today's date + current time window).
+
+    Request Body:
+    {
+        "assessment_uid": "<uid>",   -- PGStudentCourseAssessment.uid
+        "is_absent": false           -- false = PRESENT, true = ABSENT
+    }
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def post(self, request):
+        from .models import PGExamSchedule, PGStudentCourseAssessment
+        from .serializers import PGAttendanceMarkSerializer
+        from django.db.models import Q
+        from datetime import datetime
+
+        is_bulk = isinstance(request.data, list)
+        serializer = PGAttendanceMarkSerializer(data=request.data, many=is_bulk)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data_list = serializer.validated_data if is_bulk else [serializer.validated_data]
+
+        # ── Step 1: Pre-fetch all assessments in one query ───────────────────
+        uids = [item['assessment_uid'] for item in data_list]
+        assessments_queryset = PGStudentCourseAssessment.objects.filter(
+            uid__in=uids
+        ).select_related('student', 'department')
+        
+        # Map them by UID string for easy lookup
+        assessments_map = {str(a.uid): a for a in assessments_queryset}
+
+        # ── Step 2: Window Check Logic Setup ─────────────────────────────────
+        now_local = timezone.localtime(timezone.now())
+        today = now_local.date()
+        current_time = now_local.time()
+
+        def parse_exam_time_window(exam_time_str):
+            try:
+                cleaned = exam_time_str.replace(' ', '').upper()
+                parts = cleaned.split('-')
+                if len(parts) < 2:
+                    return None, None
+                start_str = parts[0]
+                end_str = '-'.join(parts[1:])
+                start = datetime.strptime(start_str, '%I:%M%p').time()
+                end = datetime.strptime(end_str, '%I:%M%p').time()
+                return start, end
+            except Exception:
+                return None, None
+
+        schedule_cache = {}
+        results = []
+        to_update = []
+        updated_at_now = timezone.now()
+
+        # ── Step 3: Process Logic ────────────────────────────────────────────
+        for item in data_list:
+            uid_str = str(item['assessment_uid'])
+            is_absent = item['is_absent']
+            
+            assessment = assessments_map.get(uid_str)
+            if not assessment:
+                results.append({"assessment_uid": uid_str, "status": "error", "error": "Assessment not found."})
+                continue
+
+            # Check window (cached)
+            course_code_key = (assessment.course_code or '').upper().strip()
+            dept_id_key = assessment.department_id
+            cache_key = f"{course_code_key}_{dept_id_key}"
+
+            if cache_key not in schedule_cache:
+                schedules_today = PGExamSchedule.objects.filter(
+                    exam_date=today,
+                    common_course_structure__course_code__iexact=course_code_key
+                ).filter(
+                    Q(group__isnull=True) | Q(group__department=dept_id_key)
+                )
+
+                active_slot_exists = False
+                for sched in schedules_today:
+                    if not sched.exam_time:
+                        continue
+                    start_t, end_t = parse_exam_time_window(sched.exam_time)
+                    if start_t and end_t and start_t <= current_time <= end_t:
+                        active_slot_exists = True
+                        break
+                schedule_cache[cache_key] = active_slot_exists
+
+            if not schedule_cache[cache_key]:
+                err_msg = f"Attendance is not open for {course_code_key}. No active exam slot right now."
+                if not is_bulk:
+                    return Response({"error": err_msg}, status=status.HTTP_403_FORBIDDEN)
+                results.append({"assessment_uid": uid_str, "status": "error", "error": err_msg})
+                continue
+
+            # Update in-memory
+            assessment.ind_is_absent = is_absent
+            assessment.updated_at = updated_at_now
+            to_update.append(assessment)
+
+            results.append({
+                "assessment_uid": uid_str,
+                "status": "success",
+                "student": assessment.student.get_full_name(),
+                "course_code": assessment.course_code,
+                "is_absent": assessment.ind_is_absent,
+            })
+
+        # ── Step 4: Bulk Update DB ───────────────────────────────────────────
+        if to_update:
+            PGStudentCourseAssessment.objects.bulk_update(to_update, ['ind_is_absent', 'updated_at'])
+
+        return Response({
+            "message": f"Processed {len(data_list)} attendance records.",
+            "results": results if is_bulk else results[0]
+        }, status=status.HTTP_200_OK)
+
+
+
