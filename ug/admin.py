@@ -57,7 +57,7 @@ class UGBatchAdmin(admin.ModelAdmin):
 @admin.register(UGStudentProfile)
 class UGStudentProfileAdmin(admin.ModelAdmin):
     list_display = ('registration_no', 'first_name', 'last_name', 'roll_no', 'college', 
-                   'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
+                   'major_course','minor_course','mdc_course','department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
     search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 

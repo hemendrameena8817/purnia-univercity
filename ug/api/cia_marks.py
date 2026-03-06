@@ -61,7 +61,7 @@ class CIAStudentListView(APIView):
     GET /api/ug/cia/students/
     """
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, CanManageMarks]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         # ── Validate required params ──────────────────────────────────────────
@@ -71,6 +71,8 @@ class CIAStudentListView(APIView):
         department_uid = request.GET.get('department_uid', '').strip()
         label_filter = request.GET.get('label', '').strip()
         entry_status = request.GET.get('entry_status', 'all').lower().strip()
+
+        exam_type = request.GET.get('exam_type', 'REGULAR').upper().strip()
 
         errors = {}
         if not sem or not sem.isdigit():
@@ -148,6 +150,7 @@ class CIAStudentListView(APIView):
                     'paper_code': a.paper_code,
                     'course_name': a.course_name,
                     'course_type': a.course_type,
+                    'course_code': a.course_code,
                     'department': a.department.name if a.department else None,
                     'cia_theory': None,
                     'cia_practical': None
