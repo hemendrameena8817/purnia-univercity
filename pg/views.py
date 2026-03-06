@@ -1001,7 +1001,7 @@ class PGPaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             uid = str(payment.registration.uid)
             redirect_url = (
-                f"{frontend_url}/pg-registration/"
+                f"{frontend_url}/pg-exam-registration/pg-examformback-1st"
                 f"?uid={uid}"
                 f"&payment_status={payment.payment_status.lower()}"
                 f"&order_id={order_id}"
