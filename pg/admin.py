@@ -233,10 +233,22 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
         attribute='department',
         widget=SafeForeignKeyWidget(PGDepartment, field='name')
     )
+    student_department = fields.Field(
+        column_name='student_department',
+        attribute='student__department__name',
+        readonly=True
+    )
 
     class Meta:
         model = PGStudentCourseAssessment
         exclude = ('uid', 'json_data')
+        export_order = (
+            'id', 'student', 'student_department', 'course_name', 'course_code',
+            'paper_code', 'semester', 'label', 'department', 'session',
+            'batch', 'college_code', 'exam_type', 'ind_marks_obtained',
+            'ind_max_marks', 'ind_pass_marks', 'ind_is_pass', 'ind_is_absent',
+            'sem_result', 'is_ese_fill'
+        )
 
     def get_queryset(self):
         """Optimize queryset for export with select_related"""
@@ -312,7 +324,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
     # ── List view: only essential columns ─────────────────────────────────
     list_display = (
-        'get_regno', 'get_student_name', 'paper_code', 'semester',
+        'get_regno', 'get_student_name', 'department', 'paper_code', 'semester',
         'label', 'exam_type', 'session',
         'ind_marks_obtained', 'ind_max_marks', 'ind_is_absent', 'ind_is_pass',
         'sem_result', 'is_ese_fill',
@@ -403,7 +415,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
                 obj.student.registration_no if obj.student else "-",
                 obj.student.roll_no if obj.student else "-",
                 student_name,
-                obj.department.name if obj.department else "-",
+                obj.department.name if obj.department else (obj.student.department.name if obj.student and obj.student.department else "-"),
                 college,
                 obj.batch.name if obj.batch else "-",
                 obj.semester,
