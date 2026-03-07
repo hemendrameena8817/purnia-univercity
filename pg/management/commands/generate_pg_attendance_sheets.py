@@ -9,6 +9,14 @@ from colleges.models import College
 from pg.utils.pdf_generator import generate_pg_attendance_sheet_pdf
 
 logger = logging.getLogger(__name__)
+
+
+
+# Generate Attendance Sheet for one student
+# python manage.py generate_pg_attendance_sheets --exam-uid <UID> --registration-no 2005B160035
+
+
+
 # python manage.py generate_pg_attendance_sheets \
 #   --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48 \
 #   --college-uid \
@@ -41,6 +49,9 @@ logger = logging.getLogger(__name__)
 #     a522e2a4-bf93-4074-b553-b2fe04258de6 \
 #     b4507b0a-5359-494a-bdc5-86a1944af693
 
+
+
+
 #olocakl 
 #  python manage.py generate_pg_attendance_sheets --exam-uid 10f3ea2b-675b-4c5d-baf6-017ef4b6b0de --college-uid 3788a4ef-76b6-4acc-9b33-e3f4b00868b4 314384cc-ad4b-43ad-aabe-ca58c7a97e48 --department-uid de58d650-0b33-4262-8991-050b94ff283c 76b6dde4-c363-4913-bcbb-453928c3e71b
 
@@ -51,12 +62,14 @@ class Command(BaseCommand):
         parser.add_argument('--exam-uid', type=str, required=True, help='UID of the PG Exam')
         parser.add_argument('--college-uid', nargs='+', help='Optional: One or more UIDs of specific Colleges')
         parser.add_argument('--department-uid', nargs='+', help='Optional: One or more UIDs of specific Departments')
+        parser.add_argument('--registration-no', type=str, help='Optional: Registration Number for single student generation')
         parser.add_argument('--output-dir', type=str, default='attendance_sheets', help='Directory to save generated PDFs')
 
     def handle(self, *args, **options):
         exam_uid = options['exam_uid']
         college_uids = options.get('college_uid') or []
         dept_uids = options.get('department_uid') or []
+        registration_no = options.get('registration_no')
         output_dir = options['output_dir']
 
         # Ensure output directory exists
@@ -109,6 +122,9 @@ class Command(BaseCommand):
         elif is_year_range:
             filters['session'] = exam.session
         
+        if registration_no:
+            filters['student__registration_no'] = registration_no
+        
         if college_uids:
             colleges_found = College.objects.filter(uid__in=college_uids)
             if colleges_found.count() != len(college_uids):
@@ -158,7 +174,7 @@ class Command(BaseCommand):
                     self.process_generation(exam, college, None, output_dir)
                 else:
                     for dept in departments:
-                        self.process_generation(exam, college, dept, output_dir)
+                        self.process_generation(exam, college, dept, output_dir, registration_no)
         except Exception as e:
             logger.error(f"Critical error in batch generation: {str(e)}")
             logger.error(traceback.format_exc())
@@ -167,17 +183,23 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(f"\nBatch generation complete! Files saved in: {output_dir}"))
 
-    def process_generation(self, exam, college, department, output_dir):
+    def process_generation(self, exam, college, department, output_dir, registration_no=None):
         dept_name = department.name if department else "General"
         self.stdout.write(f"  - Generating for Department: {dept_name}...")
         
         try:
-            pdf_content = generate_pg_attendance_sheet_pdf(exam, college, department=department)
+            pdf_content = generate_pg_attendance_sheet_pdf(exam, college, department=department, registration_no=registration_no)
             
             if pdf_content:
                 safe_college = "".join(c if c.isalnum() else "_" for c in college.name)
                 safe_dept = "".join(c if c.isalnum() else "_" for c in dept_name)
-                filename = f"Attendance_Sheet_{safe_college}_{safe_dept}.pdf"
+                
+                if registration_no:
+                    safe_reg = registration_no.replace("/", "_")
+                    filename = f"Attendance_Sheet_{safe_reg}.pdf"
+                else:
+                    filename = f"Attendance_Sheet_{safe_college}_{safe_dept}.pdf"
+                
                 file_path = os.path.join(output_dir, filename)
                 
                 with open(file_path, 'wb') as f:
