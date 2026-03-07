@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
+from django.db import models
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -21,7 +22,8 @@ from .serializers import (
     manual_parameters=[
         openapi.Parameter('university_id', openapi.IN_QUERY, description="Filter by university ID", type=openapi.TYPE_INTEGER),
         openapi.Parameter('college_code', openapi.IN_QUERY, description="Filter by college code", type=openapi.TYPE_STRING),
-        openapi.Parameter('search', openapi.IN_QUERY, description="Search by college name", type=openapi.TYPE_STRING),
+        openapi.Parameter('center_code', openapi.IN_QUERY, description="Filter by center code", type=openapi.TYPE_STRING),
+        openapi.Parameter('search', openapi.IN_QUERY, description="Search by college name, college code, or center code", type=openapi.TYPE_STRING),
     ],
     responses={
         200: CollegeSerializer(many=True),
@@ -50,10 +52,19 @@ class CollegeListView(generics.ListAPIView):
         if college_code:
             queryset = queryset.filter(college_code__icontains=college_code)
         
-        # Search by name
+        # Filter by center code
+        center_code = self.request.query_params.get('center_code')
+        if center_code:
+            queryset = queryset.filter(center_code__icontains=center_code)
+        
+        # Search by name, college_code, or center_code
         search = self.request.query_params.get('search')
         if search:
-            queryset = queryset.filter(name__icontains=search)
+            queryset = queryset.filter(
+                models.Q(name__icontains=search) |
+                models.Q(college_code__icontains=search) |
+                models.Q(center_code__icontains=search)
+            )
         
         return queryset.order_by('-created_at')
 
