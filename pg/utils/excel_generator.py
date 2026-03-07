@@ -53,7 +53,7 @@ def _roman_to_int(roman):
             res += roman_map.get(roman[i], 0)
     return res
 
-def generate_pg_roll_sheet_excel(exam, college, department=None):
+def generate_pg_roll_sheet_excel(exam, college, department=None, registration_no=None):
     """
     Generates and returns Exam Roll Sheet Excel for PG.
     """
@@ -111,6 +111,9 @@ def generate_pg_roll_sheet_excel(exam, college, department=None):
 
     if department:
         regs_qs = regs_qs.filter(student__department=department)
+
+    if registration_no:
+        regs_qs = regs_qs.filter(student__registration_no=registration_no)
 
     regs_qs = regs_qs.select_related(
         'student', 'student__department', 'student__program', 'student__degree'
@@ -272,7 +275,7 @@ def generate_pg_roll_sheet_excel(exam, college, department=None):
     wb.save(output)
     return output.getvalue()
 
-def generate_pg_tsi_excel(exam, college, department=None):
+def generate_pg_tsi_excel(exam, college, department=None, registration_no=None):
     """
     Generates and returns TSI (Tabulation Sheet I) Excel for PG.
     """
@@ -297,6 +300,7 @@ def generate_pg_tsi_excel(exam, college, department=None):
     regs_qs = PGExamRegistration.objects.filter(student__college=college, status='REGISTERED')
     if sem_variants_int: regs_qs = regs_qs.filter(sem__in=sem_variants_int)
     if department: regs_qs = regs_qs.filter(student__department=department)
+    if registration_no: regs_qs = regs_qs.filter(student__registration_no=registration_no)
 
     regs_qs = regs_qs.select_related('student', 'student__department').order_by('student__roll_no')
 
