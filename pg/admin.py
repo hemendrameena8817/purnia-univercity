@@ -700,11 +700,23 @@ class PGExamResultResource(resources.ModelResource):
         attribute='student',
         widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
     )
+    department = fields.Field(
+        column_name='department',
+        attribute='student__department__name',
+        readonly=True
+    )
 
     class Meta:
         model = PGExamResult
         exclude = ('uid',)
         import_id_fields = ('student', 'semester', 'session')
+        export_order = (
+            'id', 'student', 'department', 'semester', 'session',
+            'cia_pass', 'ese_pass', 'semester_result', 'sgpa',
+            'semester_max_credit', 'semester_credit_earned',
+            'next_semester', 'next_sem_status', 'is_legacy',
+            'published_at', 'created_at', 'updated_at'
+        )
 
 
 @admin.register(PGExamResult)
@@ -746,6 +758,7 @@ class PGExamResultAdmin(ImportExportModelAdmin):
         'student__first_name',
         'student__last_name',
         'student__roll_no',
+        'student__department__name',
         'uid'
     )
     
