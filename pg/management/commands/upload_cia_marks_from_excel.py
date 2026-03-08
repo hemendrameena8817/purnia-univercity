@@ -1,86 +1,68 @@
 import pandas as pd
-from django.core.management.base import BaseCommand
-from pg.models import PGStudentCourseAssessment
 from decimal import Decimal
-import os
-
-
-"""
-Usage examples:
-
-# Dry run (no changes):
-python manage.py upload_cia_marks_from_excel \
-    --file courses_data/cia_pg_1_mark.xlsx \
-    --session 2025-26 --semester 1ST \
-    --exam-type BACK --no-header --dry-run
-
-# Execute (save to DB):
-python manage.py upload_cia_marks_from_excel \
-    --file courses_data/cia_pg_1_mark.xlsx \
-    --session 2025-26 --semester 1ST \
-    --exam-type BACK --no-header --execute
-"""
+from django.core.management.base import BaseCommand
+from django.db import transaction
+from pg.models import (
+    PGStudentProfile, 
+    PGStudentCourseAssessment,
+    PGExamResult
+)
 
 class Command(BaseCommand):
-    help = 'Upload CIA marks from an Excel/ODS file into blank entries'
+    help = 'Upload PG CIA marks from Excel/ODS file'
+
+    """
+    Usage Examples:
+    # Dry Run:
+    python manage.py upload_cia_marks_from_excel \
+        --file courses_data/cia_pg_1_mark.xlsx \
+        --session 2025-26 --semester 1ST \
+        --exam-type BACK --no-header
+
+    # Execute (save to DB):
+    python manage.py upload_cia_marks_from_excel \
+        --file courses_data/cia_pg_1_mark.xlsx \
+        --session 2025-26 --semester 1ST \
+        --exam-type BACK --no-header --execute
+    """
 
     def add_arguments(self, parser):
-        parser.add_argument('--file', required=True, help='Path to the Excel/ODS file')
-        parser.add_argument('--session', required=True, help='Target session (e.g. 2025-26)')
-        parser.add_argument('--semester', required=True, help='Target semester label (e.g. 1ST, 2ND)')
-        parser.add_argument('--exam-type', default=None, help='Filter by exam type (e.g. BACK, REGULAR)')
-        parser.add_argument('--no-header', action='store_true', default=False,
-                            help='If set, file has no header row. Assumes: col1=reg_no, col4=course_code, col6=marks')
-        parser.add_argument('--dry-run', action='store_true', default=False, help='Dry run mode (no DB changes)')
-        parser.add_argument('--execute', action='store_true', help='Actually update the DB')
+        parser.add_argument('--file', type=str, required=True, help='Path to Excel/ODS file')
+        parser.add_argument('--session', type=str, required=True, help='Academic session (e.g., 2024-25)')
+        parser.add_argument('--semester', type=str, required=True, help='Semester (e.g., 1ST, 2ND)')
+        parser.add_argument('--exam-type', type=str, default='REGULAR', help='Exam type (REGULAR/BACK)')
+        parser.add_argument('--no-header', action='store_true', help='File has no header row')
+        parser.add_argument('--execute', action='store_true', help='Execute database updates')
 
     def handle(self, *args, **options):
         file_path = options['file']
         session = options['session']
         semester = options['semester'].upper()
-        exam_type = options.get('exam_type', None)
-        no_header = options['no_header']
-        execute = options['execute']
-        dry_run = options['dry_run'] or not execute
+        exam_type = options['exam_type'].upper()
+        dry_run = not options['execute']
 
-        if not os.path.exists(file_path):
-            self.stdout.write(self.style.ERROR(f"File not found: {file_path}"))
-            return
-
-        self.stdout.write("=" * 100)
-        self.stdout.write("UPLOADING CIA MARKS FROM FILE")
-        self.stdout.write("=" * 100)
-        self.stdout.write(f"File      : {file_path}")
-        self.stdout.write(f"Session   : {session}")
-        self.stdout.write(f"Semester  : {semester}")
-        self.stdout.write(f"Exam Type : {exam_type or 'All'}")
-        self.stdout.write(f"Mode      : {'DRY RUN' if dry_run else 'EXECUTE'}")
-        self.stdout.write("=" * 100)
-
-        # 1. Read file
         try:
-            file_ext = os.path.splitext(file_path)[1].lower()
-            if file_ext == '.ods':
-                engine = 'odf'
+            if file_path.endswith('.ods'):
+                df = pd.read_excel(file_path, engine='odf', header=None if options['no_header'] else 0)
             else:
-                engine = None  # pandas auto-detects xlsx/xls
-
-            if no_header:
-                df = pd.read_excel(file_path, engine=engine, header=None)
-                # Assign column names based on known ODS structure:
-                # col0=college_code, col1=registration_no, col2=name, col3=roll_no,
-                # col4=course_code, col5=department, col6=marks_obtained
-                df.columns = ['college_code', 'registration_no', 'name', 'roll_no',
-                              'course_code', 'department', 'marks_obtained'] + [f'extra_{i}' for i in range(max(0, len(df.columns) - 7))]
-            else:
-                df = pd.read_excel(file_path, engine=engine)
-                df.columns = [str(c).lower().strip() for c in df.columns]
-
+                df = pd.read_excel(file_path, header=None if options['no_header'] else 0)
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f"Error reading file: {str(e)}"))
+            self.stdout.write(self.style.ERROR(f"Error reading file: {e}"))
             return
 
-        # Validate required columns
+        # Map common column positions if no header
+        if options['no_header']:
+            # Expected format: College | Reg No | Name | Roll No | Course | Dept | Marks
+            cols = list(df.columns)
+            mapping = {
+                'registration_no': cols[1],
+                'course_code': cols[4],
+                'marks_obtained': cols[6],
+                'roll_no': cols[3],
+                'name': cols[2]
+            }
+            df = df.rename(columns={v: k for k, v in mapping.items()})
+
         required_cols = ['registration_no', 'course_code', 'marks_obtained']
         for col in required_cols:
             if col not in df.columns:
@@ -90,6 +72,7 @@ class Command(BaseCommand):
 
         stats = {'total_rows': len(df), 'updated': 0, 'not_found': 0, 'errors': 0}
         missing_entries = []
+        updated_with_marks = set()  # Track (reg_no, course_code) updated with actual marks
 
         for index, row in df.iterrows():
             reg_no = str(row['registration_no']).strip() if pd.notna(row['registration_no']) else None
@@ -108,20 +91,26 @@ class Command(BaseCommand):
             self.stdout.write(f"\n[{index+1}] {reg_no} | {course_code} | Marks: {marks_raw}")
 
             # 2. Find CIA entry in DB (search by course_code field)
-            assessment_qs = PGStudentCourseAssessment.objects.filter(
-                course_code=course_code,
+            assessment = PGStudentCourseAssessment.objects.filter(
+                student__registration_no=reg_no,
                 semester=semester,
                 session=session,
-                label='CIA',
-                student__registration_no=reg_no,
-            )
-            if exam_type:
-                assessment_qs = assessment_qs.filter(exam_type=exam_type.upper())
-
-            assessment = assessment_qs.first()
+                label__icontains='CIA',
+                paper_code=course_code
+            ).first()
 
             if not assessment:
-                self.stdout.write(self.style.WARNING(f"    ⚠️  CIA entry not found in DB"))
+                # Try fallback matching by course_name if paper_code doesn't match
+                assessment = PGStudentCourseAssessment.objects.filter(
+                    student__registration_no=reg_no,
+                    semester=semester,
+                    session=session,
+                    label__icontains='CIA',
+                    course_name__icontains=course_code
+                ).first()
+
+            if not assessment:
+                self.stdout.write(self.style.WARNING(f"    \u26a0\ufe0f  CIA entry not found in DB"))
                 missing_entries.append({
                     'reg_no': reg_no,
                     'roll_no': roll_no,
@@ -131,18 +120,27 @@ class Command(BaseCommand):
                 stats['not_found'] += 1
                 continue
 
-            # 3. Parse Marks (absent = 0 marks + is_absent flag)
+            # 3. Check for ABSENT
             is_absent = False
             marks_obtained = None
+            
+            # Key for duplicate tracking
+            cache_key = (reg_no, course_code)
 
-            if marks_raw in ['A', 'ABSENT', 'NAN', '']:
-                marks_obtained = Decimal('0')   # Absent → 0 marks
+            if marks_raw in ['A', 'ABSENT', 'NAN', '', ' ', '\xa0']:
+                # If we already encountered valid marks for this student/course in this run,
+                # skip this duplicate empty entry to avoid overwriting valid data.
+                if cache_key in updated_with_marks:
+                    self.stdout.write(self.style.WARNING(f"    \u26a0\ufe0f  Duplicate empty row skipped for {reg_no} | {course_code}"))
+                    continue
+                marks_obtained = Decimal('0')   # Absent \u2794 0 marks
                 is_absent = True                # Also flag as absent
             else:
                 try:
                     marks_obtained = Decimal(marks_raw)
+                    updated_with_marks.add(cache_key) # Track as updated with data
                 except Exception:
-                    self.stdout.write(self.style.ERROR(f"    ❌ Invalid marks value: {marks_raw}"))
+                    self.stdout.write(self.style.ERROR(f"    \u274c Invalid marks value: {marks_raw}"))
                     stats['errors'] += 1
                     continue
 
@@ -162,7 +160,7 @@ class Command(BaseCommand):
                 assessment.is_cia_fill = True
                 assessment.save()
                 self.stdout.write(self.style.SUCCESS(
-                    f"    ✅ Updated: {marks_obtained if not is_absent else 'ABSENT'} | Pass: {is_pass}"
+                    f"    \u2705 Updated: {marks_obtained if not is_absent else 'ABSENT'} | Pass: {is_pass}"
                 ))
             else:
                 self.stdout.write(
@@ -171,22 +169,26 @@ class Command(BaseCommand):
 
             stats['updated'] += 1
 
-        self.stdout.write("\n" + "=" * 100)
+        # Summary
+        self.stdout.write("\n" + "="*100)
         self.stdout.write("SUMMARY")
-        self.stdout.write("=" * 100)
+        self.stdout.write("="*100)
         self.stdout.write(f"Total Rows in File  : {stats['total_rows']}")
         self.stdout.write(f"Successfully Updated: {stats['updated']}")
         self.stdout.write(f"Entries Not Found   : {stats['not_found']}")
         self.stdout.write(f"Errors in Format    : {stats['errors']}")
-        
-        if missing_entries:
-            self.stdout.write("\n" + "-" * 50)
-            self.stdout.write("DETAILED LIST OF ENTRIES NOT FOUND IN DB")
-            self.stdout.write("-" * 50)
-            self.stdout.write(f"{'Reg No':<15} | {'Roll No':<10} | {'Course':<10} | {'Name'}")
-            self.stdout.write("-" * 50)
-            for m in missing_entries:
-                self.stdout.write(f"{m['reg_no']:<15} | {m['roll_no']:<10} | {m['course_code']:<10} | {m['name']}")
-            self.stdout.write("-" * 50)
+        self.stdout.write("="*100)
 
-        self.stdout.write("=" * 100)
+        # Show detailed list of missing entries
+        if missing_entries:
+            self.stdout.write("\n" + "!"*100)
+            self.stdout.write("DETAILED LIST OF ENTRIES NOT FOUND IN DB")
+            self.stdout.write("!"*100)
+            self.stdout.write(f"{'Reg No':20} | {'Roll No':15} | {'Name':30} | {'Course':20}")
+            self.stdout.write("-" * 100)
+            for entry in missing_entries:
+                self.stdout.write(f"{entry['reg_no']:20} | {entry['roll_no']:15} | {entry['name']:30} | {entry['course_code']:20}")
+            self.stdout.write("!"*100 + "\n")
+
+        if dry_run:
+            self.stdout.write(self.style.WARNING("\n\ud83d\udca1 This was a DRY RUN. No database changes were made."))
