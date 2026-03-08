@@ -9,15 +9,15 @@ import os
 Usage examples:
 
 # Dry run (no changes):
-python manage.py upload_cia_marks_from_excel \\
-    --file cia_pg_1_mark.xlsx \\
-    --session 2025-26 --semester 1ST \\
+python manage.py upload_cia_marks_from_excel \
+    --file courses_data/cia_pg_1_mark.xlsx \
+    --session 2025-26 --semester 1ST \
     --exam-type BACK --no-header --dry-run
 
 # Execute (save to DB):
-python manage.py upload_cia_marks_from_excel \\
-    --file cia_pg_1_mark.ods \\
-    --session 2025-26 --semester 1ST \\
+python manage.py upload_cia_marks_from_excel \
+    --file courses_data/cia_pg_1_mark.xlsx \
+    --session 2025-26 --semester 1ST \
     --exam-type BACK --no-header --execute
 """
 
@@ -89,9 +89,12 @@ class Command(BaseCommand):
                 return
 
         stats = {'total_rows': len(df), 'updated': 0, 'not_found': 0, 'errors': 0}
+        missing_entries = []
 
         for index, row in df.iterrows():
             reg_no = str(row['registration_no']).strip() if pd.notna(row['registration_no']) else None
+            roll_no = str(row['roll_no']).strip() if 'roll_no' in df.columns and pd.notna(row['roll_no']) else "N/A"
+            name = str(row['name']).strip() if 'name' in df.columns and pd.notna(row['name']) else "N/A"
             course_code = str(row['course_code']).strip() if pd.notna(row['course_code']) else None
             marks_raw = str(row['marks_obtained']).strip().upper() if pd.notna(row['marks_obtained']) else 'ABSENT'
 
@@ -119,6 +122,12 @@ class Command(BaseCommand):
 
             if not assessment:
                 self.stdout.write(self.style.WARNING(f"    ⚠️  CIA entry not found in DB"))
+                missing_entries.append({
+                    'reg_no': reg_no,
+                    'roll_no': roll_no,
+                    'name': name,
+                    'course_code': course_code
+                })
                 stats['not_found'] += 1
                 continue
 
@@ -169,4 +178,15 @@ class Command(BaseCommand):
         self.stdout.write(f"Successfully Updated: {stats['updated']}")
         self.stdout.write(f"Entries Not Found   : {stats['not_found']}")
         self.stdout.write(f"Errors in Format    : {stats['errors']}")
+        
+        if missing_entries:
+            self.stdout.write("\n" + "-" * 50)
+            self.stdout.write("DETAILED LIST OF ENTRIES NOT FOUND IN DB")
+            self.stdout.write("-" * 50)
+            self.stdout.write(f"{'Reg No':<15} | {'Roll No':<10} | {'Course':<10} | {'Name'}")
+            self.stdout.write("-" * 50)
+            for m in missing_entries:
+                self.stdout.write(f"{m['reg_no']:<15} | {m['roll_no']:<10} | {m['course_code']:<10} | {m['name']}")
+            self.stdout.write("-" * 50)
+
         self.stdout.write("=" * 100)
