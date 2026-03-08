@@ -15,21 +15,22 @@ Arguments:
   --execute           : Save changes to database
 
 Usage:
-    python manage.py create_failed_student_cia_entries \
-        --batch 2024-26 \
-        --source-session 2024-25 \
-        --source-semester 1 \
-        --target-session 2025-26 \
-        --target-semester 1 \
-        --dry-run
-
-
-    python manage.py create_failed_student_cia_entries \
+python manage.py create_failed_student_cia_entries \
     --batch 2024-26 \
     --source-session 2024-25 \
     --source-semester 1 \
     --target-session 2025-26 \
     --target-semester 1 \
+    --result-status PENDING \
+    --dry-run
+
+    python manage.py create_failed_student_cia_entries \
+    --batch 2023-25 \
+    --source-session 2024-25 \
+    --source-semester 1 \
+    --target-session 2025-26 \
+    --target-semester 1 \   
+    --result-status PROMOTED \
     --execute
 """
 from django.core.management.base import BaseCommand
@@ -55,6 +56,7 @@ class Command(BaseCommand):
         parser.add_argument('--target-session', required=True, help='Session for new entries')
         parser.add_argument('--target-semester', required=True, help='Semester number for new entries (1, 2, 3, or 4)')
         parser.add_argument('--registration-no', help='Filter for single student')
+        parser.add_argument('--result-status', default='FAIL', help='Result status to filter by (e.g. FAIL, PROMOTED)')
         parser.add_argument('--dry-run', action='store_true', default=False, help='Dry run')
         parser.add_argument('--execute', action='store_true', help='Actually save to DB')
 
@@ -79,6 +81,7 @@ class Command(BaseCommand):
         target_session = options['target_session']
         target_semester = options['target_semester']
         registration_no = options.get('registration_no')
+        result_status = options.get('result_status', 'FAIL').upper()
         
         # Logic for dry_run: if --execute is NOT provided, it's a dry run.
         # If --dry-run is explicitly provided, it's also a dry run.
@@ -93,6 +96,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Source Semester  : {source_semester}")
         self.stdout.write(f"Target Session   : {target_session}")
         self.stdout.write(f"Target Semester  : {target_semester}")
+        self.stdout.write(f"Result Status    : {result_status}")
         self.stdout.write(f"Mode             : {'DRY RUN' if dry_run else 'EXECUTE'}")
         self.stdout.write("=" * 100)
 
@@ -105,14 +109,14 @@ class Command(BaseCommand):
             student__batch__iexact=batch_name,
             session=source_session,
             semester__in=source_sem_variants,
-            semester_result='FAIL'
+            semester_result=result_status
         )
 
         if registration_no:
             failed_results = failed_results.filter(student__registration_no=registration_no)
 
         total_failed = failed_results.count()
-        self.stdout.write(f"Found {total_failed} students with FAIL status in {batch_name} | Sem {source_semester} | {source_session}")
+        self.stdout.write(f"Found {total_failed} students with {result_status} status in {batch_name} | Sem {source_semester} | {source_session}")
 
         if total_failed == 0:
             self.stdout.write(self.style.WARNING("No failed students found. Exiting."))
