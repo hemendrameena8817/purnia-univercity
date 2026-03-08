@@ -63,6 +63,18 @@ class Command(BaseCommand):
             }
             df = df.rename(columns={v: k for k, v in mapping.items()})
 
+        # Paper Code Mappings for Semester 1 (Excel: CC-I -> DB: PG101)
+        PAPER_MAP = {
+            '1ST': {
+                'CC-I': 'PG101',
+                'CC-II': 'PG102',
+                'CC-III': 'PG103',
+                'CC-IV': 'PG104',
+                'AECC-I': 'PG105',
+                'AECC-1': 'PG105',
+            }
+        }
+
         required_cols = ['registration_no', 'course_code', 'marks_obtained']
         for col in required_cols:
             if col not in df.columns:
@@ -91,12 +103,18 @@ class Command(BaseCommand):
             self.stdout.write(f"\n[{index+1}] {reg_no} | {course_code} | Marks: {marks_raw}")
 
             # 2. Find CIA entry in DB (search by course_code field)
+            # Support both Original (Excel) and Translated (Database) codes
+            search_codes = [course_code]
+            translation = PAPER_MAP.get(semester, {}).get(course_code)
+            if translation:
+                search_codes.append(translation)
+
             assessment = PGStudentCourseAssessment.objects.filter(
                 student__registration_no=reg_no,
                 semester=semester,
                 session=session,
                 label__icontains='CIA',
-                paper_code=course_code
+                paper_code__in=search_codes
             ).first()
 
             if not assessment:
