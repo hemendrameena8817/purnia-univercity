@@ -108,6 +108,46 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
         if cia_passed:
             self._create_exam_registration(student, dry_run=dry_run)
 
+    def _check_cia_passed(self, cia_assessments, student, dry_run: bool = False) -> bool:
+        """
+        STRICT VERSION: Only checks assessments for the current session.
+        Ignores historical passes in previous sessions or result records.
+        """
+        if not cia_assessments:
+            return False
+            
+        # Group assessments by paper_code
+        paper_assessments = {}
+        for assessment in cia_assessments:
+            code = assessment.paper_code
+            if code not in paper_assessments:
+                paper_assessments[code] = []
+            paper_assessments[code].append(assessment)
+            
+        all_papers_cleared = True
+        
+        for code, assessments in paper_assessments.items():
+            paper_cleared = False
+            for assessment in assessments:
+                is_pass = False
+                if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
+                    if not assessment.ind_is_absent:
+                        is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
+                
+                # Update DB if incorrect (standard logic)
+                if not dry_run and assessment.ind_is_pass != is_pass:
+                    assessment.ind_is_pass = is_pass
+                    assessment.save(update_fields=['ind_is_pass', 'updated_at'])
+                
+                if is_pass:
+                    paper_cleared = True
+            
+            if not paper_cleared:
+                all_papers_cleared = False
+                break # One fail is enough to fail overall CIA
+        
+        return all_papers_cleared
+
     def _create_or_update_exam_result(self, student: PGStudentProfile, cia_passed: bool, dry_run: bool = False):
         """
         Create or update PGExamResult entry - IDEMPOTENT VERSION (Per Session)
@@ -193,7 +233,7 @@ class PGCIAResultProcessingServiceSem3(PGCIAResultProcessingService):
                 session=self.session,
                 status='PENDING',
                 is_open=True,
-                exam_type='REGULAR' # Default for this script
+                exam_type='BACK' # Default for this script
             )
         
         print(f"   [REGISTRATION] CREATE: {student.registration_no:15} | Dept: {dept_name[:30]:30}")
