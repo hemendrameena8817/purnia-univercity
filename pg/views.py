@@ -666,7 +666,8 @@ class PGRegistrationCardPDFView(APIView):
         # ── Find Latest REGISTERED Registration ──────────────────────────────
         registration = PGExamRegistration.objects.defer('admission_receipt').filter(
             student=student,
-            status='REGISTERED'
+            status='REGISTERED',
+            sem=1
         ).select_related('student', 'student__college', 'student__department').order_by('-created_at').first()
 
         if not registration:
