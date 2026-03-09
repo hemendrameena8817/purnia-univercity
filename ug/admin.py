@@ -9,7 +9,7 @@ from ug.services.semester_registration_service import SemesterRegistrationServic
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
-    CommonCourseStructure, UGExamResult
+    CommonCourseStructure, UGExamResult,ExamRegistrationPayment
 )
 
 
@@ -491,3 +491,10 @@ class UGExamResultAdmin(ImportExportModelAdmin):
         return qs.select_related('student')
 
 
+@admin.register(ExamRegistrationPayment)
+class ExamRegistrationPaymentAdmin(admin.ModelAdmin):
+    list_display = ('order_id', 'registration', 'amount', 'payment_status', 'created_at', 'updated_at')
+    list_filter = ('payment_status', 'created_at', 'updated_at')
+    search_fields = ('order_id', 'registration__uid')   
+    readonly_fields = ('created_at', 'updated_at')
+    raw_id_fields = ('registration',)
