@@ -191,8 +191,7 @@ def generate_ug_exam_registration_card_pdf(student, registration):
         if key and key not in seen:
             seen.add(key)
             papers.append({
-                'code': a.paper_code or '-',
-                'course': a.course_code or a.course_type or '-', 
+                'code': a.course_type or '-',
                 'name': a.course_name or '-',
             })
 

@@ -375,14 +375,12 @@
             <table class="papers-table">
                 <tr>
                     <th class="sno-col">S.No</th>
-                    <th class="code-col">Course</th>
-                    <th class="code-col">Paper Code</th>
+                    <th class="code-col">Code</th>
                     <th class="name-col">Course Name</th>
                 </tr>
                 {% for p in papers %}
                 <tr>
                     <td class="sno-col">{{ forloop.counter }}</td>
-                    <td class="code-col">{{ p.course }}</td>
                     <td class="code-col">{{ p.code }}</td>
                     <td class="name-col">{{ p.name }}</td>
                 </tr>
