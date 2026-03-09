@@ -363,17 +363,18 @@ def fill_students(ws, students, student_map):
                 if total_credit_allotted > 0 else 0.00
             )
 
+        cgpa = _calc_cgpa(student, total_grade_points, total_credit_allotted, status)
+
         if status == "Pass":
-            letter, desc = get_letter_and_description(gpa)
-            gpa_numeric  = calculate_numeric_grade(gpa * 10)
+            letter, desc = get_letter_and_description(cgpa)
+            # Numerical of Letter Grade is calculated based upon CGPA * 10 and round off
+            gpa_numeric  = calculate_numeric_grade(cgpa * 10)
         elif status == "Fail":
             letter, desc = "F",  "Fail"
             gpa_numeric  = 0
         else:
             letter, desc = "AB", "Absent"
             gpa_numeric  = 0
-
-        cgpa = _calc_cgpa(student, total_grade_points, total_credit_allotted, status)
 
         # ── Summary block ───────────────────────────────────────────
         ws.cell(row=row, column=SUMMARY_COLS["grand_total"]   ).value = total_marks_obtained
@@ -405,7 +406,7 @@ def _add_logo(ws):
     img = XLImage(logo_path)
     img.width = 110
     img.height = 110
-    img.anchor = "R1"
+    img.anchor = "AD1"
     ws.add_image(img)
 
 
@@ -414,7 +415,7 @@ def fill_header(ws, exam_name, college, students, exam_month_year=None):
     header_val = exam_name or ""
     if exam_month_year:
         header_val = f"{header_val}, Examination held in the month of {exam_month_year}"
-
+    print("header_val = ", header_val)
     ws["A4"] = header_val
     ws["BC1"] = exam_name or ""
     ws["BC4"] = f"Dept./College : {college.name}"

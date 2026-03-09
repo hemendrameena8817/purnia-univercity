@@ -13,7 +13,8 @@ GRADE_STRUCTURE = [
 
 def calculate_numeric_grade(total):
     try:
-        total = float(total)
+        # rounding percent value (e.g. 50.5 -> 51)
+        total = int(float(total) + 0.5)
     except:
         return 0
 
@@ -57,7 +58,7 @@ def calculate_grade_point(numeric_grade, credit_obtained):
 
 def get_letter_and_description(gpa):
     try:
-        percent_value = float(gpa) * 10
+        percent_value = int(float(gpa) * 10 + 0.5)
     except:
         return "F", "Fail"
 
