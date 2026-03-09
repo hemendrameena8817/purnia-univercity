@@ -307,6 +307,10 @@ class ExamRegistrationAdmin(admin.ModelAdmin):
     list_filter = ('sem', 'status', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name')
     ordering = ('student', 'sem')
+    raw_id_fields = ('student',)
+    list_select_related = ('student',)
+    show_full_result_count = False
+    list_per_page = 50
 
 @admin.register(CommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
