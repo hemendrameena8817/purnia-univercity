@@ -20,16 +20,20 @@ def run():
     print("Finding students who are Promoted, Partly Qualified, or Disqualified...")
     
     # Identify students who need their BACK exams opened
-    results = UGExamResult.objects.filter(
+    results = UGExamResult.objects.using('default').filter(
+        semester='1ST',
         semester_result__in=['PROMOTED', 'PARTLY_QUALIFIED', 'DISQUALIFIED']
-    ).values_list('student_id', flat=True).distinct()
+    ).values_list('student__registration_no', flat=True).distinct()
     
-    student_count = results.count()
-    print(f"Found {student_count} students with matching exam results.")
+    # Evaluate queryset to a list of strings so we don't cross database boundaries improperly
+    reg_nos = list(results)
+    
+    student_count = len(reg_nos)
+    print(f"Found {student_count} distinct registration numbers with matching exam results.")
     
     # Fetch their pending exam registrations (usually exam_type='BACK')
-    regs_to_update = ExamRegistration.objects.filter(
-        student_id__in=results,
+    regs_to_update = ExamRegistration.objects.using('live').filter(
+        student__registration_no__in=reg_nos,
         session='2025-26',
         sem=1,
         status__in=['PENDING', 'OPEN']
