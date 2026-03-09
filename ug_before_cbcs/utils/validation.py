@@ -74,16 +74,22 @@ def validate_marksheet_data(student, exam_part, honours_papers, composition_pape
         error_messages.append("Subsidiary Subject 2 not available.")
 
     # 3. Validate Composition papers
-    is_rbh_student = any(p.paper_type_code == 'RB' for p in results)
+    # Priority: RBH > NRB (if student has RBH, they only need 1 composition paper)
+    is_rbh_student = any(p.paper_type_code == 'RBH' for p in results)
     is_nrb_student = any(p.paper_type_code == 'NRB' for p in results)
     
-    if is_rbh_student and len(composition_papers) < 1:
-        is_valid = False
-        error_messages.append(f"RBH Composition paper not available. Found {len(composition_papers)}, required 1.")
-    elif is_nrb_student and len(composition_papers) < 2:
-        is_valid = False
-        error_messages.append(f"NRB Composition papers not available. Found {len(composition_papers)}, required 2 (Non-Hindi + MB).")
-    elif not is_rbh_student and not is_nrb_student and not composition_papers:
+    if is_rbh_student:
+        # RBH student needs only 1 composition paper
+        if len(composition_papers) < 1:
+            is_valid = False
+            error_messages.append(f"RBH Composition paper not available. Found {len(composition_papers)}, required 1.")
+    elif is_nrb_student:
+        # NRB student needs 2 composition papers (Non-Hindi + MB)
+        if len(composition_papers) < 2:
+            is_valid = False
+            error_messages.append(f"NRB Composition papers not available. Found {len(composition_papers)}, required 2 (Non-Hindi + MB).")
+    elif not composition_papers:
+        # Neither RBH nor NRB detected, but still need composition papers
         is_valid = False
         error_messages.append("Composition papers not available (neither RBH nor NRB detected).")
 

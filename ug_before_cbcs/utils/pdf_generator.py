@@ -52,51 +52,61 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
+def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None, custom_results=None):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons Part 1 marksheet.
-    """
-    """
-    Generate marksheet PDF for UG Before CBCS student using simplified models.
     
     Args:
         student: UGBeforeCBCSStudentProfile instance
         exam_part: Part number as string ('1', '2', or '3')
+        exam_type: Optional exam type filter (REGULAR, BACK)
+        course_code: Optional course code filter
+        batch_code: Optional batch code filter
+        custom_results: Optional list of pre-filtered results to use instead of querying
     
     Returns:
-        PDF bytes or None
+        Context dictionary or None
     """
     # Convert part to uppercase format (PART1, PART2, PART3)
     part_code = f"PART{exam_part}"
 
-    # 1. Get student results for this part, filtering by exam_type if provided
-    results_query = UGBeforeCBCSStudentResult.objects.filter(
-        student=student,
-        exam__part=part_code
-    )
-    
-    if exam_type:
-        results_query = results_query.filter(exam_type__iexact=exam_type)
+    # Use custom results if provided, otherwise query
+    if custom_results:
+        results = custom_results
+        if not results:
+            logger.warning(f"No custom results provided for {student.registration_no} / {part_code}")
+            return None
+        first_result = results[0]
+        exam = first_result.exam
+    else:
+        # 1. Get student results for this part, filtering by exam_type if provided
+        results_query = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=part_code
+        )
         
-    if course_code:
-        results_query = results_query.filter(exam__course_code__iexact=course_code)
-        
-    if batch_code:
-        results_query = results_query.filter(exam__batch_code=batch_code)
-        
-    first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
+        if exam_type:
+            results_query = results_query.filter(exam_type__iexact=exam_type)
+            
+        if course_code:
+            results_query = results_query.filter(exam__course_code__iexact=course_code)
+            
+        if batch_code:
+            results_query = results_query.filter(exam__batch_code=batch_code)
+            
+        first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
-    if not first_result:
-        logger.warning(f"No results found for {student.registration_no} / {part_code}")
-        return None
+        if not first_result:
+            logger.warning(f"No results found for {student.registration_no} / {part_code}")
+            return None
 
-    exam = first_result.exam
+        exam = first_result.exam
 
-    # 2. Get all student results for this exam
-    results = UGBeforeCBCSStudentResult.objects.filter(
-        student=student,
-        exam=exam
-    ).order_by('paper_code')
+        # 2. Get all student results for this exam
+        results = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam=exam
+        ).order_by('paper_code')
 
     # 3. Get exam summary
     # Exam summary fields are now part of StudentResult; aggregate as needed.
@@ -500,6 +510,70 @@ def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, co
         print("PDF ERROR:", error_msg) 
         logger.error(f"Error generating PDF: {e}")
         return None, error_msg
+
+def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=None, session_code=None):
+    """
+    Get the latest consolidated marksheet context.
+    Combines ALL papers (REGULAR + BACK), with the latest session_code taking precedence for duplicates.
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam_part: Part number as string ('1', '2', or '3')
+        course_code: Optional course code filter
+        session_code: Optional specific session code filter
+    
+    Returns:
+        Context dictionary for marksheet generation
+    """
+    part_code = f"PART{exam_part}"
+    
+    # Get ALL results for this part
+    all_results = UGBeforeCBCSStudentResult.objects.filter(
+        student=student,
+        exam__part=part_code
+    )
+    
+    if course_code:
+        all_results = all_results.filter(exam__course_code__iexact=course_code)
+    
+    if session_code:
+        all_results = all_results.filter(exam__session_code=session_code)
+    
+    all_results = all_results.select_related('exam').order_by('exam__session_code')
+    
+    if not all_results.exists():
+        logger.warning(f"No results found for {student.registration_no} / {part_code}")
+        return None
+    
+    # Build a map with latest session_code taking precedence
+    # Key: (paper_code, status), Value: result object
+    latest_papers = {}
+    
+    for result in all_results:
+        key = (result.paper_code, result.status)
+        
+        # If key exists, compare session_codes and keep the latest
+        if key in latest_papers:
+            existing_session = latest_papers[key].exam.session_code if latest_papers[key].exam else ''
+            current_session = result.exam.session_code if result.exam else ''
+            
+            # Keep the one with the later session_code
+            if current_session > existing_session:
+                latest_papers[key] = result
+                logger.info(f"Override: {result.paper_code} {result.status} - {existing_session} → {current_session}")
+        else:
+            latest_papers[key] = result
+    
+    # Now use the existing context function with these filtered results
+    # We'll pass the results as a custom queryset
+    return get_ug_old_ba_hons_part1_context(
+        student, 
+        exam_part=exam_part, 
+        exam_type=None,  # Don't filter by exam_type
+        course_code=course_code, 
+        batch_code=None,
+        custom_results=list(latest_papers.values())
+    )
 
 def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course_code=None, batch_code=None):
     """

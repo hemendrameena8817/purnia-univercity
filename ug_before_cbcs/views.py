@@ -139,9 +139,11 @@ class UGOldMarksheetPDFView(View):
         exam_type = request.GET.get("exam_type")
         course_code = request.GET.get("course_code")
         batch_code = request.GET.get("batch_code")
+        session_code = request.GET.get("session_code")
 
-        if not (registration_no or roll_no) or not part or not exam_type or not course_code:
-            return HttpResponse("registration_no/roll_no, part, exam_type, and course_code are required", status=400)
+        # Validation
+        if not (registration_no or roll_no) or not part or not course_code:
+            return HttpResponse("registration_no/roll_no, part, and course_code are required", status=400)
  
         if registration_no:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
@@ -170,17 +172,48 @@ class UGOldMarksheetPDFView(View):
         if not is_ug_old_hons_part_1_or_2:
              return HttpResponse("Invalid course_code or part", status=400)
 
-        # Call the PDF generator utility
-        from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
-        pdf_content, error_message = generate_ug_old_ba_hons_part1_pdf(
-            student, exam_part=part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
-        )
-        
-        if not pdf_content:
-             error_msg = error_message or f"Marksheet data not found for {student.student_name} ({part})."
-             
-             status_code = 422 if error_message else 404
-             return HttpResponse(error_msg, status=status_code, content_type='text/plain')
+        # Call the appropriate PDF generator
+        # Priority: session_code > exam_type > default to latest
+        if session_code or not exam_type:
+            from .utils.pdf_generator import get_ug_old_ba_hons_part1_latest_context
+            from .utils.validation import validate_marksheet_context
+            from django.template.loader import get_template
+            from weasyprint import HTML
+            from django.conf import settings
+            
+            # Get latest consolidated context (or specific session if session_code provided)
+            context = get_ug_old_ba_hons_part1_latest_context(
+                student, exam_part=part, course_code=course_code, session_code=session_code
+            )
+            
+            if not context:
+                return HttpResponse(f"Marksheet data not found for {student.student_name} ({part}).", status=404, content_type='text/plain')
+            
+            # Validate before generating PDF
+            is_valid, error_messages = validate_marksheet_context(student, part, context, None, course_code, batch_code)
+            if not is_valid:
+                error_detail = "; ".join(error_messages)
+                return HttpResponse(error_detail, status=422, content_type='text/plain')
+            
+            # Generate PDF
+            template_name = f"ug_before_cbcs/ba_hons_marksheet_part1.html"
+            html_string = get_template(template_name).render(context)
+            
+            try:
+                pdf_content = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
+            except Exception as e:
+                return HttpResponse(f"PDF generation error: {str(e)}", status=500, content_type='text/plain')
+        else:
+            # Use exam_type filter (original behavior)
+            from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
+            pdf_content, error_message = generate_ug_old_ba_hons_part1_pdf(
+                student, exam_part=part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+            )
+            
+            if not pdf_content:
+                error_msg = error_message or f"Marksheet data not found for {student.student_name} ({part})."
+                status_code = 422 if error_message else 404
+                return HttpResponse(error_msg, status=status_code, content_type='text/plain')
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
         filename = f"Marksheet_{student.registration_no}_{part}.pdf"
@@ -202,7 +235,9 @@ class UGOldMarksheetJSONView(APIView):
         exam_type = request.query_params.get("exam_type")
         course_code = request.query_params.get("course_code")
         batch_code = request.query_params.get("batch_code")
+        session_code = request.query_params.get("session_code")
 
+        # Validation
         if not (registration_no or roll_no) or not part or not course_code:
             return Response(
                 {"error": "registration_no/roll_no, part, and course_code are required"},
@@ -214,11 +249,6 @@ class UGOldMarksheetJSONView(APIView):
         else:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
-        # Get marksheet context data based on Course and Part
-        from .utils.pdf_generator import (
-            get_ug_old_ba_hons_part1_context,
-        )
-        
         # Check if it's BA Hons Part 1 or 2 by looking at their results
         # (BA students with HON/HONS papers)
         from .models import UGBeforeCBCSStudentResult
@@ -229,14 +259,23 @@ class UGOldMarksheetJSONView(APIView):
             paper_type_code__iexact='HON'
         ).exists()
 
-        if has_honours_papers:
-            context_data = get_ug_old_ba_hons_part1_context(
-                student, exam_type=exam_type, course_code=course_code, batch_code=batch_code, exam_part=part
-            )
-        else:
+        if not has_honours_papers:
             return Response(
                 {"error": "Invalid course_code or part"},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get marksheet context data
+        # Priority: session_code > exam_type > default to latest
+        if session_code or not exam_type:
+            from .utils.pdf_generator import get_ug_old_ba_hons_part1_latest_context
+            context_data = get_ug_old_ba_hons_part1_latest_context(
+                student, exam_part=part, course_code=course_code, session_code=session_code
+            )
+        else:
+            from .utils.pdf_generator import get_ug_old_ba_hons_part1_context
+            context_data = get_ug_old_ba_hons_part1_context(
+                student, exam_type=exam_type, course_code=course_code, batch_code=batch_code, exam_part=part
             )
         
         if not context_data:
