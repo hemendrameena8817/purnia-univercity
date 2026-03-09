@@ -746,7 +746,7 @@ class PGAdmitCardPDFView(APIView):
 
         # ── Auto-resolve exam via PGExamSchedule ──────────────────────────────
         # Include exams from last 30 days so recently-started exams still work
-        cutoff_date = tz.now().date() - timedelta(days=30)
+        cutoff_date = tz.now().date() - timedelta(days=60)
 
         schedule = PGExamSchedule.objects.filter(
             group__department=student.department,
