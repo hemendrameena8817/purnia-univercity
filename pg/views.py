@@ -736,7 +736,7 @@ class PGAdmitCardPDFView(APIView):
         registration = PGExamRegistration.objects.filter(
             student=student,
             status='REGISTERED',
-            sem=1
+            sem=3
         ).order_by('-created_at').first()
 
         if not registration:
