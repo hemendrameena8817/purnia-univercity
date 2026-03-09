@@ -158,7 +158,7 @@ class UGExamRegistrationSerializer(serializers.ModelSerializer):
             semester__in=[str(semester_num), semester_text],
             session=obj.session,
             exam_type=exam_type,
-            label__startswith='ESE'
+            label__startswith='ESE-Theory'
         ).order_by('course_type', 'paper_code').distinct()
 
         return AssessmentDetailSerializer(assessments, many=True).data
