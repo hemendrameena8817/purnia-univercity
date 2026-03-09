@@ -126,18 +126,19 @@ class PGStudentProfileResource(resources.ModelResource):
 @admin.register(PGStudentProfile)
 class PGStudentProfileAdmin(ImportExportModelAdmin):
     resource_class = PGStudentProfileResource
-    list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
+    list_display = ('id', 'registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
-    search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 
+    search_fields = ('registration_no', 'user__username', 'roll_no', 'first_name', 'last_name', 
                     'mobile_no', 'aadhar_no')
     readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
     # Performance optimizations
     list_select_related = ('user', 'college', 'department', 'program', 'degree')
-    autocomplete_fields = ['user', 'college', 'department', 'program', 'degree']
+    autocomplete_fields = ['college', 'department', 'program', 'degree']
+    raw_id_fields = ('user',)
     list_per_page = 50  # Limit records per page for better performance
     
     def get_queryset(self, request):
