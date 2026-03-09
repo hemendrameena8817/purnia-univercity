@@ -500,3 +500,138 @@ def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, co
         print("PDF ERROR:", error_msg) 
         logger.error(f"Error generating PDF: {e}")
         return None, error_msg
+
+def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course_code=None, batch_code=None):
+    """
+    Generates year-by-year progressive BACK paper contexts.
+    Shows how BACK papers progressively override REGULAR papers over the years.
+    
+    Logic:
+    - Get all REGULAR papers (base marksheet)
+    - For each year with BACK papers, show cumulative state:
+      - Year 1 BACK: REGULAR + Year 1 BACK overrides
+      - Year 2 BACK: REGULAR + Year 1 BACK + Year 2 BACK overrides
+      - Year 3 BACK: REGULAR + Year 1 BACK + Year 2 BACK + Year 3 BACK overrides
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam_part: Part number as string ('1', '2', or '3')
+        course_code: Optional course code filter
+        batch_code: Optional batch code filter
+    
+    Returns:
+        List of dictionaries for each BACK session showing progressive state
+    """
+    part_code = f"PART{exam_part}"
+    
+    # Get ALL results for this part
+    all_results = UGBeforeCBCSStudentResult.objects.filter(
+        student=student,
+        exam__part=part_code
+    )
+    
+    if course_code:
+        all_results = all_results.filter(exam__course_code__iexact=course_code)
+    if batch_code:
+        all_results = all_results.filter(exam__batch_code=batch_code)
+    
+    all_results = all_results.select_related('exam').order_by('exam__session_code', 'exam_type')
+    
+    if not all_results.exists():
+        logger.warning(f"No results found for {student.registration_no} / {part_code}")
+        return []
+    
+    # Separate REGULAR and BACK papers
+    regular_papers = {}  # {(paper_code, status): result}
+    back_sessions = {}   # {session_code: [back_results]}
+    
+    for result in all_results:
+        exam_type = (result.exam_type or '').upper()
+        key = (result.paper_code, result.status)
+        session = result.exam.session_code or 'UNKNOWN'
+        
+        if exam_type == 'BACK':
+            if session not in back_sessions:
+                back_sessions[session] = []
+            back_sessions[session].append(result)
+        else:
+            # REGULAR - only add if not already present
+            if key not in regular_papers:
+                regular_papers[key] = result
+    
+    # If no BACK papers, return empty
+    if not back_sessions:
+        logger.info(f"No BACK papers found for {student.registration_no} Part {exam_part}")
+        return []
+    
+    # Sort BACK sessions chronologically
+    sorted_back_sessions = sorted(back_sessions.keys())
+    
+    # Helper function to format papers
+    def format_papers(papers_dict):
+        return [
+            {
+                'paper_code': result.paper_code,
+                'subject_name': result.subject_name,
+                'status': result.status,
+                'exam_type': result.exam_type,
+                'session_code': result.exam.session_code if result.exam else None,
+                'mark_secured': result.mark_secured,
+                'maximum_mark': result.maximum_mark,
+                'pass_mark': result.pass_mark,
+            }
+            for result in papers_dict.values()
+        ]
+    
+    # Build progressive results: REGULAR base + BACK by year
+    results_list = []
+    
+    # 1. Add REGULAR result (base)
+    if regular_papers:
+        first_regular = next(iter(regular_papers.values()))
+        results_list.append({
+            'type': 'regular',
+            'session_code': first_regular.exam.session_code if first_regular.exam else None,
+            'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
+            'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
+            'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
+            'exam_name': first_regular.exam.name if first_regular.exam else f"Part {exam_part}",
+            'result': {
+                'total_papers': len(regular_papers),
+                'papers': format_papers(regular_papers)
+            }
+        })
+    
+    # 2. Add BACK results year by year (only BACK papers, no REGULAR)
+    cumulative_back_map = {}  # Cumulative BACK papers across years
+    
+    for idx, session in enumerate(sorted_back_sessions):
+        back_results = back_sessions[session]
+        
+        # Add BACK papers from this session to cumulative map
+        for result in back_results:
+            key = (result.paper_code, result.status)
+            cumulative_back_map[key] = result
+            logger.info(f"Session {session}: Added/Updated BACK {result.paper_code} {result.status}")
+        
+        first_exam = back_results[0].exam
+        
+        results_list.append({
+            'type': 'back',
+            'session_code': session,
+            'exam_year': first_exam.exam_year if first_exam else None,
+            'exam_month_year': first_exam.exam_month_year if first_exam else None,
+            'publication_date': first_exam.publication_date if first_exam else None,
+            'exam_name': first_exam.name if first_exam else f"Part {exam_part} - {session}",
+            'is_latest': (idx == len(sorted_back_sessions) - 1),
+            'result': {
+                'back_papers_in_this_session': len(back_results),
+                'cumulative_back_papers': len(cumulative_back_map),
+                'papers': format_papers(cumulative_back_map)
+            }
+        })
+        
+        logger.info(f"Progressive BACK for {student.registration_no} - Session {session}: "
+                   f"{len(back_results)} new BACK, {len(cumulative_back_map)} total cumulative BACK")
+    
+    return results_list

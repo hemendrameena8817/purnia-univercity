@@ -9,6 +9,7 @@ urlpatterns = [
     path('results/', views.StudentResultLV.as_view(), name='result-list'),
     path('marksheet/pdf/', views.UGOldMarksheetPDFView.as_view(), name='ug-old-marksheet-pdf'),
     path('marksheet/json/', views.UGOldMarksheetJSONView.as_view(), name='ug-old-marksheet-json'),
+    path('marksheet/progressive/', views.UGOldMarksheetProgressiveView.as_view(), name='ug-old-marksheet-progressive'),
     path('marksheet/update/', views.UGOldMarksheetUpdateView.as_view(), name='ug-old-marksheet-update'),
     path('overview/', views.UGBeforeCBCSOverviewView.as_view(), name='ug-before-cbcs-overview'),
     path('overview/refresh/', views.UGBeforeCBCSOverviewRefreshView.as_view(), name='ug-before-cbcs-overview-refresh'),

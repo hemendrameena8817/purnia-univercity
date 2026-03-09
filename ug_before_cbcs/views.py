@@ -281,6 +281,62 @@ class UGOldMarksheetJSONView(APIView):
             # If serializer validation fails, return raw data (fallback)
             return Response(context_data, status=status.HTTP_200_OK)
 
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldMarksheetProgressiveView(APIView):
+    """
+    Returns year-by-year progressive marksheet data for BACK papers.
+    Shows how BACK papers progressively override REGULAR papers over the years.
+    """
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        registration_no = request.query_params.get("registration_no")
+        roll_no = request.query_params.get("roll_no")
+        part = request.query_params.get("part")
+        course_code = request.query_params.get("course_code")
+        batch_code = request.query_params.get("batch_code")
+
+        if not (registration_no or roll_no) or not part or not course_code:
+            return Response(
+                {"error": "registration_no/roll_no, part, and course_code are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
+        
+        from .utils.pdf_generator import get_ug_old_ba_hons_part1_progressive_contexts
+        
+        # Get progressive contexts
+        progressive_data = get_ug_old_ba_hons_part1_progressive_contexts(
+            student, exam_part=part, course_code=course_code, batch_code=batch_code
+        )
+        
+        if not progressive_data:
+            return Response(
+                {"message": f"No BACK papers found for {student.student_name} (Part {part}). Only REGULAR papers exist."},
+                status=status.HTTP_200_OK
+            )
+        
+        # Add student info
+        response_data = {
+            'student': {
+                'uid': str(student.uid),
+                'registration_no': student.registration_no,
+                'roll_no': student.roll_no,
+                'student_name': student.student_name,
+                'fathers_name': student.fathers_name,
+                'mothers_name': student.mothers_name,
+                'college_name': student.college.name if student.college else None,
+                'course_code': course_code,
+            },
+            'part': part,
+            'results': progressive_data
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class UGOldMarksheetUpdateView(APIView):
@@ -314,12 +370,12 @@ class UGOldMarksheetUpdateView(APIView):
         )
         
         exam_type = request.data.get("exam_type")
-        batch_code = request.data.get("batch_code")
+        session_code = request.data.get("session_code")
         
         if exam_type:
             results = results.filter(exam_type__iexact=exam_type)
-        if batch_code:
-            results = results.filter(exam__batch_code=batch_code)
+        if session_code:
+            results = results.filter(exam__session_code=session_code)
             
         first_result = results.select_related('exam').first()
         if not first_result:
