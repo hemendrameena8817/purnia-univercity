@@ -172,12 +172,15 @@ class UGOldMarksheetPDFView(View):
 
         # Call the PDF generator utility
         from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
-        pdf_content = generate_ug_old_ba_hons_part1_pdf(
+        pdf_content, error_message = generate_ug_old_ba_hons_part1_pdf(
             student, exam_part=part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
         )
         
         if not pdf_content:
-             return HttpResponse(f"Marksheet data not found for {student.student_name} ({part}).", status=404, content_type='text/plain')
+             error_msg = error_message or f"Marksheet data not found for {student.student_name} ({part})."
+             
+             status_code = 422 if error_message else 404
+             return HttpResponse(error_msg, status=status_code, content_type='text/plain')
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
         filename = f"Marksheet_{student.registration_no}_{part}.pdf"
