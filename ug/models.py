@@ -200,6 +200,9 @@ class UGStudentProfile(models.Model):
 
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
     caste = models.CharField(max_length=20, null=True, blank=True)
+    religion = models.CharField(max_length=50, null=True, blank=True)
+    nationality = models.CharField(max_length=50, null=True, blank=True)
+    medium_of_student = models.CharField(max_length=50, null=True, blank=True)
     enrollment_date = models.DateField(null=True, blank=True)
     roll_no = models.CharField(max_length=50, null=True, blank=True)
     batch = models.ForeignKey(
