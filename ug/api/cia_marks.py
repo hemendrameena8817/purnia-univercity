@@ -81,6 +81,8 @@ class CIAStudentListView(APIView):
             errors['session'] = 'Required (e.g. 2025-26).'
         if not course_type_filter or course_type_filter not in COURSE_TYPE_PREFIXES:
             errors['course_type'] = f'Required. Must be one of: {", ".join(COURSE_TYPE_PREFIXES)}'
+        if exam_type not in ('REGULAR', 'BACK'):
+            errors['exam_type'] = 'Must be REGULAR or BACK.'
         if errors:
             return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -163,6 +165,7 @@ class CIAStudentListView(APIView):
                 'ind_is_absent': a.ind_is_absent,
                 'is_cia_filled': a.is_cia_filled,
                 'cia_filled_on': a.cia_filled_on.isoformat() if a.cia_filled_on else None,
+                'is_carried_forward': (a.exam_type == 'BACK' and a.created_at == a.updated_at) # Simplistic check or use custom flag
             }
             if a.label == 'CIA-Theory':
                 grouped_map[key]['cia_theory'] = comp_data
@@ -224,6 +227,7 @@ class CIAStudentListView(APIView):
             'sem': sem,
             'session': session,
             'course_type': course_type_filter,
+            'exam_type': exam_type,
             'history_mode': is_history,
             'count': paginator.count,
             'total_pages': paginator.num_pages,

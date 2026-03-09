@@ -50,9 +50,15 @@ class DashboardService:
     @classmethod
     def _get_ug_data(cls, user) -> Dict:
         """Get UG student dashboard data"""
+        from ug.services.ug_registration_eligiblity import check_ug_registration_eligibility
+
         student = UGStudentProfile.objects.select_related(
             'program', 'department', 'college', 'batch'
         ).get(user=user)
+
+        exam_eligibility_data = check_ug_registration_eligibility(student)
+        # Drop the raw model object
+        exam_eligibility_data.pop('_registration', None)
 
         return {
             'student_info': {
@@ -67,7 +73,8 @@ class DashboardService:
                 'profile_image': student.profile_image.url if student.profile_image else None,
             },
             'batch': student.batch.name if student.batch else None,
-            'registration': SemesterRegistrationService.check_registration_eligibility(student)
+            'registration': SemesterRegistrationService.check_registration_eligibility(student),
+            'exam_registration': exam_eligibility_data
         }
     
     @classmethod
