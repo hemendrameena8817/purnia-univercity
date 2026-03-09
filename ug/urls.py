@@ -7,7 +7,8 @@ from ug.api.semester_registration import (
     AvailableCoursesView,
     SubmitRegistrationView,
     RegistrationCardView,
-    UGExamRegistrationDetailView
+    UGExamRegistrationDetailView,
+    UGStudentUploadView
 )
 from ug.api.cia_marks import (
     UGDepartmentListView,
@@ -50,6 +51,11 @@ urlpatterns = [
         'exam-registration/',
         UGExamRegistrationDetailView.as_view(),
         name='ug-exam-registration'
+    ),
+    path(
+        'student-image-upload/',
+        UGStudentUploadView.as_view(),
+        name='ug-student-image-upload'
     ),
 
     # CIA Marks Entry APIs (College)
