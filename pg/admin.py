@@ -126,18 +126,19 @@ class PGStudentProfileResource(resources.ModelResource):
 @admin.register(PGStudentProfile)
 class PGStudentProfileAdmin(ImportExportModelAdmin):
     resource_class = PGStudentProfileResource
-    list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
+    list_display = ('id', 'registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
-    search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 
+    search_fields = ('registration_no', 'user__username', 'roll_no', 'first_name', 'last_name', 
                     'mobile_no', 'aadhar_no')
     readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
     # Performance optimizations
     list_select_related = ('user', 'college', 'department', 'program', 'degree')
-    autocomplete_fields = ['user', 'college', 'department', 'program', 'degree']
+    autocomplete_fields = ['college', 'department', 'program', 'degree']
+    raw_id_fields = ('user',)
     list_per_page = 50  # Limit records per page for better performance
     
     def get_queryset(self, request):
@@ -233,10 +234,22 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
         attribute='department',
         widget=SafeForeignKeyWidget(PGDepartment, field='name')
     )
+    student_department = fields.Field(
+        column_name='student_department',
+        attribute='student__department__name',
+        readonly=True
+    )
 
     class Meta:
         model = PGStudentCourseAssessment
         exclude = ('uid', 'json_data')
+        export_order = (
+            'id', 'student', 'student_department', 'course_name', 'course_code',
+            'paper_code', 'semester', 'label', 'department', 'session',
+            'batch', 'college_code', 'exam_type', 'ind_marks_obtained',
+            'ind_max_marks', 'ind_pass_marks', 'ind_is_pass', 'ind_is_absent',
+            'sem_result', 'is_ese_fill'
+        )
 
     def get_queryset(self):
         """Optimize queryset for export with select_related"""
@@ -312,7 +325,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
     # ── List view: only essential columns ─────────────────────────────────
     list_display = (
-        'get_regno', 'get_student_name', 'paper_code', 'semester',
+        'get_regno', 'get_student_name', 'department', 'paper_code', 'semester',
         'label', 'exam_type', 'session',
         'ind_marks_obtained', 'ind_max_marks', 'ind_is_absent', 'ind_is_pass',
         'sem_result', 'is_ese_fill',
@@ -403,7 +416,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
                 obj.student.registration_no if obj.student else "-",
                 obj.student.roll_no if obj.student else "-",
                 student_name,
-                obj.department.name if obj.department else "-",
+                obj.department.name if obj.department else (obj.student.department.name if obj.student and obj.student.department else "-"),
                 college,
                 obj.batch.name if obj.batch else "-",
                 obj.semester,
@@ -596,7 +609,7 @@ class PGExamRegistrationResource(resources.ModelResource):
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
     list_display = ('student', 'exam', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'start_date', 'end_date',)
-    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'exam', 'student__department')
+    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'exam', 'student__department', 'created_at')
     search_fields = (
         'student__registration_no',
         'student__roll_no',
@@ -688,11 +701,23 @@ class PGExamResultResource(resources.ModelResource):
         attribute='student',
         widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
     )
+    department = fields.Field(
+        column_name='department',
+        attribute='student__department__name',
+        readonly=True
+    )
 
     class Meta:
         model = PGExamResult
         exclude = ('uid',)
         import_id_fields = ('student', 'semester', 'session')
+        export_order = (
+            'id', 'student', 'department', 'semester', 'session',
+            'cia_pass', 'ese_pass', 'semester_result', 'sgpa',
+            'semester_max_credit', 'semester_credit_earned',
+            'next_semester', 'next_sem_status', 'is_legacy',
+            'published_at', 'created_at', 'updated_at'
+        )
 
 
 @admin.register(PGExamResult)
@@ -734,6 +759,7 @@ class PGExamResultAdmin(ImportExportModelAdmin):
         'student__first_name',
         'student__last_name',
         'student__roll_no',
+        'student__department__name',
         'uid'
     )
     

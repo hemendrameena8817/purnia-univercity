@@ -9,10 +9,12 @@ from ug_before_cbcs.models import (
 )
 from pup_umis_backend.utils.file_utils import image_to_base64
 from ug_before_cbcs.utils.qr_generator import generate_qr_code_base64, generate_ug_marksheet_qr_text
+from ug_before_cbcs.utils.validation import validate_marksheet_context
 from .res_calculation import calculate_ba_hons_part1_result
 import os
 import logging
 from decimal import Decimal
+from weasyprint import HTML
 
 logger = logging.getLogger(__name__)
 
@@ -469,12 +471,22 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
 def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
     """
     Generate marksheet PDF for UG Before CBCS student Part 1.
+    Only generates PDF if validation passes.
+    
+    Returns:
+        tuple: (pdf_content: bytes or None, error_message: str or None)
     """
-    from weasyprint import HTML
     context = get_ug_old_ba_hons_part1_context(student, exam_part, exam_type, course_code, batch_code)
-
+    
     if not context:
-        return None
+        return None, "No results found for this student and exam part"
+    
+    # Validate before generating PDF
+    is_valid, error_messages = validate_marksheet_context(student, exam_part, context, exam_type, course_code, batch_code)
+    if not is_valid:
+        error_detail = "; ".join(error_messages)
+        logger.error(f"Marksheet validation failed for {student.registration_no} (Part {exam_part}): {error_detail}")
+        return None, error_detail
 
     template_name = f"ug_before_cbcs/ba_hons_marksheet_part1.html"
     
@@ -482,8 +494,9 @@ def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, co
     
     try:
         pdf_file = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
-        return pdf_file
+        return pdf_file, None
     except Exception as e:
-        print("PDF ERROR:", str(e)) 
+        error_msg = f"PDF generation error: {str(e)}"
+        print("PDF ERROR:", error_msg) 
         logger.error(f"Error generating PDF: {e}")
-        return None
+        return None, error_msg
