@@ -58,7 +58,7 @@ class UGPaymentInfoView(APIView):
         return Response({
             'payment_required': True,
             'registration_uid': str(registration.uid),
-            'student_name': student.get_full_name(),
+            'student_name': student.first_name ,
             'father_name': student.father_name,
             'registration_no': student.registration_no,
             'sem': registration.sem,
