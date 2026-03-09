@@ -353,10 +353,10 @@ class UGOldMarksheetProgressiveView(APIView):
             student, exam_part=part, course_code=course_code, batch_code=batch_code
         )
         
-        if not progressive_data:
+        if not progressive_data or not progressive_data.get('results'):
             return Response(
-                {"message": f"No BACK papers found for {student.student_name} (Part {part}). Only REGULAR papers exist."},
-                status=status.HTTP_200_OK
+                {"error": f"No marksheet data found for {student.student_name} (Part {part})."},
+                status=status.HTTP_404_NOT_FOUND
             )
         
         # Add student info
@@ -372,7 +372,8 @@ class UGOldMarksheetProgressiveView(APIView):
                 'course_code': course_code,
             },
             'part': part,
-            'results': progressive_data
+            'available_sessions': progressive_data.get('available_sessions', []),
+            'results': progressive_data.get('results', [])
         }
         
         return Response(response_data, status=status.HTTP_200_OK)

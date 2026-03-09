@@ -618,11 +618,16 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
     # Separate REGULAR and BACK papers
     regular_papers = {}  # {(paper_code, status): result}
     back_sessions = {}   # {session_code: [back_results]}
+    all_sessions = set()  # Track all unique session codes
     
     for result in all_results:
         exam_type = (result.exam_type or '').upper()
         key = (result.paper_code, result.status)
         session = result.exam.session_code or 'UNKNOWN'
+        
+        # Track all sessions
+        if session:
+            all_sessions.add(session)
         
         if exam_type == 'BACK':
             if session not in back_sessions:
@@ -633,10 +638,42 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
             if key not in regular_papers:
                 regular_papers[key] = result
     
-    # If no BACK papers, return empty
+    # If no BACK papers, return only REGULAR papers
     if not back_sessions:
-        logger.info(f"No BACK papers found for {student.registration_no} Part {exam_part}")
-        return []
+        logger.info(f"No BACK papers found for {student.registration_no} Part {exam_part}. Returning REGULAR papers only.")
+        
+        # Return just the REGULAR result
+        if not regular_papers:
+            return {'results': [], 'available_sessions': []}
+        
+        first_regular = next(iter(regular_papers.values()))
+        return {
+            'results': [{
+                'type': 'regular',
+                'session_code': first_regular.exam.session_code if first_regular.exam else None,
+                'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
+                'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
+                'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
+                'exam_name': first_regular.exam.name if first_regular.exam else f"Part {exam_part}",
+                'result': {
+                    'total_papers': len(regular_papers),
+                    'papers': [
+                        {
+                            'paper_code': result.paper_code,
+                            'subject_name': result.subject_name,
+                            'status': result.status,
+                            'exam_type': result.exam_type,
+                            'session_code': result.exam.session_code if result.exam else None,
+                            'mark_secured': result.mark_secured,
+                            'maximum_mark': result.maximum_mark,
+                            'pass_mark': result.pass_mark,
+                        }
+                        for result in regular_papers.values()
+                    ]
+                }
+            }],
+            'available_sessions': sorted(list(all_sessions))
+        }
     
     # Sort BACK sessions chronologically
     sorted_back_sessions = sorted(back_sessions.keys())
@@ -708,4 +745,8 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
         logger.info(f"Progressive BACK for {student.registration_no} - Session {session}: "
                    f"{len(back_results)} new BACK, {len(cumulative_back_map)} total cumulative BACK")
     
-    return results_list
+    # Return results with available sessions for filtering
+    return {
+        'results': results_list,
+        'available_sessions': sorted(list(all_sessions))
+    }

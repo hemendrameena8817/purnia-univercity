@@ -75,7 +75,7 @@ def validate_marksheet_data(student, exam_part, honours_papers, composition_pape
 
     # 3. Validate Composition papers
     # Priority: RBH > NRB (if student has RBH, they only need 1 composition paper)
-    is_rbh_student = any(p.paper_type_code == 'RBH' for p in results)
+    is_rbh_student = any(p.paper_type_code == 'RB' for p in results)
     is_nrb_student = any(p.paper_type_code == 'NRB' for p in results)
     
     if is_rbh_student:
