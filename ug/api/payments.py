@@ -139,7 +139,7 @@ class UGInitiatePaymentView(APIView):
             f"merchant_id={merchant_id}&order_id={order_id}&"
             f"amount={amount}&currency=INR&"
             f"redirect_url={redirect_url}&cancel_url={cancel_url}&"
-            f"language=EN&billing_name={student.get_full_name()}&"
+            f"language=EN&billing_name={student.first_name}&"
             f"billing_tel={student.mobile_no or ''}&"
             f"billing_email={(student.user.email or '') if hasattr(student, 'user') else ''}"
         )

@@ -177,6 +177,7 @@ def generate_ug_exam_registration_card_pdf(student, registration):
             semester=semester_text,
             session=session,
             exam_type=exam_type,
+            label__startswith='ESE',
         )
         .select_related('department')
         .order_by('course_type', 'paper_code')
