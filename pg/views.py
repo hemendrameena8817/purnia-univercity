@@ -735,7 +735,8 @@ class PGAdmitCardPDFView(APIView):
         # ── Check Registration Status ──────────────────────────────────────────
         registration = PGExamRegistration.objects.filter(
             student=student,
-            status='REGISTERED'
+            status='REGISTERED',
+            sem=1
         ).order_by('-created_at').first()
 
         if not registration:
@@ -1002,17 +1003,18 @@ class PGPaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             uid = str(payment.registration.uid)
             redirect_url = (
-                f"{frontend_url}/pg-exam-registration/pg-examform-3rd"
+                f"{frontend_url}/pg-exam-registration/pg-examformback-1st"
                 f"?uid={uid}"
                 f"&payment_status={payment.payment_status.lower()}"
                 f"&order_id={order_id}"
             )
+            print(redirect_url,"kshfskd sdkgaw idusifueh")
             return django_redirect(redirect_url)
 
         except Exception as e:
             logger.exception("Error processing PG payment response")
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
-            return django_redirect(f"{frontend_url}/pg-exam-registration/pg-examform-3rd?error={str(e)[:100]}")
+            return django_redirect(f"{frontend_url}/pg-exam-registration/pg-examformback-1st?error={str(e)[:100]}")
 
 
 class PGStudentUploadView(APIView):
