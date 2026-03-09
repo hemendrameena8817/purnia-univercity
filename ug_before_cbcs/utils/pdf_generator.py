@@ -575,6 +575,59 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
         custom_results=list(latest_papers.values())
     )
 
+def get_center_info_for_student(student, exam):
+    """
+    Get the examination center information for a student from the mapping table.
+    Returns complete college object if available, otherwise just the name.
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam: UGBeforeCBCSExam instance
+    
+    Returns:
+        dict: Center information with uid, name, etc. or just name string
+    """
+    from ..models import UGBeforeCBCSExamCenterMapping
+    
+    if not student.college:
+        return {
+            'name': exam.centre_name,
+            'uid': None,
+            'college_code': None
+        } if exam.centre_name else None
+    
+    mapping = UGBeforeCBCSExamCenterMapping.objects.filter(
+        exam=exam,
+        student_college=student.college
+    ).select_related('center_college').first()
+    
+    if mapping:
+        # Priority: center_college > center_name > exam.centre_name
+        if mapping.center_college:
+            return {
+                'uid': str(mapping.center_college.uid),
+                'name': mapping.center_college.name,
+                'college_code': mapping.center_college.college_code,
+                'short_name': mapping.center_college.short_name,
+                'address': mapping.center_college.address,
+            }
+        elif mapping.center_name:
+            return {
+                'name': mapping.center_name,
+                'uid': None,
+                'college_code': None
+            }
+    
+    # Fallback to exam's centre_name
+    if exam.centre_name:
+        return {
+            'name': exam.centre_name,
+            'uid': None,
+            'college_code': None
+        }
+    
+    return None
+
 def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course_code=None, batch_code=None):
     """
     Generates year-by-year progressive BACK paper contexts.
@@ -654,6 +707,7 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
                 'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
                 'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
                 'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
+                'centre': get_center_info_for_student(student, first_regular.exam) if first_regular.exam else None,
                 'exam_name': first_regular.exam.name if first_regular.exam else f"Part {exam_part}",
                 'result': {
                     'total_papers': len(regular_papers),
@@ -706,6 +760,7 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
             'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
             'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
             'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
+            'centre': get_center_info_for_student(student, first_regular.exam) if first_regular.exam else None,
             'exam_name': first_regular.exam.name if first_regular.exam else f"Part {exam_part}",
             'result': {
                 'total_papers': len(regular_papers),
@@ -733,6 +788,7 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
             'exam_year': first_exam.exam_year if first_exam else None,
             'exam_month_year': first_exam.exam_month_year if first_exam else None,
             'publication_date': first_exam.publication_date if first_exam else None,
+            'centre': get_center_info_for_student(student, first_exam) if first_exam else None,
             'exam_name': first_exam.name if first_exam else f"Part {exam_part} - {session}",
             'is_latest': (idx == len(sorted_back_sessions) - 1),
             'result': {
