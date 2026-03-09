@@ -268,3 +268,66 @@ class UGRegistrationStatusView(APIView):
             'payment_details': payment_data,
             'latest_payment_status': latest_payment.payment_status if latest_payment else None,
         }, status=status.HTTP_200_OK)
+
+
+class UGExamRegistrationCardPDFView(APIView):
+    """
+    GET /api/ug/exam-registration-card/
+    Generates a UG Exam Registration Card PDF for the logged-in student.
+    Fetches the latest 'REGISTERED' exam registration.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ug.utils.exam_registration_card_pdf import generate_ug_exam_registration_card_pdf
+        from django.http import HttpResponse
+
+        # ── Resolve Student ───────────────────────────────────────────────────
+        try:
+            student = UGStudentProfile.objects.select_related(
+                'college', 'department', 'program', 'degree', 'batch'
+            ).get(user=request.user)
+        except UGStudentProfile.DoesNotExist:
+             return Response(
+                 {'error': 'UG Student profile not found for this user.'},
+                 status=status.HTTP_404_NOT_FOUND
+             )
+
+        # ── Find Latest REGISTERED Registration ──────────────────────────────
+        uid = request.query_params.get('uid')
+        queryset = ExamRegistration.objects.defer('admission_receipt').filter(
+            student=student,
+            status='REGISTERED'
+        ).select_related('student', 'student__college', 'student__department').order_by('-created_at')
+
+        if uid:
+            registration = queryset.filter(uid=uid).first()
+        else:
+            registration = queryset.first()
+
+        if not registration:
+            return Response(
+                {'error': 'No active REGISTERED exam registration found for this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # ── Generate PDF ──────────────────────────────────────────────────────
+        pdf_buffer = generate_ug_exam_registration_card_pdf(
+            student, 
+            registration
+        )
+        
+        if not pdf_buffer:
+            return Response(
+                {'error': 'Failed to generate PDF.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        force_download = request.GET.get('download', 'false').lower() == 'true'
+        disposition = 'attachment' if force_download else 'inline'
+        filename = f"UG_Exam_Registration_{student.registration_no}.pdf"
+
+        response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
+        response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+        return response

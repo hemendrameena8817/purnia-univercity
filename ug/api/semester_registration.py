@@ -327,3 +327,62 @@ class RegistrationCardView(APIView):
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UGExamRegistrationDetailView(APIView):
+    """
+    API View to get Exam Registration details including student profile and assessments.
+    Student is identified from the JWT token (no student_uid param needed).
+    
+    Query Parameters:
+    - sem: Semester (optional, returns most recent registration if not provided)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ug.models import UGStudentProfile
+        from django.utils import timezone
+
+        try:
+            student = UGStudentProfile.objects.select_related(
+                'department', 'degree', 'program', 'college'
+            ).get(user=request.user)
+        except UGStudentProfile.DoesNotExist:
+            return Response(
+                {'error': 'No UG student profile found for this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        from ug.services.ug_registration_eligiblity import check_ug_registration_eligibility
+        from ug.serializers import UGExamRegistrationSerializer
+        from django.utils import timezone as tz
+
+        sem = request.query_params.get('sem')
+        response_data = check_ug_registration_eligibility(student, semester=sem)
+
+        # Pull out the raw registration object (private key set by service)
+        registration_obj = response_data.pop('_registration', None)
+
+        if registration_obj is not None:
+            # Build registration_window here in the view
+            def fmt_date(dt):
+                if not dt:
+                    return None
+                return tz.localtime(dt).strftime('%d %b %Y, %I:%M %p')
+
+            response_data['registration_window'] = {
+                'start_date': fmt_date(registration_obj.start_date),
+                'end_date': fmt_date(registration_obj.end_date),
+                'status': registration_obj.status,
+            }
+
+            # Serialize registration
+            response_data['registration'] = UGExamRegistrationSerializer(registration_obj).data
+
+        status_code = status.HTTP_200_OK
+        if not response_data.get('eligible') and 'reason' in response_data:
+             if 'No exam registration record found' in response_data['reason']:
+                 status_code = status.HTTP_404_NOT_FOUND
+
+        return Response(response_data, status=status_code)

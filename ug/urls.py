@@ -6,7 +6,8 @@ from ug.api.semester_registration import (
     RegistrationEligibilityView,
     AvailableCoursesView,
     SubmitRegistrationView,
-    RegistrationCardView
+    RegistrationCardView,
+    UGExamRegistrationDetailView
 )
 from ug.api.cia_marks import (
     UGDepartmentListView,
@@ -18,6 +19,7 @@ from ug.api.payments import (
     UGInitiatePaymentView,
     UGPaymentResponseView,
     UGRegistrationStatusView,
+    UGExamRegistrationCardPDFView,
 )
 
 app_name = 'ug'
@@ -44,6 +46,11 @@ urlpatterns = [
         RegistrationCardView.as_view(),
         name='registration-card'
     ),
+    path(
+        'exam-registration/',
+        UGExamRegistrationDetailView.as_view(),
+        name='ug-exam-registration'
+    ),
 
     # CIA Marks Entry APIs (College)
     path(
@@ -69,4 +76,7 @@ urlpatterns = [
     
     # Registration status (public — used after CC Avenue redirect)
     path('<uuid:uid>/status/', UGRegistrationStatusView.as_view(), name='ug-registration-status'),
+
+    # Exam Registration Card
+    path('exam-registration/card/', UGExamRegistrationCardPDFView.as_view(), name='ug-exam-registration-card'),
 ]
