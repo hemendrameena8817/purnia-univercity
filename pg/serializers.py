@@ -191,7 +191,7 @@ class PGExamRegistrationSerializer(serializers.ModelSerializer):
             student=obj.student,
             semester__icontains=sem_str,
             label__icontains='ESE',
-        ).order_by('paper_code')
+        ).order_by('paper_code').distinct()
 
         return AssessmentDetailSerializer(assessments, many=True).data
 
