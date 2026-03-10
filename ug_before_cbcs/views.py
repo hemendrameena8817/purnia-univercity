@@ -529,7 +529,10 @@ class UGOldMarksheetUpdateView(APIView):
                     
                     res_obj.mark_secured = obtained
                     
-                if "status" in mark_item: res_obj.status = mark_item["status"]
+                if "status" in mark_item: 
+                    res_obj.status = mark_item["status"]
+                if "subject_name" in mark_item: 
+                    res_obj.subject_name = mark_item["subject_name"]
                 res_obj.save()
                 
         # Update Summary fields (final_result, total_secured_mark)
