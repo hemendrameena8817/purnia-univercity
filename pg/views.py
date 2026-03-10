@@ -808,7 +808,7 @@ class PGPaymentInfoView(APIView):
             except PGExamRegistration.DoesNotExist:
                 return Response({'error': 'Registration not found.'}, status=status.HTTP_404_NOT_FOUND)
         else:
-            registration = PGExamRegistration.objects.filter(student=student).order_by('-sem', '-created_at').first()
+            registration = PGExamRegistration.objects.filter(student=student).order_by('-created_at', '-sem').first()
             if not registration:
                 return Response({'error': 'No exam registration found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -879,7 +879,7 @@ class PGInitiatePaymentView(APIView):
                 prof = PGStudentProfile.objects.get(registration_no=registration_uid)
                 registration = PGExamRegistration.objects.filter(
                     student=prof
-                ).order_by('-sem', '-created_at').first()
+                ).order_by('-created_at', '-sem').first()
             except PGStudentProfile.DoesNotExist:
                 pass
 
@@ -1056,7 +1056,7 @@ class PGStudentUploadView(APIView):
             registration = (
                 PGExamRegistration.objects
                 .filter(student=student)
-                .order_by('-sem', '-created_at')
+                .order_by('-created_at', '-sem')
                 .first()
             )
             if not registration:
