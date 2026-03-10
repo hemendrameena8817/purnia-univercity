@@ -736,10 +736,12 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
     def format_papers(papers_dict):
         return [
             {
+                'uid': str(result.uid),
                 'paper_code': result.paper_code,
                 'subject_name': result.subject_name,
                 'status': result.status,
                 'exam_type': result.exam_type,
+                'paper_type_code': result.paper_type_code,
                 'session_code': result.exam.session_code if result.exam else None,
                 'mark_secured': result.mark_secured,
                 'maximum_mark': result.maximum_mark,
@@ -757,6 +759,7 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
         results_list.append({
             'type': 'regular',
             'session_code': first_regular.exam.session_code if first_regular.exam else None,
+            'exam_code': first_regular.exam.exam_code if first_regular.exam else None,
             'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
             'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
             'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
@@ -785,6 +788,7 @@ def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course
         results_list.append({
             'type': 'back',
             'session_code': session,
+            'exam_code': first_exam.exam_code if first_exam else None,
             'exam_year': first_exam.exam_year if first_exam else None,
             'exam_month_year': first_exam.exam_month_year if first_exam else None,
             'publication_date': first_exam.publication_date if first_exam else None,

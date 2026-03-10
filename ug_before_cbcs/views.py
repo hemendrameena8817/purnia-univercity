@@ -226,7 +226,7 @@ class UGOldMarksheetJSONView(APIView):
     """
     Returns the Marksheet data in JSON format for Part I, II, or III.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         registration_no = request.query_params.get("registration_no")
@@ -326,7 +326,7 @@ class UGOldMarksheetProgressiveView(APIView):
     Returns year-by-year progressive marksheet data for BACK papers.
     Shows how BACK papers progressively override REGULAR papers over the years.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         registration_no = request.query_params.get("registration_no")
@@ -492,13 +492,18 @@ class UGOldMarksheetUpdateView(APIView):
         for mark_item in marks_data:
             res_uid = mark_item.get("uid")
             paper_code = mark_item.get("paper_code")
+            status_field = mark_item.get("status")
             obtained = mark_item.get("obtained")
             
             res_obj = None
             if res_uid:
                 res_obj = results.filter(uid=res_uid).first()
             elif paper_code:
-                res_obj = results.filter(paper_code=paper_code).first()
+                # Match by both paper_code and status to get the correct paper
+                if status_field:
+                    res_obj = results.filter(paper_code=paper_code, status=status_field).first()
+                else:
+                    res_obj = results.filter(paper_code=paper_code).first()
 
             if res_obj:
                 if obtained is not None:
@@ -548,7 +553,7 @@ class UGBeforeCBCSOverviewView(APIView):
     Returns pre-calculated statistical overview of UG Before CBCS data.
     This is very lightweight as it reads from a cache model.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsUniversityAdmin]
 
     def get(self, request):
         stats_obj = UGBeforeCBCSStatistics.objects.order_by('-last_updated').first()
@@ -572,3 +577,166 @@ class UGBeforeCBCSOverviewRefreshView(APIView):
     def post(self, request):
         stats_obj = calculate_and_save_ug_before_cbcs_stats()
         return Response(stats_obj.data, status=status.HTTP_201_CREATED)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldResultCreateView(APIView):
+    """
+    Create individual paper/result entry for a student.
+    Allows adding subject-wise entries one at a time.
+    """
+    permission_classes = [IsUniversityAdmin]
+    
+    def post(self, request):
+        # Required fields
+        registration_no = request.data.get("registration_no")
+        roll_no = request.data.get("roll_no")
+        exam_code = request.data.get("exam_code")
+        paper_code = request.data.get("paper_code")
+        subject_name = request.data.get("subject_name")
+        
+        # Validate required fields
+        if not (registration_no or roll_no):
+            return Response(
+                {"error": "registration_no or roll_no is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not exam_code:
+            return Response(
+                {"error": "exam_code is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not paper_code:
+            return Response(
+                {"error": "paper_code is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get student
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
+        
+        # Get exam
+        exam = get_object_or_404(UGBeforeCBCSExam, exam_code=exam_code)
+        
+        # Optional fields
+        status_field = request.data.get("status", "END_TERM")
+        exam_type = request.data.get("exam_type", "REGULAR")
+        paper_type_code = request.data.get("paper_type_code")
+        
+        # Marks fields
+        theory = request.data.get("theory")
+        practical = request.data.get("practical")
+        sessional = request.data.get("sessional")
+        mark_secured = request.data.get("mark_secured")
+        maximum_mark = request.data.get("maximum_mark", "100")
+        pass_mark = request.data.get("pass_mark", "33")
+        
+        # Check for duplicate entry
+        existing = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam=exam,
+            paper_code=paper_code,
+            status=status_field
+        ).first()
+        
+        if existing:
+            return Response(
+                {
+                    "error": "Result entry already exists for this student, exam, paper_code, and status",
+                    "existing_uid": str(existing.uid)
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Create new result entry
+        result = UGBeforeCBCSStudentResult.objects.create(
+            student=student,
+            exam=exam,
+            paper_code=paper_code,
+            subject_name=subject_name,
+            status=status_field,
+            exam_type=exam_type,
+            paper_type_code=paper_type_code,
+            theory=theory,
+            practical=practical,
+            sessional=sessional,
+            mark_secured=mark_secured,
+            maximum_mark=maximum_mark,
+            pass_mark=pass_mark,
+            subject_code=request.data.get("subject_code"),
+            temp_paper_code=request.data.get("temp_paper_code"),
+            paper_code_correction=request.data.get("paper_code_correction"),
+            subject_code_correction=request.data.get("subject_code_correction"),
+            exam_type_his=request.data.get("exam_type_his"),
+            is_ex_regular=request.data.get("is_ex_regular", False),
+            mark_secured_history=request.data.get("mark_secured_history"),
+            subject_total_mark=request.data.get("subject_total_mark"),
+            subject_result=request.data.get("subject_result"),
+        )
+        
+        return Response(
+            {
+                "message": "Result entry created successfully",
+                "uid": str(result.uid),
+                "student": {
+                    "registration_no": student.registration_no,
+                    "roll_no": student.roll_no,
+                    "student_name": student.student_name
+                },
+                "exam": {
+                    "exam_code": exam.exam_code,
+                    "name": exam.name,
+                    "session_code": exam.session_code
+                },
+                "result": {
+                    "paper_code": result.paper_code,
+                    "subject_name": result.subject_name,
+                    "status": result.status,
+                    "exam_type": result.exam_type,
+                    "mark_secured": result.mark_secured,
+                    "maximum_mark": result.maximum_mark
+                }
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldResultDeleteView(APIView):
+    """
+    Delete individual paper/result entry for a student.
+    Allows deleting subject-wise entries one at a time.
+    """
+    permission_classes = [IsUniversityAdmin]
+    
+    def delete(self, request, uid):
+        """
+        Delete a result entry by UID
+        """
+        try:
+            result = UGBeforeCBCSStudentResult.objects.get(uid=uid)
+            result.delete()
+            return Response(
+                {
+                    "message": "Result entry deleted successfully",
+                    "deleted_entry": {
+                        "uid": str(result.uid),
+                        "paper_code": result.paper_code,
+                        "subject_name": result.subject_name,
+                        "status": result.status,
+                        "exam_type": result.exam_type,
+                        "mark_secured": result.mark_secured
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        except UGBeforeCBCSStudentResult.DoesNotExist:
+            return Response(
+                {"error": "Result entry not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
