@@ -158,7 +158,16 @@ class UGExamRegistrationSerializer(serializers.ModelSerializer):
             semester__in=[str(semester_num), semester_text],
             session=obj.session,
             exam_type=exam_type,
-            label__startswith='ESE-Theory'
-        ).order_by('course_type', 'paper_code').distinct()
+            label__startswith='ESE'
+        ).order_by('course_type', 'paper_code')
 
-        return AssessmentDetailSerializer(assessments, many=True).data
+        # Deduplicate so paper does not repeat if it has both ESE-Theory and ESE-Practical
+        seen_codes = set()
+        unique_assessments = []
+        for a in assessments:
+            code = a.paper_code or a.course_code or ''
+            if code not in seen_codes:
+                seen_codes.add(code)
+                unique_assessments.append(a)
+
+        return AssessmentDetailSerializer(unique_assessments, many=True).data
