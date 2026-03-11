@@ -1,12 +1,12 @@
 from rest_framework import generics
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentAssessment
+    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
 )
 from .serializers import (
     LLBCourseSerializer, LLBSessionSerializer, LLBBatchSerializer,
     LLBStudentProfileSerializer, LLBCourseStructureSerializer, LLBExamSerializer,
-    LLBStudentExamResultSerializer, LLBStudentAssessmentSerializer
+    LLBStudentExamResultSerializer, LLBStudentCourseAssessmentSerializer
 )
 
 # Course Views
@@ -118,19 +118,19 @@ class LLBStudentExamResultDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = LLBStudentExamResultSerializer
 
 # Assessment (Marks) Views
-class LLBStudentAssessmentListView(generics.ListCreateAPIView):
-    serializer_class = LLBStudentAssessmentSerializer
+class LLBStudentCourseAssessmentListView(generics.ListCreateAPIView):
+    serializer_class = LLBStudentCourseAssessmentSerializer
     
     def get_queryset(self):
-        queryset = LLBStudentAssessment.objects.all()
+        queryset = LLBStudentCourseAssessment.objects.all()
         exam_result_id = self.request.query_params.get('exam_result')
         if exam_result_id:
             queryset = queryset.filter(exam_result_id=exam_result_id)
         return queryset
 
-class LLBStudentAssessmentDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = LLBStudentAssessment.objects.all()
-    serializer_class = LLBStudentAssessmentSerializer
+class LLBStudentCourseAssessmentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = LLBStudentCourseAssessment.objects.all()
+    serializer_class = LLBStudentCourseAssessmentSerializer
 
 import os
 from django.conf import settings
@@ -162,7 +162,7 @@ class LLBResultPDFView(View):
         
         results = LLBStudentExamResult.objects.select_related(
             'student', 'student__user', 'student__course', 'student__college', 'exam'
-        ).prefetch_related('assessments', 'assessments__subject').filter(
+        ).prefetch_related('student_assessments_result', 'student_assessments_result__course_structure').filter(
             student__registration_no=registration_no
         ).order_by('-created_at')
         
@@ -197,7 +197,7 @@ class LLBBulkMarksheetGenerateView(APIView):
         try:
             results = LLBStudentExamResult.objects.select_related(
                 'student', 'student__user', 'student__course', 'student__college', 'exam'
-            ).prefetch_related('assessments', 'assessments__subject')
+            ).prefetch_related('student_assessments_result', 'student_assessments_result__course_structure')
             
             # 1. Filter results based on provided UID
             if exam_uid:

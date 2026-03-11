@@ -3,13 +3,13 @@ import io
 import os
 from django.conf import settings
 from django.template.loader import get_template
-from xhtml2pdf import pisa
+from weasyprint import HTML
 import qrcode
 from llb.utils.generate_llb_barcode_text import generate_llb_barcode_text
 
 def generate_marksheet_pdf(result):
     """
-    Generates a PDF marksheet for a given LLBResult object.
+    Generates a PDF marksheet for a given LLBResult object using WeasyPrint.
     """
     # 1. Generate QR Code
     barcode_text = generate_llb_barcode_text(result)
@@ -42,22 +42,24 @@ def generate_marksheet_pdf(result):
         'student': result.student,
         'qr_code': qr_code_base64,
         'university_logo': university_logo_base64,
-        'pass_percentage': 33, 
+        'pass_percentage': 33,
+        'exam_name': result.exam.name if result.exam else 'LLB Examination',
+        'exam_year': result.exam.session if result.exam else '',
+        'batch_year': result.student.batch.name if result.student.batch else '',
+        'exam_month_year': result.exam.exam_month_year if result.exam else '',
+        'hons_subject': result.student.course.name if result.student.course else '',
+        'center_name': result.student.college.name if result.student.college else '',
     }
     
-    # 3. Render Template
+    # 4. Render Template
     template_path = 'llb/detailed_marksheet_LLB_1.html'
     template = get_template(template_path)
     html = template.render(context)
     
-    # 4. Create PDF
-    result_buffer = io.BytesIO()
-    pisa_status = pisa.CreatePDF(
-        io.BytesIO(html.encode("utf-8")),
-        dest=result_buffer
-    )
-    
-    if pisa_status.err:
+    # 5. Generate PDF using WeasyPrint
+    try:
+        pdf = HTML(string=html).write_pdf()
+        return pdf
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
         return None
-        
-    return result_buffer.getvalue()

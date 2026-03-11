@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentAssessment
+    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
 )
 from .utils.generate_llb_barcode_text import generate_llb_barcode_text
 
@@ -41,17 +41,20 @@ class LLBStudentProfileSerializer(serializers.ModelSerializer):
         model = LLBStudentProfile
         fields = '__all__'
 
-class LLBStudentAssessmentSerializer(serializers.ModelSerializer):
-    subject_name = serializers.ReadOnlyField(source='subject.name')
-    full_marks = serializers.ReadOnlyField(source='subject.full_marks')
-    pass_marks = serializers.ReadOnlyField(source='subject.pass_marks')
+class LLBStudentCourseAssessmentSerializer(serializers.ModelSerializer):
+    subject_name = serializers.ReadOnlyField(source='course_structure.name')
+    full_marks = serializers.ReadOnlyField(source='course_structure.full_marks')
+    pass_marks = serializers.ReadOnlyField(source='course_structure.pass_marks')
+    course_name = serializers.ReadOnlyField(source='course.name')
+    student_details = LLBStudentProfileSerializer(source='student', read_only=True)
+    exam_details = LLBExamSerializer(source='exam', read_only=True)
 
     class Meta:
-        model = LLBStudentAssessment
+        model = LLBStudentCourseAssessment
         fields = '__all__'
 
 class LLBStudentExamResultSerializer(serializers.ModelSerializer):
-    assessments = LLBStudentAssessmentSerializer(many=True, read_only=True)
+    assessments = LLBStudentCourseAssessmentSerializer(many=True, read_only=True)
     student_details = LLBStudentProfileSerializer(source='student', read_only=True)
     exam_details = LLBExamSerializer(source='exam', read_only=True)
     barcode_text = serializers.SerializerMethodField()

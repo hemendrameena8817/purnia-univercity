@@ -27,7 +27,7 @@ django.setup()
 from staging.models import StagingLLBResultCurrent
 from llb.models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile,
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentAssessment, LLBStudentCourseAssessment
+    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
 )
 from colleges.models import College
 
@@ -143,7 +143,7 @@ def get_or_create_subject(subject_name, maximum_mark, pass_mark):
         print(f"  Created subject: {subject.name}")
     return subject
 
-def get_or_create_exam(session_code, exam_type, batch=None):
+def get_or_create_exam(session_code, exam_type, batch=None, semester=None):
     """Get or create LLB exam"""
     cache_key = f"{session_code}_{exam_type}"
     if cache_key in exams_cache:
@@ -157,7 +157,7 @@ def get_or_create_exam(session_code, exam_type, batch=None):
         defaults={
             'session': session_code or '2020-21',
             'batch': batch,
-            'semester': None,
+            'semester': semester,
             'exam_month_year': 'June 2024',
             'publication_date': date.today()
         }
@@ -190,15 +190,18 @@ def get_or_create_college(institute_code):
             print(f"  Created college: {college.name}")
         return college
 
-def get_or_create_user(student_name, fathers_name, mothers_name, college_roll_no):
+def get_or_create_user(student_name, fathers_name, mothers_name, college_roll_no, college_reg_no):
     """Get or create user account"""
-    cache_key = college_roll_no
+    # Use college_reg_no first, then college_roll_no as username
+    username = college_reg_no or college_roll_no or 'llb_unknown'
+    cache_key = username
+    
     if cache_key in users_cache:
         return users_cache[cache_key]
     
-    # Try to find existing user by username (roll_no)
+    # Try to find existing user by username
     try:
-        user = User.objects.get(username=college_roll_no)
+        user = User.objects.get(username=username)
         users_cache[cache_key] = user
         return user
     except User.DoesNotExist:
@@ -209,16 +212,20 @@ def get_or_create_user(student_name, fathers_name, mothers_name, college_roll_no
     first_name = name_parts[0] if len(name_parts) > 0 else 'Student'
     last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else 'Name'
     
+    # Password is same as username or 'PASSWORD' if no username available
+    password = username if username and username != 'llb_unknown' else 'PASSWORD'
+    
     # Create new user
     user = User.objects.create_user(
-        username=college_roll_no or f'llb_{college_roll_no}',
+        username=username,
         first_name=first_name[:30],
         last_name=last_name[:150],
-        email=f'{college_roll_no}@llb.edu' if college_roll_no else 'noemail@llb.edu',
+        email=f'{username}@llb.edu' if username != 'llb_unknown' else 'noemail@llb.edu',
+        password=password,
         profile_type='llb'
     )
     users_cache[cache_key] = user
-    print(f"  Created user: {user.username} ({user.get_full_name()})")
+    print(f"  Created user: {user.username} ({user.get_full_name()}) - password: {password}")
     return user
 
 def get_or_create_student_profile(staging_record, user, college, course, batch):
@@ -278,7 +285,7 @@ def migrate_data():
             session = get_or_create_session(record.session_code)
             batch = get_or_create_batch(record.batch_code)
             college = get_or_create_college(record.institute_code)
-            exam = get_or_create_exam(record.session_code, record.exam_type, batch)
+            exam = get_or_create_exam(record.session_code, record.exam_type, batch, record.semester_code)
             subject = get_or_create_subject(
                 record.subject_name,
                 record.maximum_mark,
@@ -294,7 +301,8 @@ def migrate_data():
                     record.student_name,
                     record.fathers_name,
                     record.mothers_name,
-                    record.college_roll_no
+                    record.college_roll_no,
+                    record.college_reg_no
                 )
                 
                 student = get_or_create_student_profile(
@@ -324,18 +332,7 @@ def migrate_data():
                 except:
                     marks_obtained = 0
                 
-                # Create simple assessment for backward compatibility
-                LLBStudentAssessment.objects.create(
-                    exam_result=current_result,
-                    subject=subject,
-                    paper_code=record.paper_code,
-                    marks_obtained=marks_obtained,
-                    total_secured_mark=int(record.total_secured_mark) if record.total_secured_mark else None,
-                    total_percentage=float(record.total_per) if record.total_per else None,
-                    grade=record.grade,
-                    subject_result=record.subject_result,
-                    status=record.status
-                )
+                # Skip simple assessment - using only MCA pattern assessment
                 
                 # Create detailed course assessment with labels
                 assessment_label = get_assessment_label(record.status)
@@ -343,15 +340,16 @@ def migrate_data():
                 LLBStudentCourseAssessment.objects.create(
                     exam_result=current_result,
                     student=student,
-                    course_name=subject.name,
-                    course_code=subject.name[:100],  # Truncate to fit in field
-                    paper_code=record.paper_code,
-                    semester=str(exam.semester) if exam.semester else None,
+                    course=course,
+                    course_structure=subject,
+                    exam=exam,
+                    semester=record.semester_code,
                     label=assessment_label,
                     session=record.session_code,
                     batch=batch,
                     college_code=record.institute_code,
                     exam_type=record.exam_type,
+                    paper_code=record.paper_code,
                     
                     # Individual assessment fields
                     ind_max_marks=int(record.maximum_mark) if record.maximum_mark else None,
@@ -364,6 +362,15 @@ def migrate_data():
                     comb_pass_marks=int(record.pass_mark) if record.pass_mark else None,
                     comb_marks_obtained=marks_obtained,
                     comb_final_marks_obtained=marks_obtained,
+                    
+                    # Course summary fields
+                    course_max_marks=int(record.maximum_mark) if record.maximum_mark else None,
+                    course_marks_obtained=marks_obtained,
+                    course_final_marks_obtained=marks_obtained,
+                    
+                    # Result status
+                    subject_result=record.subject_result,
+                    grade=record.grade,
                 )
                 
                 # Mark as migrated

@@ -1,8 +1,9 @@
 from django.contrib import admin
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentAssessment,
-    LLBExamCenterMapping, LLBExamSchedule, LLBYearRegistration, LLBExamRegistration
+    LLBCourseStructure, CommonCourseStructure, LLBExam, LLBStudentExamResult, 
+    LLBStudentCourseAssessment, LLBExamCenterMapping, 
+    LLBExamSchedule, LLBYearRegistration, LLBExamRegistration
 )
 
 @admin.register(LLBCourse)
@@ -33,6 +34,12 @@ class LLBCourseStructureAdmin(admin.ModelAdmin):
     list_display = ('name', 'full_marks', 'pass_marks')
     search_fields = ('name',)
 
+@admin.register(CommonCourseStructure)
+class CommonCourseStructureAdmin(admin.ModelAdmin):
+    list_display = ('name', 'course_code', 'full_marks', 'cia_max_marks', 'ese_max_marks')
+    search_fields = ('name', 'course_code')
+    list_filter = ('course_code',)
+
 @admin.register(LLBExam)
 class LLBExamAdmin(admin.ModelAdmin):
     list_display = ('name', 'semester', 'session', 'batch', 'exam_month_year', 'publication_date')
@@ -40,24 +47,20 @@ class LLBExamAdmin(admin.ModelAdmin):
     search_fields = ('name', 'session')
     raw_id_fields = ('batch',)
 
-class LLBStudentAssessmentInline(admin.TabularInline):
-    model = LLBStudentAssessment
-    extra = 1
-
 @admin.register(LLBStudentExamResult)
 class LLBStudentExamResultAdmin(admin.ModelAdmin):
-    list_display = ('student', 'exam', 'total_marks', 'result_status', 'exam_center')
+    list_display = ('student', 'exam', 'total_marks', 'result_status')
     list_filter = ('exam', 'result_status')
     search_fields = ('student__roll_no', 'student__user__first_name', 'student__user__last_name')
     raw_id_fields = ('student', 'exam')
-    inlines = [LLBStudentAssessmentInline]
 
-@admin.register(LLBStudentAssessment)
-class LLBStudentAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('exam_result', 'subject', 'paper_code', 'marks_obtained')
-    list_filter = ('subject', 'paper_code')
-    search_fields = ('subject__name', 'paper_code')
-    raw_id_fields = ('exam_result', 'subject')
+@admin.register(LLBStudentCourseAssessment)
+class LLBStudentCourseAssessmentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'course', 'course_structure', 'label', 'semester', 'ind_marks_obtained', 'ind_is_pass')
+    list_filter = ('label', 'semester', 'session', 'batch', 'exam_type')
+    search_fields = ('student__roll_no', 'student__registration_no', 'course_structure__name', 'course_code')
+    raw_id_fields = ('student', 'exam_result', 'course', 'course_structure', 'batch')
+    list_select_related = ('student', 'exam_result', 'course', 'course_structure', 'batch')
 
 @admin.register(LLBExamCenterMapping)
 class LLBExamCenterMappingAdmin(admin.ModelAdmin):
