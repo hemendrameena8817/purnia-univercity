@@ -1,4 +1,4 @@
-def generate_pg_admit_card_pdf(student, exam):
+def generate_pg_admit_card_pdf(student, exam, registration=None):
     from weasyprint import HTML
     import os
     import logging
@@ -136,19 +136,20 @@ def generate_pg_admit_card_pdf(student, exam):
             exam_center = mapping.center
 
     # ── Exam Registration ──────────────────────────────────────────────────────
-    # Prefer registration matching the exam's session, then fall back to the
-    # most recent REGISTERED record (view already guarantees one exists).
-    registration = PGExamRegistration.objects.filter(
-        student=student,
-        status='REGISTERED',
-        session=getattr(exam, 'session', None),
-    ).order_by('-created_at').first()
-
     if not registration:
+        # Prefer registration matching the exam's session, then fall back to the
+        # most recent REGISTERED record (view already guarantees one exists).
         registration = PGExamRegistration.objects.filter(
             student=student,
             status='REGISTERED',
+            session=getattr(exam, 'session', None),
         ).order_by('-created_at').first()
+
+        if not registration:
+            registration = PGExamRegistration.objects.filter(
+                student=student,
+                status='REGISTERED',
+            ).order_by('-created_at').first()
 
     exam_type = registration.exam_type if registration else "REGULAR"
 
