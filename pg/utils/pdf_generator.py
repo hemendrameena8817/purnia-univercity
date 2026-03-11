@@ -502,14 +502,36 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
         seen_norms = set()
 
         if dept_obj is not None:
+            # Derive sessions and semesters from actual registrations in this dept
+            dept_sessions = list(set(r.session for r in dept_regs if r.session))
+            if not dept_sessions:
+                dept_sessions = [exam.session] if exam.session else []
+
+            dept_sems = list(set(r.sem for r in dept_regs if r.sem is not None))
+            dept_sem_variants = set()
+            for s_int in dept_sems:
+                s_str = str(s_int)
+                roman_s = roman_map_inv.get(s_str, "")
+                variants = [s_str, roman_s]
+                if s_str == '1': variants.extend(['1ST', 'FIRST'])
+                elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+                elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+                elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+                for v in variants:
+                    if v:
+                        v_up = v.upper()
+                        dept_sem_variants.add(v_up)
+                        dept_sem_variants.add(f"SEM-{v_up}")
+                        dept_sem_variants.add(f"SEM {v_up}")
+                        dept_sem_variants.add(f"SEMESTER-{v_up}")
+                        dept_sem_variants.add(f"SEMESTER {v_up}")
+
             # Derive columns from actual ESE assessments of this dept's students.
-            # NOTE: do NOT filter by session here — PGExam.session and
-            # PGStudentCourseAssessment.session can differ (e.g. 2025-26 vs 2024-25).
             ese_rows = PGStudentCourseAssessment.objects.filter(
                 student_id__in=stu_ids,
                 label__iregex=r'^ESE',
-                semester__in=sem_variants,
-                session=exam.session,
+                semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
+                session__in=dept_sessions,
             ).values('course_code', 'course_name').distinct()
 
             for row in ese_rows:
@@ -560,8 +582,8 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
         asmts = PGStudentCourseAssessment.objects.filter(
             student_id__in=stu_ids,
             label__iregex=r'^(ESE|CIA)',
-            session=exam.session,
-            semester__in=sem_variants,
+            session__in=dept_sessions,
+            semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
         ).values('student_id', 'course_code', 'course_name', 'label', 'semester', 'session')
 
         sn = {}   # (student_id, subj_id) -> best display name
@@ -618,13 +640,32 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
             if reg.exam_type == 'REGULAR':
                 stu_sids = [s['id'] for s in subjects]
             else:
+                # Derive student-specific variants for more accuracy
+                stu_sem_variants = set()
+                if reg.sem:
+                    s_int = reg.sem
+                    s_str = str(s_int)
+                    r_s = roman_map_inv.get(s_str, "")
+                    variants = [s_str, r_s]
+                    if s_str == '1': variants.extend(['1ST', 'FIRST'])
+                    elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+                    elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+                    elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+                    for v in variants:
+                        if v:
+                            v_u = v.upper()
+                            stu_sem_variants.add(v_u)
+                            stu_sem_variants.add(f"SEM-{v_u}")
+                            stu_sem_variants.add(f"SEM {v_u}")
+                            stu_sem_variants.add(f"SEMESTER-{v_u}")
+                            stu_sem_variants.add(f"SEMESTER {v_u}")
+
                 sa = PGStudentCourseAssessment.objects.filter(
-                    student=stu, semester__in=sem_variants, label__icontains='ESE', session=exam.session
+                    student=stu, 
+                    semester__in=list(stu_sem_variants) if stu_sem_variants else sem_variants, 
+                    label__icontains='ESE', 
+                    session=reg.session if reg.session else exam.session
                 )
-                if not sa.exists():
-                    sa = PGStudentCourseAssessment.objects.filter(
-                        student=stu, semester=reg.sem, label__icontains='ESE', session=exam.session
-                    )
                 stu_sids = []
                 for a in sa:
                     ac = (a.course_code or "").upper()
@@ -847,14 +888,39 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None, registratio
 
     # ── Pre-fetch ESE codes for all students in one query (Avoid N+1) ────────
     student_ids = [r.student_id for r in regs_list]
-    # Use sem_variants (text list like ['3RD', '3TH', ...]) NOT sem_variants_int (integers)
-    # because PGStudentCourseAssessment.semester stores text values like '3RD'
+    
+    # Derive sessions and semesters from actual registrations
+    distinct_sessions = list(set(r.session for r in regs_list if r.session))
+    if not distinct_sessions:
+        distinct_sessions = [exam.session] if exam.session else []
+
+    distinct_sems = list(set(r.sem for r in regs_list if r.sem is not None))
+    distinct_sem_variants = set()
+    for s_int in distinct_sems:
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                distinct_sem_variants.add(v_up)
+                distinct_sem_variants.add(f"SEM-{v_up}")
+                distinct_sem_variants.add(f"SEM {v_up}")
+                distinct_sem_variants.add(f"SEMESTER-{v_up}")
+                distinct_sem_variants.add(f"SEMESTER {v_up}")
+
     ese_filter = dict(
         student_id__in=student_ids,
         label__iregex=r'^ESE',
-        session=exam.session,
+        session__in=distinct_sessions,
     )
-    if sem_variants:
+    if distinct_sem_variants:
+        ese_filter['semester__in'] = list(distinct_sem_variants)
+    elif sem_variants:
         ese_filter['semester__in'] = sem_variants
     assessments = PGStudentCourseAssessment.objects.filter(**ese_filter).values('student_id', 'course_code', 'course_name')
 

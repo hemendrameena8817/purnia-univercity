@@ -12,8 +12,16 @@ from pg.models import (
 )
 import re as _re
 import logging
-
 logger = logging.getLogger(__name__)
+
+# ── Common Semester/Roman Mappings ───────────────────────────────────────
+_roman_str_to_int = {
+    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+}
+roman_to_arabic_map = {k: str(v) for k, v in _roman_str_to_int.items()}
+roman_to_arabic_map.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
+roman_map_inv = {v: k for k, v in roman_to_arabic_map.items()}
 
 def normalize_code(code):
     if not code:
@@ -23,19 +31,14 @@ def normalize_code(code):
     if m:
         code = f"{m.group(1)}-{m.group(2)}"
     
-    roman_to_arabic = {
-        'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5',
-        'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10'
-    }
-    
     if "-" in code:
         parts = code.rsplit("-", 1)
         prefix, suffix = parts[0], parts[1]
-        if suffix in roman_to_arabic:
-            return f"{prefix}-{roman_to_arabic[suffix]}"
+        if suffix in roman_to_arabic_map:
+            return f"{prefix}-{roman_to_arabic_map[suffix]}"
         return code
-    if code in roman_to_arabic:
-        return roman_to_arabic[code]
+    if code in roman_to_arabic_map:
+        return roman_to_arabic_map[code]
     return code
 
 def get_suffix(code):
@@ -60,15 +63,6 @@ def generate_pg_roll_sheet_excel(exam, college, department=None, registration_no
     wb = openpyxl.Workbook()
     # Remove default sheet
     wb.remove(wb.active)
-
-    # ── Semester number variants ─────────────────────────────────────────────
-    _roman_str_to_int = {
-        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
-    }
-    roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
-    roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
-    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
 
     ey = str(exam.year) if exam.year else ""
     sem_variants_int = set()
@@ -160,11 +154,35 @@ def generate_pg_roll_sheet_excel(exam, college, department=None, registration_no
         norm_to_id = {}
 
         if dept_obj:
+            # Derive sessions and semesters from actual registrations in this dept
+            dept_sessions = list(set(r.session for r in dept_regs if r.session))
+            if not dept_sessions:
+                dept_sessions = [exam.session] if exam.session else []
+
+            dept_sems = list(set(r.sem for r in dept_regs if r.sem is not None))
+            dept_sem_variants = set()
+            for s_int in dept_sems:
+                s_str = str(s_int)
+                r_s = roman_map_inv.get(s_str, "")
+                variants = [s_str, r_s]
+                if s_str == '1': variants.extend(['1ST', 'FIRST'])
+                elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+                elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+                elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+                for v in variants:
+                    if v:
+                        v_u = v.upper()
+                        dept_sem_variants.add(v_u)
+                        dept_sem_variants.add(f"SEM-{v_u}")
+                        dept_sem_variants.add(f"SEM {v_u}")
+                        dept_sem_variants.add(f"SEMESTER-{v_u}")
+                        dept_sem_variants.add(f"SEMESTER {v_u}")
+
             ese_rows = PGStudentCourseAssessment.objects.filter(
                 student_id__in=stu_ids, 
                 label__iregex=r'^ESE', 
-                semester__in=sem_variants,
-                session=exam.session
+                semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
+                session__in=dept_sessions
             ).values('course_code', 'course_name').distinct()
             for row in ese_rows:
                 nc = normalize_code(row['course_code'])
@@ -254,8 +272,31 @@ def generate_pg_roll_sheet_excel(exam, college, department=None, registration_no
             ws.cell(row=curr_row, column=4, value=stu.get_full_name()).border = thin_border
 
             # Marks/Subject Registration check
+            # For each student, use their specific registration's session and sem variants
+            stu_sem_variants = set()
+            if reg.sem:
+                s_int = reg.sem
+                s_str = str(s_int)
+                r_s = roman_map_inv.get(s_str, "")
+                variants = [s_str, r_s]
+                if s_str == '1': variants.extend(['1ST', 'FIRST'])
+                elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+                elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+                elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+                for v in variants:
+                    if v:
+                        v_u = v.upper()
+                        stu_sem_variants.add(v_u)
+                        stu_sem_variants.add(f"SEM-{v_u}")
+                        stu_sem_variants.add(f"SEM {v_u}")
+                        stu_sem_variants.add(f"SEMESTER-{v_u}")
+                        stu_sem_variants.add(f"SEMESTER {v_u}")
+
             stu_assessments = PGStudentCourseAssessment.objects.filter(
-                student=stu, semester__in=sem_variants, label__icontains='ESE', session=exam.session
+                student=stu, 
+                semester__in=list(stu_sem_variants) if stu_sem_variants else sem_variants, 
+                label__icontains='ESE', 
+                session=reg.session if reg.session else exam.session
             )
             stu_codes = set()
             for a in stu_assessments:
@@ -289,10 +330,8 @@ def generate_pg_tsi_excel(exam, college, department=None, registration_no=None):
     Generates and returns TSI (Tabulation Sheet I) Excel for PG.
     """
     wb = openpyxl.Workbook()
-    wb.remove(wb.active)
-
-    _roman_str_to_int = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 }
-    roman_map_inv = {str(v): k for k, v in _roman_str_to_int.items()}
+    ws_base = wb.active if wb.active else wb.create_sheet()
+    wb.remove(ws_base)
 
     ey = str(exam.year) if exam.year else ""
     sem_variants_int = set()
@@ -345,12 +384,36 @@ def generate_pg_tsi_excel(exam, college, department=None, registration_no=None):
         dept_regs = regs_qs.filter(student__department=dept)
         stu_ids = [r.student_id for r in dept_regs]
 
+        # Derive sessions and semesters from registrations in this dept
+        dept_sessions = list(set(r.session for r in dept_regs if r.session))
+        if not dept_sessions:
+            dept_sessions = [exam.session] if exam.session else []
+
+        dept_sems = list(set(r.sem for r in dept_regs if r.sem is not None))
+        dept_sem_variants = set()
+        for s_int in dept_sems:
+            s_str = str(s_int)
+            r_s = roman_map_inv.get(s_str, "")
+            variants = [s_str, r_s]
+            if s_str == '1': variants.extend(['1ST', 'FIRST'])
+            elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+            elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+            elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+            for v in variants:
+                if v:
+                    v_u = v.upper()
+                    dept_sem_variants.add(v_u)
+                    dept_sem_variants.add(f"SEM-{v_u}")
+                    dept_sem_variants.add(f"SEM {v_u}")
+                    dept_sem_variants.add(f"SEMESTER-{v_u}")
+                    dept_sem_variants.add(f"SEMESTER {v_u}")
+
         # Get relevant subjects for this department/semester
         subjects_qs = PGStudentCourseAssessment.objects.filter(
             student_id__in=stu_ids, 
-            semester__in=sem_variants, 
+            semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants, 
             label__iregex=r'^(ESE|CIA)',
-            session=exam.session
+            session__in=dept_sessions
         ).values('course_code', 'course_name').distinct()
         
         subjects = []
@@ -405,8 +468,12 @@ def generate_pg_tsi_excel(exam, college, department=None, registration_no=None):
             ws.cell(row=h_row, column=c_idx + i, value=col).font = Font(bold=True)
 
         # ── Data Processing ───────────────────────────────────────────────────
+        # For each student, use their specific registration contexts if possible, 
+        # but for bulk load here we use the union of dept metadata
         assessments = PGStudentCourseAssessment.objects.filter(
-            student_id__in=stu_ids, semester__in=sem_variants, session=exam.session
+            student_id__in=stu_ids, 
+            semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants, 
+            session__in=dept_sessions
         )
         asmt_map = {} # (student_id, course_code) -> {'CIA': marks, 'ESE': marks}
         for a in assessments:
