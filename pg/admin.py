@@ -1094,7 +1094,7 @@ class PGGroupAdmin(admin.ModelAdmin):
 
 @admin.register(PGExamSchedule)
 class PGExamScheduleAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+    list_display = ('exam', 'group', 'common_course_structure', 'exam_date','session','semester', 'exam_time', 'sitting')
     list_filter = ('exam', 'group', 'exam_date', 'sitting')
     search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
     ordering = ('exam_date', 'exam_time')
