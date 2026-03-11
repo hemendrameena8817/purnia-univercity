@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 # Generate Attendance Sheet for one student
-# python manage.py generate_pg_attendance_sheets --exam-uid <UID> --registration-no 2005B160035
+# python manage.py generate_pg_attendance_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd 
+# python manage.py generate_pg_attendance_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd --registration-no 2005B160035
 
     #Political Science
 # python manage.py generate_pg_attendance_sheets \
@@ -86,40 +87,11 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Generating attendance sheets for Exam: {exam.name} ({exam.session})")
 
-        # ── Semester variants extraction (aligned with pdf_generator.py) ────────
-        _roman_str_to_int = {
-            'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-            'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
-        }
-        ey = str(exam.year) if exam.year else ""
-        sem_variants_int = set()
-        if ey.isdigit():
-            sem_variants_int.add(int(ey))
-        if exam.name:
-            roman_m = re.search(r'\b(?:SEM|SEMESTER)[-\s]*(I{1,3}|IV|VI{0,3}|IX|X)\b', exam.name, re.IGNORECASE)
-            if roman_m:
-                rn = roman_m.group(1).upper()
-                if rn in _roman_str_to_int:
-                    sem_variants_int.add(_roman_str_to_int[rn])
-            digit_m = re.search(r'(?<!\d)([1-8])(?!\d)', exam.name)
-            if digit_m:
-                sem_variants_int.add(int(digit_m.group(1)))
-        
-        sem_variants_int = list(sem_variants_int)
-        is_year_range = bool(re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
-
         # ── Build Registration Filters ──────────────────────────────────────────
         filters = {
+            'exam': exam,
             'status': 'REGISTERED',
         }
-        
-        if sem_variants_int:
-            # Filter primarily by semester. 
-            # We don't strictly match session because registrations for the same exam
-            # might have different sessions (e.g. 2024-25 vs 2025-26).
-            filters['sem__in'] = sem_variants_int
-        elif is_year_range:
-            filters['session'] = exam.session
         
         if registration_no:
             filters['student__registration_no'] = registration_no
