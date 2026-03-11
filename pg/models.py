@@ -556,8 +556,6 @@ class PGGroup(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255, null=True, blank=True)
     department = models.ManyToManyField('PGDepartment',related_name='pg_groups')
-    session = models.CharField(max_length=20, null=True, blank=True)
-    semester = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -591,6 +589,8 @@ class PGExamSchedule(models.Model):
         null=True,
         blank=True
     )
+    session = models.CharField(max_length=20, null=True, blank=True)
+    semester = models.IntegerField(null=True, blank=True)
     exam_date = models.DateField(null=True, blank=True)
     exam_time = models.CharField(max_length=100, null=True, blank=True)
     sitting = models.CharField(max_length=50, null=True, blank=True)
