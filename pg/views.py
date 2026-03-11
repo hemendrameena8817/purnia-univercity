@@ -764,7 +764,7 @@ class PGAdmitCardPDFView(APIView):
         exam = schedule.exam
 
         # ── Generate PDF ───────────────────────────────────────────────────────
-        pdf_content = generate_pg_admit_card_pdf(student, exam)
+        pdf_content = generate_pg_admit_card_pdf(student, exam, registration=registration)
 
         if not pdf_content:
             return Response(
