@@ -401,6 +401,7 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
 
     # ── Base registrations ───────────────────────────────────────────────────
     regs_qs = PGExamRegistration.objects.filter(
+        exam=exam,
         student__college=college,
         status='REGISTERED',
     )
@@ -786,6 +787,7 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None, registratio
 
     # ── Fetch registrations ──────────────────────────────────────────────────
     regs_qs = PGExamRegistration.objects.filter(
+        exam=exam,
         student__college=college,
         status='REGISTERED',
     )
