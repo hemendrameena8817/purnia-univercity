@@ -1,7 +1,19 @@
+import re as _re
+import logging
+logger = logging.getLogger(__name__)
+
+# ── Common Semester/Roman Mappings ───────────────────────────────────────
+_roman_str_to_int = {
+    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+}
+roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
+roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
+roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
+
 def generate_pg_admit_card_pdf(student, exam, registration=None):
     from weasyprint import HTML
     import os
-    import logging
     from django.conf import settings
     from django.template.loader import get_template
     from pg.models import PGExamCenterMapping, PGExamSchedule, PGExamRegistration, PGStudentCourseAssessment
@@ -9,7 +21,6 @@ def generate_pg_admit_card_pdf(student, exam, registration=None):
     import qrcode
     import base64
     from io import BytesIO
-    logger = logging.getLogger(__name__)
 
     def _get_base64_image(image_field_or_path):
         """
@@ -188,20 +199,34 @@ def generate_pg_admit_card_pdf(student, exam, registration=None):
                 schedule_by_course_type[ccs.course_type.upper()] = s
 
     # ── Get subjects from student's ESE assessments ────────────────────────────
-    # Convert registration semester (int) to text like '3RD'
-    _SUFFIXES = {1: 'ST', 2: 'ND', 3: 'RD'}
-    sem_text = None
+    # Standardized Semester Label Mapping (bridging int vs string labels)
+    sem_variants = set()
     if registration and registration.sem:
-        sv = registration.sem
-        sem_text = f"{sv}{_SUFFIXES.get(sv, 'TH')}" if isinstance(sv, int) else str(sv).upper()
+        s_int = registration.sem
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                sem_variants.add(v_up)
+                sem_variants.add(f"SEM-{v_up}")
+                sem_variants.add(f"SEM {v_up}")
+                sem_variants.add(f"SEMESTER-{v_up}")
+                sem_variants.add(f"SEMESTER {v_up}")
 
     assessment_filter = dict(
         student=student,
         label__icontains='ESE',
         session=registration.session if registration else exam.session,
     )
-    if sem_text:
-        assessment_filter['semester'] = sem_text
+    if sem_variants:
+        assessment_filter['semester__in'] = list(sem_variants)
     if exam_type in ['BACK', 'IMPROVEMENT']:
         assessment_filter['exam_type__iexact'] = exam_type
 
@@ -323,20 +348,6 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
     )
     from pup_umis_backend.utils.file_utils import image_to_base64
     import os
-    import re as _re
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    # ── Semester number variants ─────────────────────────────────────────────
-    _roman_str_to_int = {
-        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
-    }
-    roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
-    roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
-    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
-
     ey = str(exam.year) if exam.year else ""
     sem_variants_int = set()
 
@@ -361,19 +372,27 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
             sem_variants_int.add(int(digit_m.group(1)))
 
     sem_variants_int = list(sem_variants_int)
-    logger.info(f"Roll sheet sem filter: exam.year={exam.year}, name={exam.name}, sem_variants_int={sem_variants_int}")
-
-    # sem_variants: string forms used to filter PGStudentCourseAssessment.semester
-    ey_for_str = str(list(sem_variants_int)[0]) if sem_variants_int else ey
-    roman_ey = roman_map_inv.get(ey_for_str, "")
-    sem_variants = [
-        ey_for_str,
-        f"{ey_for_str}ST", f"{ey_for_str}ND", f"{ey_for_str}RD", f"{ey_for_str}TH",
-        f"Semester-{roman_ey}", f"Semester {roman_ey}",
-        f"Semester-{ey_for_str}", f"Semester {ey_for_str}",
-        roman_ey,
-    ]
-    sem_variants = list(set(v.upper() for v in sem_variants if v))
+    sem_variants = set()
+    for s_int in sem_variants_int:
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                sem_variants.add(v_up)
+                sem_variants.add(f"SEM-{v_up}")
+                sem_variants.add(f"SEM {v_up}")
+                sem_variants.add(f"SEMESTER-{v_up}")
+                sem_variants.add(f"SEMESTER {v_up}")
+    
+    sem_variants = list(sem_variants)
+    logger.info(f"Roll sheet sem filter: exam.year={exam.year}, name={exam.name}, sem_variants_int={sem_variants_int}, sem_variants={sem_variants}")
 
     # Whether exam.session is a real session year-range like "2025-26"
     _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
@@ -490,6 +509,7 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
                 student_id__in=stu_ids,
                 label__iregex=r'^ESE',
                 semester__in=sem_variants,
+                session=exam.session,
             ).values('course_code', 'course_name').distinct()
 
             for row in ese_rows:
@@ -540,6 +560,8 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
         asmts = PGStudentCourseAssessment.objects.filter(
             student_id__in=stu_ids,
             label__iregex=r'^(ESE|CIA)',
+            session=exam.session,
+            semester__in=sem_variants,
         ).values('student_id', 'course_code', 'course_name', 'label', 'semester', 'session')
 
         sn = {}   # (student_id, subj_id) -> best display name
@@ -597,11 +619,11 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=N
                 stu_sids = [s['id'] for s in subjects]
             else:
                 sa = PGStudentCourseAssessment.objects.filter(
-                    student=stu, semester__in=sem_variants, label__icontains='ESE'
+                    student=stu, semester__in=sem_variants, label__icontains='ESE', session=exam.session
                 )
                 if not sa.exists():
                     sa = PGStudentCourseAssessment.objects.filter(
-                        student=stu, semester=reg.sem, label__icontains='ESE'
+                        student=stu, semester=reg.sem, label__icontains='ESE', session=exam.session
                     )
                 stu_sids = []
                 for a in sa:
@@ -746,15 +768,6 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None, registratio
 
     logger = logging.getLogger(__name__)
 
-    # ── Semester variants (same logic as roll sheet) ─────────────────────────
-    _roman_str_to_int = {
-        'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-        'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
-    }
-    roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
-    roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
-    roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
-
     ey = str(exam.year) if exam.year else ""
     sem_variants_int = set()
     if ey.isdigit():
@@ -769,18 +782,26 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None, registratio
         if digit_m:
             sem_variants_int.add(int(digit_m.group(1)))
     sem_variants_int = list(sem_variants_int)
-
-    # sem_variants: text forms used to filter PGStudentCourseAssessment.semester
-    ey_for_str = str(sem_variants_int[0]) if sem_variants_int else ey
-    roman_ey = roman_map_inv.get(ey_for_str, "")
-    sem_variants = [
-        ey_for_str,
-        f"{ey_for_str}ST", f"{ey_for_str}ND", f"{ey_for_str}RD", f"{ey_for_str}TH",
-        f"Semester-{roman_ey}", f"Semester {roman_ey}",
-        f"Semester-{ey_for_str}", f"Semester {ey_for_str}",
-        roman_ey,
-    ]
-    sem_variants = list(set(v.upper() for v in sem_variants if v))
+    sem_variants = set()
+    for s_int in sem_variants_int:
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                sem_variants.add(v_up)
+                sem_variants.add(f"SEM-{v_up}")
+                sem_variants.add(f"SEM {v_up}")
+                sem_variants.add(f"SEMESTER-{v_up}")
+                sem_variants.add(f"SEMESTER {v_up}")
+    
+    sem_variants = list(sem_variants)
     logger.info(f"[ATTENDANCE] sem_variants_int={sem_variants_int}, sem_variants={sem_variants}")
 
     _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
@@ -831,6 +852,7 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None, registratio
     ese_filter = dict(
         student_id__in=student_ids,
         label__iregex=r'^ESE',
+        session=exam.session,
     )
     if sem_variants:
         ese_filter['semester__in'] = sem_variants
