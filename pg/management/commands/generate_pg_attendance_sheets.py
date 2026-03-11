@@ -15,8 +15,7 @@ logger = logging.getLogger(__name__)
 # Generate Attendance Sheet for one student
 # python manage.py generate_pg_attendance_sheets --exam-uid <UID> --registration-no 2005B160035
 
-
-
+    #Political Science
 # python manage.py generate_pg_attendance_sheets \
 #   --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48 \
 #   --college-uid \
