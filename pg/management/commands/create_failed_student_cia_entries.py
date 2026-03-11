@@ -16,11 +16,12 @@ Arguments:
 
 Usage:
 python manage.py create_failed_student_cia_entries \
-    --batch 2024-26 \
-    --source-session 2024-25 \
+    --batch 2023-25 \
+    --source-session 2023-24 \
     --source-semester 1 \
     --target-session 2025-26 \
     --target-semester 1 \
+    --registration-no  1809-24352/  
     --result-status PENDING \
     --dry-run
 
@@ -30,7 +31,8 @@ python manage.py create_failed_student_cia_entries \
     --source-semester 1 \
     --target-session 2025-26 \
     --target-semester 1 \   
-    --result-status PROMOTED \
+    --result-status PENDING \
+    --registration-no  1809-24352 \
     --execute
 """
 from django.core.management.base import BaseCommand

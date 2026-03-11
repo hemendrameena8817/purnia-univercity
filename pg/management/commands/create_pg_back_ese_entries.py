@@ -7,7 +7,7 @@ from pg.services.create_exam_registration_from_result import SEMESTER_STR_TO_INT
 Usage:
     # Dry Run
     python manage.py create_pg_back_ese_entries \
-        --batch 2024-26 \
+        --batch 2023-25 \
         --source-session 2024-25 \
         --source-semester 1 \
         --target-session 2025-26 \
@@ -16,10 +16,11 @@ Usage:
 
     # Execute
     python manage.py create_pg_back_ese_entries \
-        --batch 2024-26 \
-        --source-session 2024-25 \
+        --batch 2023-25 \
+        --source-session 2023-24 \
         --source-semester 1 \
         --target-session 2025-26 \
+            --registration-no  2032B160010\
         --target-semester 1 \
         --execute
 """
