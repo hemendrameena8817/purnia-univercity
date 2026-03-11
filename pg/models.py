@@ -589,6 +589,8 @@ class PGExamSchedule(models.Model):
         null=True,
         blank=True
     )
+    session = models.CharField(max_length=20, null=True, blank=True)
+    semester = models.IntegerField(null=True, blank=True)
     exam_date = models.DateField(null=True, blank=True)
     exam_time = models.CharField(max_length=100, null=True, blank=True)
     sitting = models.CharField(max_length=50, null=True, blank=True)

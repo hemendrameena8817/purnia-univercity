@@ -736,7 +736,6 @@ class PGAdmitCardPDFView(APIView):
         registration = PGExamRegistration.objects.filter(
             student=student,
             status='REGISTERED',
-            sem=3
         ).order_by('-created_at').first()
 
         if not registration:
@@ -751,7 +750,9 @@ class PGAdmitCardPDFView(APIView):
 
         schedule = PGExamSchedule.objects.filter(
             group__department=student.department,
-            exam_date__gte=cutoff_date          # upcoming or recently started
+            exam_date__gte=cutoff_date,          # upcoming or recently started
+            session=registration.session,
+            semester=registration.sem,
         ).select_related('exam').order_by('-exam__created_at').first()
 
         if not schedule or not schedule.exam:
@@ -763,7 +764,7 @@ class PGAdmitCardPDFView(APIView):
         exam = schedule.exam
 
         # ── Generate PDF ───────────────────────────────────────────────────────
-        pdf_content = generate_pg_admit_card_pdf(student, exam)
+        pdf_content = generate_pg_admit_card_pdf(student, exam, registration=registration)
 
         if not pdf_content:
             return Response(
