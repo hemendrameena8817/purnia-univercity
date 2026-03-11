@@ -19,7 +19,8 @@ from .registration_serializers import (
     CourseSelectionRequestSerializer,
     RegisteredCourseSerializer,
     RegistrationResponseSerializer,
-    SubmitRegistrationSerializer
+    SubmitRegistrationSerializer,
+    UGExamRegistrationSerializer
 )
 
 __all__ = [
@@ -38,5 +39,6 @@ __all__ = [
     'CourseSelectionRequestSerializer',
     'RegisteredCourseSerializer',
     'RegistrationResponseSerializer',
-    'SubmitRegistrationSerializer'
+    'SubmitRegistrationSerializer',
+    'UGExamRegistrationSerializer'
 ]

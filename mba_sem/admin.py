@@ -106,12 +106,12 @@ class StudentCourseAssessmentAdmin(admin.ModelAdmin):
         "created_at",
     )
 
-    # list_editable = (
-    #     "ind_marks_obtained",
-    #     "ind_is_absent",
-    #     "ind_is_pass",
-    #     "sgpa",
-    # )
+    list_editable = (
+        "ind_marks_obtained",
+        "ind_is_absent",
+        "ind_is_pass",
+        "sgpa",
+    )
 
     list_filter = (
         "semester",

@@ -666,7 +666,8 @@ class PGRegistrationCardPDFView(APIView):
         # ── Find Latest REGISTERED Registration ──────────────────────────────
         registration = PGExamRegistration.objects.defer('admission_receipt').filter(
             student=student,
-            status='REGISTERED'
+            status='REGISTERED',
+            sem=1
         ).select_related('student', 'student__college', 'student__department').order_by('-created_at').first()
 
         if not registration:
@@ -734,7 +735,8 @@ class PGAdmitCardPDFView(APIView):
         # ── Check Registration Status ──────────────────────────────────────────
         registration = PGExamRegistration.objects.filter(
             student=student,
-            status='REGISTERED'
+            status='REGISTERED',
+            sem=3
         ).order_by('-created_at').first()
 
         if not registration:
@@ -745,7 +747,7 @@ class PGAdmitCardPDFView(APIView):
 
         # ── Auto-resolve exam via PGExamSchedule ──────────────────────────────
         # Include exams from last 30 days so recently-started exams still work
-        cutoff_date = tz.now().date() - timedelta(days=30)
+        cutoff_date = tz.now().date() - timedelta(days=60)
 
         schedule = PGExamSchedule.objects.filter(
             group__department=student.department,
@@ -806,7 +808,7 @@ class PGPaymentInfoView(APIView):
             except PGExamRegistration.DoesNotExist:
                 return Response({'error': 'Registration not found.'}, status=status.HTTP_404_NOT_FOUND)
         else:
-            registration = PGExamRegistration.objects.filter(student=student).order_by('-sem', '-created_at').first()
+            registration = PGExamRegistration.objects.filter(student=student).order_by('-created_at', '-sem').first()
             if not registration:
                 return Response({'error': 'No exam registration found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -877,7 +879,7 @@ class PGInitiatePaymentView(APIView):
                 prof = PGStudentProfile.objects.get(registration_no=registration_uid)
                 registration = PGExamRegistration.objects.filter(
                     student=prof
-                ).order_by('-sem', '-created_at').first()
+                ).order_by('-created_at', '-sem').first()
             except PGStudentProfile.DoesNotExist:
                 pass
 
@@ -1001,11 +1003,12 @@ class PGPaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             uid = str(payment.registration.uid)
             redirect_url = (
-                f"{frontend_url}/pg-registration/"
+                f"{frontend_url}/pg-exam-registration/pg-examformback-1st"
                 f"?uid={uid}"
                 f"&payment_status={payment.payment_status.lower()}"
                 f"&order_id={order_id}"
             )
+            print(redirect_url,"kshfskd sdkgaw idusifueh")
             return django_redirect(redirect_url)
 
         except Exception as e:
@@ -1053,7 +1056,7 @@ class PGStudentUploadView(APIView):
             registration = (
                 PGExamRegistration.objects
                 .filter(student=student)
-                .order_by('-sem', '-created_at')
+                .order_by('-created_at', '-sem')
                 .first()
             )
             if not registration:
@@ -1314,47 +1317,28 @@ class PGStudentAttendanceListView(APIView):
                 "total": 0
             }, status=status.HTTP_200_OK)
 
-        # ── Step 3: Find currently active slot based on exam_time ────────────
-        # exam_time format: "10:00AM-01:00PM" or "10:00 AM - 01:00 PM"
-        def parse_exam_time_window(exam_time_str):
-            """Parse 'HH:MMAM-HH:MMPM' into (start_time, end_time)."""
-            try:
-                # Normalize: remove spaces around dash, uppercase
-                cleaned = exam_time_str.replace(' ', '').upper()
-                parts = cleaned.split('-')
-                if len(parts) < 2:
-                    return None, None
-                # Rejoin last two parts if split produced 3 (e.g. 10:00AM-01:00PM → fine)
-                start_str = parts[0]
-                end_str = '-'.join(parts[1:])
-                start = datetime.strptime(start_str, '%I:%M%p').time()
-                end = datetime.strptime(end_str, '%I:%M%p').time()
-                return start, end
-            except Exception:
-                return None, None
+        # ── Step 3: If any exam is scheduled today, attendance is open for
+        #           BOTH shifts until 8:00 PM (regardless of exact exam_time) ──
+        CUTOFF_HOUR = 20  # 8 PM
 
-        active_schedules = []
-        active_exam_time = None
-        for sched in todays_schedules:
-            if not sched.exam_time:
-                continue
-            start_t, end_t = parse_exam_time_window(sched.exam_time)
-            if start_t and end_t:
-                if start_t <= current_time <= end_t:
-                    active_schedules.append(sched)
-                    active_exam_time = sched.exam_time
-
-        if not active_schedules:
-            # Return today's scheduled slots for info but mark not open
+        if current_time.hour >= CUTOFF_HOUR:
             slot_info = list(
                 todays_schedules.values_list('exam_time', flat=True).distinct()
             )
             return Response({
                 "attendance_open": False,
-                "message": f"No active slot right now. Today's slots: {slot_info}",
+                "message": "Attendance window has closed for today (after 8:00 PM).",
                 "students": [],
                 "total": 0
             }, status=status.HTTP_200_OK)
+
+        # All today's schedules are considered active (both shifts open till 8 PM)
+        active_schedules = list(todays_schedules)
+        active_exam_time = (
+            ", ".join(
+                todays_schedules.values_list('exam_time', flat=True).distinct()
+            )
+        )
 
         # ── Step 4: Extract exam and paper codes from active schedules ───────
         active_exam = active_schedules[0].exam

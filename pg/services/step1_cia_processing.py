@@ -17,7 +17,7 @@ Usage Examples:
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches --dry-run
     
     # Production run (saves to database)
-    python pg/services/run_step1_cia_processing.py --semester 3RD --session 2025-26
+    python pg/services/run_step1_cia_processing.py --semester 3RD --session 2025-26 --dry-run
     
     # Back paper production run
     python pg/services/run_step1_cia_processing.py --batch 2024-26 --semester 1ST --session 2024-25 --include-all-batches

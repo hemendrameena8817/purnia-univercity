@@ -61,7 +61,7 @@ class CIAStudentListView(APIView):
     GET /api/ug/cia/students/
     """
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, CanManageMarks]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         # ── Validate required params ──────────────────────────────────────────
@@ -72,6 +72,8 @@ class CIAStudentListView(APIView):
         label_filter = request.GET.get('label', '').strip()
         entry_status = request.GET.get('entry_status', 'all').lower().strip()
 
+        exam_type = request.GET.get('exam_type', 'REGULAR').upper().strip()
+
         errors = {}
         if not sem or not sem.isdigit():
             errors['sem'] = 'Required. Must be a number (e.g. 3).'
@@ -79,6 +81,8 @@ class CIAStudentListView(APIView):
             errors['session'] = 'Required (e.g. 2025-26).'
         if not course_type_filter or course_type_filter not in COURSE_TYPE_PREFIXES:
             errors['course_type'] = f'Required. Must be one of: {", ".join(COURSE_TYPE_PREFIXES)}'
+        if exam_type not in ('REGULAR', 'BACK'):
+            errors['exam_type'] = 'Must be REGULAR or BACK.'
         if errors:
             return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -148,6 +152,7 @@ class CIAStudentListView(APIView):
                     'paper_code': a.paper_code,
                     'course_name': a.course_name,
                     'course_type': a.course_type,
+                    'course_code': a.course_code,
                     'department': a.department.name if a.department else None,
                     'cia_theory': None,
                     'cia_practical': None
@@ -160,6 +165,7 @@ class CIAStudentListView(APIView):
                 'ind_is_absent': a.ind_is_absent,
                 'is_cia_filled': a.is_cia_filled,
                 'cia_filled_on': a.cia_filled_on.isoformat() if a.cia_filled_on else None,
+                'is_carried_forward': (a.exam_type == 'BACK' and a.created_at == a.updated_at) # Simplistic check or use custom flag
             }
             if a.label == 'CIA-Theory':
                 grouped_map[key]['cia_theory'] = comp_data
@@ -221,6 +227,7 @@ class CIAStudentListView(APIView):
             'sem': sem,
             'session': session,
             'course_type': course_type_filter,
+            'exam_type': exam_type,
             'history_mode': is_history,
             'count': paginator.count,
             'total_pages': paginator.num_pages,

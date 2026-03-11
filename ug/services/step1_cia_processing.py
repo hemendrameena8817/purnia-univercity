@@ -140,8 +140,72 @@ class CIAResultProcessingService:
             label__icontains='CIA'
         )
         
+        if not cia_assessments.exists() and self.exam_type == 'BACK':
+            # USER REQUIREMENT (2026-03-06): CIA Carry-Forward for Regular Back Students
+            # If a student did not fail previously in CIA, the old CIA marks should be carried forward.
+            # 1. Get all papers the student is appearing for in BACK exam
+            back_papers = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=self.semester,
+                session=self.session,
+                exam_type='BACK'
+            ).values_list('paper_code', flat=True).distinct()
+            
+            # Correct Rejoined logic (Assessment-based in Batch context)
+            is_rejoined = False
+            if student.batch:
+                is_rejoined = not StudentCourseAssessment.objects.filter(
+                    student=student,
+                    semester=self.semester,
+                    batch__name=student.batch.name,
+                    exam_type='REGULAR'
+                ).exists()
+
+            if not is_rejoined:
+                for paper_code in back_papers:
+                    # Check if student CIA should be carried forward based on the 3 rules
+                    can_carry = UGResultCalculator.should_cia_carry_forward(student.id, self.semester, paper_code)
+                    
+                    if can_carry:
+                        # Fetch CIA assessments from previous session
+                        old_cia = StudentCourseAssessment.objects.filter(
+                            student=student,
+                            semester=self.semester,
+                            paper_code=paper_code,
+                            label__icontains='CIA'
+                        ).exclude(session=self.session).order_by('-created_at')
+                        
+                        if old_cia.exists():
+                            # Create new CIA entries for current session by copying old ones
+                            new_cia_list = []
+                            for old in old_cia:
+                                # Avoid duplicates if already created
+                                if not StudentCourseAssessment.objects.filter(
+                                    student=student, semester=self.semester, session=self.session,
+                                    paper_code=paper_code, label=old.label, exam_type='BACK'
+                                ).exists():
+                                    old.pk = None # Clone
+                                    old.session = self.session
+                                    old.exam_type = 'BACK'
+                                    old.is_cia_filled = True
+                                    # Note: created_at/updated_at will be auto-set
+                                    new_cia_list.append(old)
+                            
+                            if new_cia_list and not dry_run:
+                                StudentCourseAssessment.objects.bulk_create(new_cia_list)
+                                print(f"  📎 Carried forward CIA for {student.registration_no} - {paper_code}")
+            
+            # Re-fetch CIA assessments after carry-forward
+            cia_assessments = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=self.semester,
+                session=self.session,
+                exam_type=self.exam_type,
+                label__icontains='CIA'
+            )
+
         if not cia_assessments.exists():
-            # No CIA assessments found - skip
+            # No CIA assessments found (and none carried forward) - skip
             return
         
         self.stats['students_with_cia'] += 1

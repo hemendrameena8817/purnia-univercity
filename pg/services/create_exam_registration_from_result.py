@@ -13,19 +13,15 @@ from pg.models import PGExamResult, PGExamRegistration
 
 # Registration window
 IST = pytz.timezone('Asia/Kolkata')
-REGISTRATION_START = IST.localize(datetime(2026, 2, 20, 10, 0, 0))   # 20-Feb-2026 10:00 AM IST
-REGISTRATION_END   = IST.localize(datetime(2026, 2, 22,  0, 0, 0))   # 22-Feb-2026 12:00 AM (midnight) IST
+REGISTRATION_START = IST.localize(datetime(2026, 3, 7, 0, 0, 0))    # 07-Mar-2026 12:00 AM IST
+REGISTRATION_END   = IST.localize(datetime(2026, 3, 11, 0, 0, 0))   # 11-Mar-2026 12:00 AM IST
 
 # Mapping: semester string (e.g. '3RD') → integer sem number stored in PGExamRegistration.sem
 SEMESTER_STR_TO_INT = {
     '1ST': 1,
     '2ND': 2,
     '3RD': 3,
-    '4TH': 4,
-    '5TH': 5,
-    '6TH': 6,
-    '7TH': 7,
-    '8TH': 8,
+    '4TH': 4
 }
 
 

@@ -300,13 +300,14 @@ def generate_pg_admit_card_pdf(student, exam):
 
 
 
-def generate_pg_roll_sheet_pdf(exam, college, department=None):
+def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=None):
     """
     Generates and returns Exam Roll Sheet PDF for PG.
 
     When `department` is provided, only that department's roll sheet is produced.
-    When `department` is None, ONE PDF is produced containing a page/section
-    for EVERY department that has registered students for this exam in this college.
+    When `registration_no` is provided, only that student is included.
+    When `department` is None and `registration_no` is None, ONE PDF is produced
+    containing a page/section for EVERY department that has registered students.
     """
     from weasyprint import HTML
     from django.conf import settings
@@ -411,6 +412,9 @@ def generate_pg_roll_sheet_pdf(exam, college, department=None):
 
     if department:
         regs_qs = regs_qs.filter(student__department=department)
+
+    if registration_no:
+        regs_qs = regs_qs.filter(student__registration_no=registration_no)
 
     regs_qs = regs_qs.select_related(
         'student', 'student__department', 'student__program', 'student__degree'
@@ -718,11 +722,12 @@ def _roman_to_int(roman):
             res += roman_map.get(roman[i], 0)
     return res
 
-def generate_pg_attendance_sheet_pdf(exam, college, department=None):
+def generate_pg_attendance_sheet_pdf(exam, college, department=None, registration_no=None):
     """
     Generates student-wise PG Attendance Sheet PDF.
     One page per student with: photo, barcode, exam schedule table.
     department: optional PGDepartment — if given, only that dept's students.
+    registration_no: optional — if given, generate for ONLY this student.
     """
     from weasyprint import HTML
     from django.conf import settings
@@ -791,6 +796,9 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None):
 
     if department:
         regs_qs = regs_qs.filter(student__department=department)
+
+    if registration_no:
+        regs_qs = regs_qs.filter(student__registration_no=registration_no)
 
     regs_qs = regs_qs.select_related(
         'student', 'student__department', 'student__program'

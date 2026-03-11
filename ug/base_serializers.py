@@ -47,9 +47,10 @@ class UGStudentProfileSerializer(serializers.ModelSerializer):
         model = UGStudentProfile
         fields = [
             'uid',
-            'registration_no', 'roll_no',
+            'registration_no', 'roll_no','first_name',
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
+            'religion', 'nationality', 'medium_of_student',
             'mobile_no', 'aadhar_no', 'address',
             'college', 'profile_image', 'signature',
             'department', 'degree', 'program',
