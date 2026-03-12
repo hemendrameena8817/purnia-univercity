@@ -205,29 +205,55 @@ from django.shortcuts import get_object_or_404
 class LLBResultPDFView(View):
     """
     Generates and returns a single PDF marksheet for viewing/downloading.
-    URL: /results/<registration_no>/pdf/?semester=1ST
-    Example: /results/1946B370095/pdf/?semester=1ST
-    semester parameter specifies which semester to return (1ST, 2ND, 3RD, etc.)
+    URL: /results/<registration_no>/pdf/?semester=1ST&type=regular
+    Examples: 
+        - /results/1946B370095/pdf/?semester=1ST (all exam types)
+        - /results/1946B370095/pdf/?semester=1ST&type=regular (Regular exams only)
+        - /results/1946B370095/pdf/?semester=1ST&type=back (Back/Backlog exams only)
+    
+    Query Parameters:
+        - semester: Semester to return (1ST, 2ND, 3RD, etc.)
+        - type: Optional. When set to 'regular' or 'back', filters for that exam type only
     """
     def get(self, request, registration_no):
         semester = request.GET.get('semester', '1')
         semester_normalized = normalize_semester(semester)
+        exam_type = request.GET.get('type', None)  # Get exam type from query params
+        
+        # Build filter for results
+        result_filters = {
+            'student__registration_no': registration_no,
+            'student_assessments_result__semester': semester_normalized
+        }
+        
+        # Add exam_type filter if type parameter is provided
+        exam_type_value = None
+        if exam_type:
+            exam_type_lower = exam_type.lower()
+            if exam_type_lower == 'regular':
+                exam_type_value = 'Regular'
+                result_filters['student_assessments_result__exam_type__iexact'] = exam_type_value
+            elif exam_type_lower == 'back':
+                exam_type_value = 'Back'
+                result_filters['student_assessments_result__exam_type__iexact'] = exam_type_value
         
         results = LLBStudentExamResult.objects.select_related(
             'student', 'student__user', 'student__course', 'student__college', 'exam'
-        ).filter(
-            student__registration_no=registration_no,
-            student_assessments_result__semester=semester_normalized
-        ).distinct().order_by('-created_at')
+        ).filter(**result_filters).distinct().order_by('-created_at')
         
         if not results.exists():
-            raise Http404(f"No results found for registration number: {registration_no} in semester {semester_normalized}")
+            exam_type_msg = f" ({exam_type_value})" if exam_type_value else ""
+            raise Http404(f"No results found for registration number: {registration_no} in semester {semester_normalized}{exam_type_msg}")
         
         # Get the latest result for that semester
         result = results.first()
         
-        # Manually filter assessments by semester and attach to result
-        filtered_assessments = result.student_assessments_result.filter(semester=semester_normalized).select_related('course_structure').order_by('paper_code')
+        # Manually filter assessments by semester and exam_type
+        assessment_filters = {'semester': semester_normalized}
+        if exam_type_value:
+            assessment_filters['exam_type__iexact'] = exam_type_value
+        
+        filtered_assessments = result.student_assessments_result.filter(**assessment_filters).select_related('course_structure').order_by('paper_code')
         
         # Temporarily override the assessments with filtered ones
         result._filtered_assessments = filtered_assessments

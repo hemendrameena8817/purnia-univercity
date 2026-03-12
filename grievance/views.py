@@ -1,15 +1,19 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from datetime import timedelta, datetime
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from decouple import config
+import uuid
 
-from .models import Grievance, GrievanceComment
+from .models import Grievance, GrievanceComment, GrievancePayment
 from .serializers import (
     GrievanceListSerializer,
     GrievanceDetailSerializer,
@@ -605,3 +609,231 @@ class GrievanceAttachmentUploadView(APIView):
         # Use utility to format errors to {error: "message"}
         error_msg = get_first_serializer_error(serializer.errors)
         return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GrievancePaymentInitiateView(APIView):
+    """
+    POST: Initiate payment for grievance submission
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Initiate payment for grievance submission.
+        
+        **Payment Flow:**
+        1. Student creates a grievance draft (without payment)
+        2. Student initiates payment using grievance UID
+        3. Payment gateway processes payment
+        4. On success, grievance number is generated and grievance is activated
+        
+        **Fixed Amount:** ₹100.00
+        """,
+        responses={
+            200: openapi.Response(
+                description="Payment initiated successfully",
+                examples={
+                    'application/json': {
+                        'order_id': 'GRV_ABC123456789',
+                        'enc_request': 'encrypted_data_string',
+                        'access_code': 'AVXXX',
+                        'production_url': 'https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction'
+                    }
+                }
+            ),
+            400: 'Bad request',
+            404: 'Grievance not found'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def post(self, request, grievance_uid):
+        """Initiate payment for grievance"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            grievance = Grievance.objects.select_related('category', 'assigned_to_college').get(
+                uid=grievance_uid, 
+                is_deleted=False
+            )
+        except Grievance.DoesNotExist:
+            return Response({"error": "Grievance not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if user owns this grievance
+        if grievance.user != request.user:
+            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Check if payment already completed
+        if grievance.is_payment_completed:
+            return Response({"error": "Payment already completed for this grievance"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Fixed amount
+        amount = str(grievance.payment_amount)
+
+        # Configuration
+        merchant_id = config('CCAVENUE_MERCHANT_ID', default='')
+        access_code = config('CCAVENUE_ACCESS_CODE', default='')
+        working_key = config('CCAVENUE_WORKING_KEY', default='')
+        redirect_url = config('CCAVENUE_REDIRECT_URL', default=f"{request.scheme}://{request.get_host()}/api/grievances/payment-response/")
+        cancel_url = redirect_url
+        
+        order_id = f"GRV_{uuid.uuid4().hex[:12].upper()}"
+        
+        # Create payment record
+        GrievancePayment.objects.create(
+            grievance=grievance,
+            order_id=order_id,
+            amount=amount,
+            payment_status='PENDING'
+        )
+
+        # Prepare payload for CC Avenue
+        merchant_data = (
+            f"merchant_id={merchant_id}&order_id={order_id}&"
+            f"amount={amount}&currency=INR&"
+            f"redirect_url={redirect_url}&cancel_url={cancel_url}&"
+            f"language=EN&billing_name={grievance.contact_person_name or request.user.get_full_name()}&"
+            f"billing_tel={grievance.contact_person_phone_number or ''}&"
+            f"billing_email={request.user.email or ''}"
+        )
+
+        # Import encryption utility from voc_new_registration
+        from voc_new_registration.utils.ccavenue_utils import encrypt
+        encrypted_data = encrypt(merchant_data, working_key)
+        
+        ccavenue_url = config('CCAVENUE_URL', default='https://secure.ccavenue.com/transaction/transaction.do?command=initiateTransaction')
+        
+        logger.info(f"Payment initiated for grievance {grievance_uid}, order_id: {order_id}")
+        
+        return Response({
+            "order_id": order_id,
+            "enc_request": encrypted_data,
+            "access_code": access_code,
+            "production_url": ccavenue_url
+        }, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class GrievancePaymentResponseView(APIView):
+    """
+    POST: Handle CC Avenue payment response for grievance
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Grievance payment response received. Data: {request.data}")
+        logger.info(f"Request headers: {request.headers}")
+        
+        # Check if this is a form submission or direct POST
+        if request.content_type == 'application/x-www-form-urlencoded':
+            enc_response = request.POST.get('encResp')
+        else:
+            enc_response = request.data.get('encResp')
+            
+        logger.info(f"Encrypted response: {enc_response}")
+            
+        if not enc_response:
+            logger.error("No encResp parameter found in request")
+            return Response(
+                {"error": "Invalid response: Missing encResp parameter"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            working_key = config('CCAVENUE_WORKING_KEY')
+            if not working_key:
+                raise ValueError("CCAVENUE_WORKING_KEY not configured")
+                
+            logger.info(f"Decrypting response with working key")
+            
+            # Import decryption utilities from voc_new_registration
+            from voc_new_registration.utils.ccavenue_utils import decrypt, parse_response
+            decrypted_response = decrypt(enc_response, working_key)
+            response_data = parse_response(decrypted_response)
+            logger.info(f"Decrypted response data: {response_data}")
+            
+            order_id = response_data.get('order_id')
+            auth_status = response_data.get('order_status', '').lower()
+            
+            if not order_id:
+                raise ValueError("No order_id in decrypted response")
+                
+            logger.info(f"Processing payment for order_id: {order_id}, status: {auth_status}")
+            
+            try:
+                payment = GrievancePayment.objects.select_related(
+                    'grievance',
+                    'grievance__category',
+                    'grievance__assigned_to_college'
+                ).get(order_id=order_id)
+            except GrievancePayment.DoesNotExist:
+                logger.error(f"Payment record not found for order_id: {order_id}")
+                return Response(
+                    {"error": "Payment record not found"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Update payment details
+            payment.tracking_id = response_data.get('tracking_id')
+            payment.bank_ref_no = response_data.get('bank_ref_no')
+            payment.payment_mode = response_data.get('payment_mode')
+            payment.raw_response = response_data
+            
+            # Handle different payment statuses
+            if auth_status == 'success':
+                payment.payment_status = 'SUCCESS'
+                grievance = payment.grievance
+                
+                try:
+                    # Mark payment as completed and generate grievance number
+                    grievance.is_payment_completed = True
+                    grievance.save()  # This will trigger grievance_number generation in model's save method
+                    
+                    logger.info(f"Successfully generated grievance number: {grievance.grievance_number} for UID: {grievance.uid}")
+                    
+                except Exception as e:
+                    logger.error(f"Error updating grievance: {str(e)}")
+                    payment.payment_status = 'PENDING'
+                    payment.save()
+                    raise
+                    
+            elif auth_status == 'aborted':
+                payment.payment_status = 'ABORTED'
+                logger.info(f"Payment aborted for order_id: {order_id}")
+            else:
+                payment.payment_status = 'FAILED'
+                logger.warning(f"Payment failed for order_id: {order_id}. Status: {auth_status}")
+            
+            payment.save()
+            logger.info(f"Payment {payment.payment_status} for order_id: {order_id}")
+
+            # Redirect to Frontend with all necessary parameters
+            frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+            
+            if hasattr(payment, 'grievance') and hasattr(payment.grievance, 'uid'):
+                uid = str(payment.grievance.uid)
+                
+                redirect_url = (
+                    f"{frontend_url}/grievances/payment-status"
+                    f"?uid={uid}"
+                    f"&payment_status={payment.payment_status.lower()}"
+                    f"&order_id={order_id}"
+                )
+                if payment.payment_status == 'SUCCESS' and payment.grievance.grievance_number:
+                    redirect_url += f"&grievance_number={payment.grievance.grievance_number}"
+            else:
+                logger.error(f"Grievance or UID not found for payment {payment.id}")
+                redirect_url = f"{frontend_url}/grievances/payment-status?error=grievance_not_found"
+
+            logger.info(f"Redirecting to: {redirect_url}")
+            return redirect(redirect_url)
+            
+        except Exception as e:
+            logger.exception("Error processing grievance payment response")
+            # Still redirect to frontend but with error status
+            frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+            error_redirect = f"{frontend_url}/grievances/payment-status?error={str(e)[:100]}"
+            return redirect(error_redirect)

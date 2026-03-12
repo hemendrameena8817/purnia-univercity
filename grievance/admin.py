@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment
+from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment, GrievancePayment
 
 
 @admin.register(GrievanceCategory)
@@ -50,6 +50,7 @@ class GrievanceAdmin(admin.ModelAdmin):
         'category',
         'subject',
         'status',
+        'is_payment_completed',
         'is_assigned_to_college',
         'is_assigned_to_university',
         'is_grievance_resolved',
@@ -83,6 +84,9 @@ class GrievanceAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Grievance Information', {
             'fields': ('uid', 'grievance_number', 'user', 'contact_person_name', 'contact_person_phone_number')
+        }),
+        ('Payment Information', {
+            'fields': ('is_payment_completed', 'payment_amount')
         }),
         ('Details', {
             'fields': ('category', 'subject', 'description')
@@ -191,3 +195,72 @@ class GrievanceCommentAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at')
         }),
     )
+
+
+@admin.register(GrievancePayment)
+class GrievancePaymentAdmin(admin.ModelAdmin):
+    
+    def payment_status_badge(self, obj):
+        """Display payment status with color coding"""
+        colors = {
+            'SUCCESS': '#28a745',
+            'PENDING': '#ffc107',
+            'FAILED': '#dc3545',
+            'ABORTED': '#6c757d',
+        }
+        color = colors.get(obj.payment_status, '#6c757d')
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">{}</span>',
+            color,
+            obj.payment_status
+        )
+    payment_status_badge.short_description = 'Payment Status'
+    
+    list_display = [
+        'order_id',
+        'grievance',
+        'amount',
+        'payment_status_badge',
+        'payment_mode',
+        'tracking_id',
+        'created_at',
+    ]
+    list_filter = [
+        'payment_status',
+        'payment_mode',
+        'created_at',
+    ]
+    search_fields = [
+        'order_id',
+        'tracking_id',
+        'bank_ref_no',
+        'grievance__grievance_number',
+        'grievance__contact_person_name',
+    ]
+    readonly_fields = [
+        'order_id',
+        'tracking_id',
+        'bank_ref_no',
+        'payment_mode',
+        'card_name',
+        'raw_response',
+        'created_at',
+        'updated_at',
+    ]
+    fieldsets = (
+        ('Payment Information', {
+            'fields': ('grievance', 'order_id', 'amount', 'payment_status')
+        }),
+        ('Transaction Details', {
+            'fields': ('tracking_id', 'bank_ref_no', 'payment_mode', 'card_name')
+        }),
+        ('Raw Response', {
+            'fields': ('raw_response',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+    date_hierarchy = 'created_at'
+    ordering = ['-created_at']
