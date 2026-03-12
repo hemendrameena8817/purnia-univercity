@@ -736,6 +736,7 @@ class PGAdmitCardPDFView(APIView):
         registration = PGExamRegistration.objects.filter(
             student=student,
             status='REGISTERED',
+            sem=1
         ).order_by('-created_at').first()
 
         if not registration:
@@ -1261,7 +1262,9 @@ class PGCenterAttachedCollegesView(APIView):
                 "colleges": [], 
                 "total": 0,
                 "center_code": center_college.center_code,
-                "college_code": center_college.college_code
+                "college_code": center_college.college_code,      
+                "center_name": center_college.name
+
             }, status=status.HTTP_200_OK)
             
         attached_colleges = mapping.attached_colleges.all().order_by('name')
@@ -1271,9 +1274,148 @@ class PGCenterAttachedCollegesView(APIView):
             "colleges": data, 
             "total": len(data), 
             "center_code": center_college.center_code,
-            "college_code": center_college.college_code
+            "college_code": center_college.college_code,
+            "center_name": center_college.name
         }, status=status.HTTP_200_OK)
 
+
+class PGDispatchMemoView(APIView):
+    """
+    GET /api/pg/center/dispatch-memo/?exam_date=YYYY-MM-DD&exam_time=shift_time&course_code=course_code
+    Generates a dispatch memo for a specific exam slot at the logged-in user's center.
+    Groups students by their HOME college.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def get(self, request):
+        from datetime import datetime
+        from django.db.models import Q
+        from .models import PGStudentCourseAssessment, PGExamSchedule
+
+        # 1. Validate Center College
+        try:
+            center_college = request.user.college_profile.college
+        except AttributeError:
+            return Response({"error": "Center college profile not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2. Get Query Params
+        exam_date_str = request.query_params.get('exam_date')
+        exam_time_str = request.query_params.get('exam_time')
+        course_code = request.query_params.get('course_code')
+        department_uid = request.query_params.get('department_uid') # Optional but good for filtering
+
+        if not all([exam_date_str, exam_time_str, course_code]):
+            return Response({
+                "error": "exam_date, exam_time, and course_code are required parameters."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            exam_date = datetime.strptime(exam_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 3. Find Relevant Exam Schedule to get Exam Details (Name, Session, Year)
+        schedule_qs = PGExamSchedule.objects.filter(
+            exam_date=exam_date,
+            exam_time__icontains=exam_time_str,
+            common_course_structure__course_code__iexact=course_code
+        ).select_related('exam')
+        
+        if department_uid:
+            schedule_qs = schedule_qs.filter(Q(group__isnull=True) | Q(group__department__uid=department_uid))
+
+        schedule = schedule_qs.first()
+
+        if not schedule:
+            return Response({"error": "No exam schedule found for the given parameters."}, status=status.HTTP_404_NOT_FOUND)
+
+        exam = schedule.exam
+        
+        # Determine Semester String (e.g. 3rd Sem)
+        sem_str = ""
+        if exam.year:
+             from .utils.memo_utils import get_ordinal
+             sem_str = f"{get_ordinal(exam.year)} Sem. "
+        
+        exam_name_display = exam.name if exam.name else f"PG {sem_str}Exam"
+
+        # 4. Fetch Assessments for Students grouped to THIS CENTER
+        from .models import PGExamCenterMapping, PGExamRegistration
+        
+        mapping = PGExamCenterMapping.objects.filter(center=center_college).first()
+        if not mapping:
+            return Response({"error": "No colleges mapped to this center."}, status=status.HTTP_404_NOT_FOUND)
+            
+        attached_colleges = mapping.attached_colleges.all()
+        attached_college_ids = attached_colleges.values_list('id', flat=True)
+
+        # Get all registered students from attached colleges for this exam
+        q_filter = Q(exam=exam) | Q(session=exam.session) # simplified filter
+        registered_student_ids = PGExamRegistration.objects.filter(
+            q_filter,
+            student__college_id__in=attached_college_ids,
+            status='REGISTERED'
+        ).values_list('student_id', flat=True).distinct()
+
+        # Fetch Assessments
+        assessments = PGStudentCourseAssessment.objects.filter(
+            student_id__in=registered_student_ids,
+            course_code__iexact=course_code,
+            label__iregex=r'^ESE'
+        ).select_related('student', 'student__college').order_by('student__college__name', 'student__roll_no')
+
+        # 5. Group Data by Home College
+        colleges_dict = {}
+        total_present = 0
+        total_absent = 0
+        total_expelled = 0
+
+        for asmnt in assessments:
+            student = asmnt.student
+            college_name = student.college.name if student.college else "Unknown College"
+            college_name = f"{college_name}, {student.college.address.split(',')[0]}" if student.college and getattr(student.college,'address', None) else college_name
+            
+            if college_name not in colleges_dict:
+                colleges_dict[college_name] = {
+                    "college_name": college_name,
+                    "present_rolls": [],
+                    "absent_rolls": [],
+                    "expelled_rolls": []
+                }
+            
+            roll = student.roll_no or student.registration_no
+
+            if asmnt.ind_is_absent:
+                colleges_dict[college_name]["absent_rolls"].append(roll)
+                total_absent += 1
+            else:
+                colleges_dict[college_name]["present_rolls"].append(roll)
+                total_present += 1
+                
+        # 6. Build Final JSON Response
+        memo_data = {
+            "header": {
+                "center_name": center_college.name,
+                "center_code": center_college.center_code,
+                "university_name": "Purnea University, Purnea", 
+                "exam_name": exam_name_display,
+                "year": exam.session.split('-')[0] if exam.session else "",
+                "subject": course_code, 
+                "date": exam_date.strftime("%d/%m/%Y"),
+                "shift": exam_time_str,
+                "group": schedule.group.name if schedule.group else "All"
+            },
+            "colleges_data": list(colleges_dict.values()),
+            "summary": {
+                "total_present": total_present,
+                "total_absent": total_absent,
+                "total_expelled": total_expelled,
+                "grand_total": total_present + total_absent + total_expelled
+            }
+        }
+
+        return Response(memo_data, status=status.HTTP_200_OK)
 
 class PGStudentAttendanceListView(APIView):
     """
@@ -1567,6 +1709,5 @@ class PGAttendanceMarkView(APIView):
             "message": f"Processed {len(data_list)} attendance records.",
             "results": results if is_bulk else results[0]
         }, status=status.HTTP_200_OK)
-
 
 
