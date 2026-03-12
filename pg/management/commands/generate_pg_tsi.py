@@ -47,25 +47,10 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Generating TSI Excel for Exam: {exam.name} ({exam.session})")
 
-        # ── Semester variants extraction ────────
-        _roman_str_to_int = { 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10 }
-        ey = str(exam.year) if exam.year else ""
-        sem_variants_int = set()
-        if ey.isdigit(): sem_variants_int.add(int(ey))
-        if exam.name:
-            roman_m = re.search(r'\b(?:SEM|SEMESTER)[-\s]*(I{1,3}|IV|VI{0,3}|IX|X)\b', exam.name, re.IGNORECASE)
-            if roman_m:
-                rn = roman_m.group(1).upper()
-                if rn in _roman_str_to_int: sem_variants_int.add(_roman_str_to_int[rn])
-            digit_m = re.search(r'(?<!\d)([1-8])(?!\d)', exam.name)
-            if digit_m: sem_variants_int.add(int(digit_m.group(1)))
-        
-        sem_variants_int = list(sem_variants_int)
-        is_year_range = bool(re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
-
-        filters = {'status': 'REGISTERED'}
-        if sem_variants_int: filters['sem__in'] = sem_variants_int
-        elif is_year_range: filters['session'] = exam.session
+        filters = {
+            'exam': exam,
+            'status': 'REGISTERED'
+        }
         
         if registration_no:
             filters['student__registration_no'] = registration_no
