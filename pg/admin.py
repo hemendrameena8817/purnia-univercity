@@ -38,9 +38,10 @@ class PGFacultyAdmin(admin.ModelAdmin):
 
 @admin.register(PGDepartment)
 class PGDepartmentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'faculty', 'head_of_department', 'created_at')
+    list_display = ('uid', 'name', 'code', 'faculty', 'head_of_department', 'created_at')
     list_filter = ('faculty',)
-    search_fields = ('name', 'code', 'faculty__name')
+    search_fields = ('uid', 'name', 'code', 'faculty__name')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('faculty', 'name')
 
 
@@ -125,18 +126,19 @@ class PGStudentProfileResource(resources.ModelResource):
 @admin.register(PGStudentProfile)
 class PGStudentProfileAdmin(ImportExportModelAdmin):
     resource_class = PGStudentProfileResource
-    list_display = ('registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
+    list_display = ('id', 'registration_no', 'first_name', 'last_name', 'hindi_name', 'roll_no', 'college', 
                    'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'religion', 'nationality', 'medium_of_student', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
-    search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 
+    search_fields = ('registration_no', 'user__username', 'roll_no', 'first_name', 'last_name', 
                     'mobile_no', 'aadhar_no')
     readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
     
     # Performance optimizations
     list_select_related = ('user', 'college', 'department', 'program', 'degree')
-    autocomplete_fields = ['user', 'college', 'department', 'program', 'degree']
+    autocomplete_fields = ['college', 'department', 'program', 'degree']
+    raw_id_fields = ('user',)
     list_per_page = 50  # Limit records per page for better performance
     
     def get_queryset(self, request):
@@ -232,10 +234,26 @@ class PGStudentCourseAssessmentResource(resources.ModelResource):
         attribute='department',
         widget=SafeForeignKeyWidget(PGDepartment, field='name')
     )
+    student_department = fields.Field(
+        column_name='student_department',
+        attribute='student__department__name',
+        readonly=True
+    )
 
     class Meta:
         model = PGStudentCourseAssessment
-        exclude = ('uid',)
+        exclude = ('uid', 'json_data')
+        export_order = (
+            'id', 'student', 'student_department', 'course_name', 'course_code',
+            'paper_code', 'semester', 'label', 'department', 'session',
+            'batch', 'college_code', 'exam_type', 'ind_marks_obtained',
+            'ind_max_marks', 'ind_pass_marks', 'ind_is_pass', 'ind_is_absent',
+            'sem_result', 'is_ese_fill'
+        )
+
+    def get_queryset(self):
+        """Optimize queryset for export with select_related"""
+        return super().get_queryset().select_related('student', 'department', 'batch')
 
     def skip_row(self, instance, original, row, import_validation_errors=None):
         """Skip completely blank rows (Excel files often have trailing empty rows)."""
@@ -307,7 +325,7 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
     # ── List view: only essential columns ─────────────────────────────────
     list_display = (
-        'get_regno', 'get_student_name', 'paper_code', 'semester',
+        'get_regno', 'get_student_name', 'department', 'paper_code', 'semester',
         'label', 'exam_type', 'session',
         'ind_marks_obtained', 'ind_max_marks', 'ind_is_absent', 'ind_is_pass',
         'sem_result', 'is_ese_fill',
@@ -324,11 +342,12 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
     # Only FK / indexed / low-cardinality fields as filters
     list_filter = (
-        'semester', 'session', 'exam_type', 'label',
+        'semester', 'batch__name','session', 'exam_type', 'label',
         'ind_is_absent', 'sem_result',
         'is_cia_fill', 'is_ese_fill',
         'department',
         'college_code',
+        'course_code'
     )
 
     # Search on indexed fields only
@@ -344,6 +363,85 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # No default ordering → avoids full-table sort on 400K rows
     # Use search / filters to narrow first, then sort
     ordering = []
+
+    actions = ['export_assessments_to_excel']
+
+    def export_assessments_to_excel(self, request, queryset):
+        """
+        Fast Excel export for PG Student Course Assessments.
+        Uses openpyxl directly for better performance on large datasets.
+        Respects current filters and selection.
+        """
+        from openpyxl import Workbook
+        from django.http import HttpResponse
+        from openpyxl.styles import Font, PatternFill, Alignment
+        
+        # Create workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Assessments"
+        
+        # Define headers
+        headers = [
+            'Registration No', 'Roll No', 'Name', 'Department', 'College', 
+            'Batch', 'Semester', 'Session', 'Paper Code', 'Label', 
+            'Exam Type', 'Max Marks', 'Pass Marks', 'Marks Obtained', 
+            'Is Absent', 'Is Pass', 'Result', 'ESE Fill'
+        ]
+        
+        # Style header
+        header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        
+        for col, head in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=head)
+            cell.fill = header_fill
+            cell.font = header_font
+        
+        # Optimize queryset
+        queryset = queryset.select_related('student', 'student__college', 'department', 'batch').only(
+            'student__registration_no', 'student__roll_no', 'student__first_name', 'student__last_name',
+            'student__college__college_code', 'department__name', 'batch__name',
+            'semester', 'session', 'paper_code', 'label', 'exam_type',
+            'ind_max_marks', 'ind_pass_marks', 'ind_marks_obtained',
+            'ind_is_absent', 'ind_is_pass', 'sem_result', 'is_ese_fill'
+        )
+        
+        # Write data
+        for row_idx, obj in enumerate(queryset.iterator(), 2):
+            student_name = f"{obj.student.first_name} {obj.student.last_name or ''}".strip() if obj.student else "-"
+            college = obj.student.college.college_code if obj.student and obj.student.college else obj.college_code or "-"
+            
+            row = [
+                obj.student.registration_no if obj.student else "-",
+                obj.student.roll_no if obj.student else "-",
+                student_name,
+                obj.department.name if obj.department else (obj.student.department.name if obj.student and obj.student.department else "-"),
+                college,
+                obj.batch.name if obj.batch else "-",
+                obj.semester,
+                obj.session,
+                obj.paper_code,
+                obj.label,
+                obj.exam_type,
+                obj.ind_max_marks,
+                float(obj.ind_pass_marks) if obj.ind_pass_marks else 0,
+                float(obj.ind_marks_obtained) if obj.ind_marks_obtained is not None else 0,
+                "YES" if obj.ind_is_absent else "NO",
+                "PASS" if obj.ind_is_pass else "FAIL" if obj.ind_is_pass is False else "PENDING",
+                obj.sem_result,
+                "YES" if obj.is_ese_fill else "NO"
+            ]
+            for col_idx, value in enumerate(row, 1):
+                ws.cell(row=row_idx, column=col_idx, value=value)
+        
+        # Response
+        response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="pg_assessments_export.xlsx"'
+        wb.save(response)
+        return response
+
+    export_assessments_to_excel.short_description = "🚀 Fast Excel Export (Optimized)"
 
     readonly_fields = (
         'uid', 'created_at', 'updated_at',
@@ -510,8 +608,8 @@ class PGExamRegistrationResource(resources.ModelResource):
 @admin.register(PGExamRegistration)
 class PGExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = PGExamRegistrationResource
-    list_display = ('student', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'admission_receipt', 'start_date', 'end_date',)
-    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'student__department')
+    list_display = ('student', 'exam', 'sem', 'session', 'status', 'is_open', 'exam_type', 'fees', 'start_date', 'end_date',)
+    list_filter = ('sem', 'is_open', 'status', 'session', 'exam_type', 'exam', 'student__department', 'created_at')
     search_fields = (
         'student__registration_no',
         'student__roll_no',
@@ -521,13 +619,13 @@ class PGExamRegistrationAdmin(ImportExportModelAdmin):
         'student__mobile_no',
         'session',
     )
-    raw_id_fields = ('student',)
+    raw_id_fields = ('student', 'exam')
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('uid', 'student', 'sem', 'session', 'exam_type')
+            'fields': ('uid', 'student', 'exam', 'sem', 'session', 'exam_type')
         }),
         ('Registration Period', {
             'fields': ('start_date', 'end_date', 'is_open', 'status')
@@ -603,11 +701,23 @@ class PGExamResultResource(resources.ModelResource):
         attribute='student',
         widget=ForeignKeyWidget(PGStudentProfile, field='registration_no')
     )
+    department = fields.Field(
+        column_name='department',
+        attribute='student__department__name',
+        readonly=True
+    )
 
     class Meta:
         model = PGExamResult
         exclude = ('uid',)
         import_id_fields = ('student', 'semester', 'session')
+        export_order = (
+            'id', 'student', 'department', 'semester', 'session',
+            'cia_pass', 'ese_pass', 'semester_result', 'sgpa',
+            'semester_max_credit', 'semester_credit_earned',
+            'next_semester', 'next_sem_status', 'is_legacy',
+            'published_at', 'created_at', 'updated_at'
+        )
 
 
 @admin.register(PGExamResult)
@@ -634,13 +744,13 @@ class PGExamResultAdmin(ImportExportModelAdmin):
     list_filter = (
         'semester',
         'session',
+         'student__batch',
         'cia_pass',
         'ese_pass',
         'semester_result',
         'next_sem_status',
         'is_legacy',
         'student__department',
-        'student__batch'
     )
     
     # Optimized search fields
@@ -649,6 +759,7 @@ class PGExamResultAdmin(ImportExportModelAdmin):
         'student__first_name',
         'student__last_name',
         'student__roll_no',
+        'student__department__name',
         'uid'
     )
     
@@ -951,6 +1062,7 @@ class PGExamAdmin(admin.ModelAdmin):
     list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
     list_filter = ('session', 'year', 'batch')
     search_fields = ('name', 'session', 'batch')
+    readonly_fields = ('uid', 'created_at', 'updated_at')
     ordering = ('-created_at',)
 
 @admin.register(PGExamCenterMapping)
@@ -982,7 +1094,7 @@ class PGGroupAdmin(admin.ModelAdmin):
 
 @admin.register(PGExamSchedule)
 class PGExamScheduleAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+    list_display = ('exam', 'group', 'common_course_structure', 'exam_date','session','semester', 'exam_time', 'sitting')
     list_filter = ('exam', 'group', 'exam_date', 'sitting')
     search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
     ordering = ('exam_date', 'exam_time')

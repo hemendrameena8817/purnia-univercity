@@ -4,11 +4,14 @@ Step 1: CIA Result Processing Script
 Run this script after CIA marks entry is complete.
 
 Usage:
-    # Dry run (no database changes)
-    poetry run python ug/services/run_step1_cia_processing.py --batch 2024-28 --semester 1ST --dry-run
+    # Dry run - by session (all batches)
+    poetry run python ug/services/run_step1_cia_processing.py --semester 1ST --session 2022-23 --dry-run
     
-    # Production run
+    # Production run - filter by batch
     poetry run python ug/services/run_step1_cia_processing.py --batch 2024-28 --semester 1ST --session 2024-25
+    
+    # Back exams
+    poetry run python ug/services/run_step1_cia_processing.py --semester 1ST --session 2024-25 --exam-type BACK
 """
 
 import os
@@ -51,8 +54,9 @@ Examples:
     parser.add_argument(
         '--batch',
         type=str,
-        required=True,
-        help='Batch code (e.g., 2024-28)'
+        required=False,
+        default=None,
+        help='Batch code (e.g., 2024-28). Optional - if omitted, all batches in session are processed.'
     )
     
     parser.add_argument(
@@ -75,6 +79,14 @@ Examples:
         help='Run in test mode without making database changes'
     )
     
+    parser.add_argument(
+        '--exam-type',
+        type=str,
+        default='REGULAR',
+        choices=['REGULAR', 'BACK'],
+        help='Exam type (default: REGULAR)'
+    )
+    
     args = parser.parse_args()
     
     ################################################################################
@@ -84,9 +96,10 @@ Examples:
     if not args.dry_run:
         print(f"\n⚠️  PRODUCTION MODE")
         print(f"This will create/update UGExamResult entries for:")
-        print(f"  Batch:    {args.batch}")
-        print(f"  Semester: {args.semester}")
-        print(f"  Session:  {args.session}")
+        print(f"  Batch:     {args.batch or 'ALL'}")
+        print(f"  Semester:  {args.semester}")
+        print(f"  Session:   {args.session}")
+        print(f"  Exam Type: {args.exam_type}")
         response = input("\nContinue? (yes/no): ")
         if response.lower() != 'yes':
             print("❌ Cancelled")
@@ -100,6 +113,7 @@ Examples:
         batch=args.batch,
         semester=args.semester,
         session=args.session,
+        exam_type=args.exam_type,
         dry_run=args.dry_run
     )
     

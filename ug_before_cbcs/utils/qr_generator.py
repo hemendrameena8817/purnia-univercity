@@ -52,7 +52,7 @@ def generate_ug_marksheet_qr_text(student, exam, grand_total):
         str: Formatted text for QR code
     """
     return (
-        f"MSNO.: {exam.batch_code or 'N/A'}-{student.roll_no} | "
+        f"MSNO.: {exam.exam_year or 'N/A'}-{student.roll_no} | "
         f"Roll No: {student.roll_no} | "
         f"Registration No.: {student.registration_no} | "
         f"Name: {student.student_name} | "

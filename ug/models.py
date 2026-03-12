@@ -200,6 +200,9 @@ class UGStudentProfile(models.Model):
 
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
     caste = models.CharField(max_length=20, null=True, blank=True)
+    religion = models.CharField(max_length=50, null=True, blank=True)
+    nationality = models.CharField(max_length=50, null=True, blank=True)
+    medium_of_student = models.CharField(max_length=50, null=True, blank=True)
     enrollment_date = models.DateField(null=True, blank=True)
     roll_no = models.CharField(max_length=50, null=True, blank=True)
     batch = models.ForeignKey(
@@ -404,14 +407,17 @@ class StudentCourseAssessment(models.Model):
     sem_max_credit = models.IntegerField(null=True, blank=True, help_text="Semester MAX CREDIT")
     sem_credit_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester CREDIT OBTAINED")
     sgpa = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRADE POINT")
-    sem_result = models.CharField(max_length=10, null=True, blank=True, help_text="Semester Result eg: pass/fail/promoted")
-    next_sem_status = models.CharField(max_length=10, null=True, blank=True, help_text="Next Semester Status eg: eligible/not eligible")
+    sem_result = models.CharField(max_length=25, null=True, blank=True, help_text="Semester Result eg: PASS/FAIL/PROMOTED/QUALIFIED/DISQUALIFIED")
+    next_sem_status = models.CharField(max_length=20, null=True, blank=True, help_text="Next Semester Status eg: ELIGIBLE/NOT_ELIGIBLE")
     sem_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Semester GRACE MARKS OBTAINED")
     ####semester####
 
     #####temp#####
     temp_total_gp = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Total GRADE POINT")
     #####temp#####
+    
+    is_cia_filled = models.BooleanField(default=False)
+    cia_filled_on = models.DateTimeField(null=True, blank=True)
 
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
@@ -444,6 +450,15 @@ class StudentCourseAssessment(models.Model):
             # Includes exam_type to differentiate regular vs back exams
             models.Index(fields=['student', 'semester', 'session', 'paper_code', 'label', 'exam_type'], 
                         name='idx_reg_dup_check'),
+            
+            # Session-based queries (for session-wise result processing)
+            models.Index(fields=['session', 'semester', 'exam_type'], name='idx_session_sem_exam'),
+            
+            # Student + semester + exam_type (for back exam lookups per student)
+            models.Index(fields=['student', 'semester', 'exam_type'], name='idx_stud_sem_exam'),
+
+            # Optimization for CIA entry (College + Session + Sem + Type)
+            models.Index(fields=['college_code', 'session', 'semester', 'course_type'], name='idx_college_cia_entry'),
         ]
 
 
@@ -591,13 +606,23 @@ class ExamRegistration(models.Model):
         on_delete=models.CASCADE,
         related_name='exam_registrations'
     )
+    admission_receipt = models.FileField(storage=MediaStorage(), upload_to=unique_file_path('ug/admission_receipts/'), null=True, blank=True, help_text="Admission Receipt")
     start_date = models.DateTimeField(null=True, blank=True, help_text="Start Date")
     end_date = models.DateTimeField(null=True, blank=True, help_text="End Date")
     is_open = models.BooleanField(default=False, help_text="Is Open")
     fees = models.IntegerField(null=True, blank=True, help_text="Fees")
     sem = models.IntegerField(null=True, blank=True, help_text="Semester")
-    status = models.CharField(max_length=10, null=True, blank=True, help_text="Status")
+    status = models.CharField(max_length=15, choices=(
+        ('PENDING', 'Pending'),
+        ('OPEN', 'Open'),
+        ('REGISTERED', 'Registered'),
+        ('CLOSED', 'Closed'),
+    ), default='PENDING', help_text="Registration Status")
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
+    exam_type = models.CharField(max_length=20, choices=(
+        ('REGULAR', 'Regular'),
+        ('BACK', 'Back'),
+    ), default='REGULAR', help_text="Exam Type", null=True, blank=True)
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
@@ -609,6 +634,44 @@ class ExamRegistration(models.Model):
 
     def __str__(self):
         return f"{self.student}"
+
+
+class ExamRegistrationPayment(models.Model):
+    """
+    Tracks CC Avenue payments for UG exam registrations.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('ABORTED', 'Aborted'),
+    ]
+
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    registration = models.ForeignKey(
+        ExamRegistration,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+    order_id = models.CharField(max_length=100, unique=True, help_text="Unique order ID sent to CC Avenue")
+    tracking_id = models.CharField(max_length=100, null=True, blank=True, help_text="CC Avenue tracking ID")
+    bank_ref_no = models.CharField(max_length=100, null=True, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    payment_mode = models.CharField(max_length=50, null=True, blank=True)
+    card_name = models.CharField(max_length=50, null=True, blank=True)
+    raw_response = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Exam Registration Payment'
+        verbose_name_plural = 'Exam Registration Payments'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.order_id} - {self.registration.student} - {self.payment_status}"
+
 
 class CommonCourseStructure(models.Model):
     """

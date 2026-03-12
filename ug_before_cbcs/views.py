@@ -16,7 +16,10 @@ from .models import (
 
     UGBeforeCBCSExam,
     UGBeforeCBCSStudentResult,
+    UGBeforeCBCSStatistics,
 )
+from django.db import models
+from django.db.models import Count, F
 from .serializers import (
     UGBeforeCBCSStudentProfileSerializer,
 
@@ -145,14 +148,39 @@ class UGOldMarksheetPDFView(View):
         else:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
+        # Check if it's BA Hons Part 1 or 2 by looking at their results
+        # (BA students with HON/HONS papers)
+        from .models import UGBeforeCBCSStudentResult
+        
+        has_honours_papers = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=f"PART{part}",
+            paper_type_code__iexact='HON'
+        ).exists() or UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=f"PART{part}",
+            paper_type_code__iexact='HONS'
+        ).exists()
+
+        is_ug_old_hons_part_1_or_2 = (
+            (str(part) == '1' or str(part) == '2') and 
+            has_honours_papers
+        )
+
+        if not is_ug_old_hons_part_1_or_2:
+             return HttpResponse("Invalid course_code or part", status=400)
+
         # Call the PDF generator utility
-        from .utils.pdf_generator import generate_ug_old_ba_hons_marksheet_pdf
-        pdf_content = generate_ug_old_ba_hons_marksheet_pdf(
-            student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+        from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
+        pdf_content, error_message = generate_ug_old_ba_hons_part1_pdf(
+            student, exam_part=part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
         )
         
         if not pdf_content:
-             return HttpResponse(f"Marksheet data not found for {student.student_name} ({part}).", status=404, content_type='text/plain')
+             error_msg = error_message or f"Marksheet data not found for {student.student_name} ({part})."
+             
+             status_code = 422 if error_message else 404
+             return HttpResponse(error_msg, status=status_code, content_type='text/plain')
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
         filename = f"Marksheet_{student.registration_no}_{part}.pdf"
@@ -186,11 +214,30 @@ class UGOldMarksheetJSONView(APIView):
         else:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
-        # Get marksheet context data
-        from .utils.pdf_generator import get_ug_old_ba_hons_marksheet_context
-        context_data = get_ug_old_ba_hons_marksheet_context(
-            student, part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
+        # Get marksheet context data based on Course and Part
+        from .utils.pdf_generator import (
+            get_ug_old_ba_hons_part1_context,
         )
+        
+        # Check if it's BA Hons Part 1 or 2 by looking at their results
+        # (BA students with HON/HONS papers)
+        from .models import UGBeforeCBCSStudentResult
+        
+        has_honours_papers = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=f"PART{part}",
+            paper_type_code__iexact='HON'
+        ).exists()
+
+        if has_honours_papers:
+            context_data = get_ug_old_ba_hons_part1_context(
+                student, exam_type=exam_type, course_code=course_code, batch_code=batch_code, exam_part=part
+            )
+        else:
+            return Response(
+                {"error": "Invalid course_code or part"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         if not context_data:
             return Response(
@@ -211,7 +258,7 @@ class UGOldMarksheetJSONView(APIView):
                 'mothers_name': student_obj.mothers_name,
                 'gender': student_obj.gender,
                 'dob': student_obj.dob,
-                'course_code': student_obj.course_code,
+                'course_code': course_code,
                 'discipline_code': student_obj.discipline_code,
                 'college_name': student_obj.college.name if student_obj.college else None,
             }
@@ -245,16 +292,20 @@ class UGOldMarksheetUpdateView(APIView):
 
     def post(self, request):
         registration_no = request.data.get("registration_no")
+        roll_no = request.data.get("roll_no")
         part = request.data.get("part")
         
-        if not registration_no or not part:
+        if not (registration_no or roll_no) or not part:
             return Response(
-                {"error": "registration_no and part are required"},
+                {"error": "registration_no/roll_no and part are required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
         part_code = f"PART{part}"
-        student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Get the results to identify the exam
         results = UGBeforeCBCSStudentResult.objects.filter(
@@ -281,6 +332,7 @@ class UGOldMarksheetUpdateView(APIView):
         exam_month_year = request.data.get("exam_month_year")
         publication_date = request.data.get("publication_date")
         centre_name = request.data.get("center_name") or request.data.get("centre_name")
+        exam_year = request.data.get("exam_year")
         
         if exam_name:
             exam.name = exam_name
@@ -288,22 +340,55 @@ class UGOldMarksheetUpdateView(APIView):
             exam.exam_month_year = exam_month_year
         if publication_date:
             exam.publication_date = publication_date
-        if centre_name:
-            exam.centre_name = centre_name
-            
-        if exam_name or exam_month_year or publication_date or centre_name:
+        if exam_year:
+            exam.exam_year = exam_year            
+        if exam_name or exam_month_year or publication_date or exam_year:
             exam.save()
+            
+        # Update Center Name (Using the new mapping approach)
+        center_college_uid = request.data.get("center_college_uid")
+        
+        if centre_name or center_college_uid:
+            from .models import UGBeforeCBCSExamCenterMapping
+            from colleges.models import College
+            
+            defaults = {}
+            if centre_name:
+                defaults['center_name'] = centre_name
+            
+            if center_college_uid:
+                try:
+                    center_col = College.objects.get(uid=center_college_uid)
+                    defaults['center_college'] = center_col
+                    # If we have a formal college, sync its name as backup
+                    defaults['center_name'] = center_col.name
+                except College.DoesNotExist:
+                    pass
+
+            # Update for ALL students of THIS college in THIS exam
+            UGBeforeCBCSExamCenterMapping.objects.update_or_create(
+                exam=exam,
+                student_college=student.college,
+                defaults=defaults
+            )
             
         # Update Student details (if provided)
         student_name = request.data.get("student_name")
-        father_name = request.data.get("fathers_name")
+        father_name = request.data.get("fathers_name") 
         mother_name = request.data.get("mothers_name")
         
-        if student_name: student.student_name = student_name
-        if father_name: student.fathers_name = father_name
-        if mother_name: student.mothers_name = mother_name
+        student_updated = False
+        if student_name: 
+            student.student_name = student_name
+            student_updated = True
+        if father_name: 
+            student.fathers_name = father_name
+            student_updated = True
+        if mother_name: 
+            student.mothers_name = mother_name
+            student_updated = True
         
-        if student_name or father_name or mother_name:
+        if student_updated:
             student.save()
             
         # Update Marks
@@ -361,3 +446,33 @@ class UGOldMarksheetUpdateView(APIView):
             UGBeforeCBCSStudentResult.objects.filter(student=student, exam=exam).update(**update_fields)
 
         return Response({"message": "Marksheet updated successfully"}, status=status.HTTP_200_OK)
+
+class UGBeforeCBCSOverviewView(APIView):
+    """
+    Returns pre-calculated statistical overview of UG Before CBCS data.
+    This is very lightweight as it reads from a cache model.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        stats_obj = UGBeforeCBCSStatistics.objects.order_by('-last_updated').first()
+        if not stats_obj:
+            return Response(
+                {"error": "Statistics not yet calculated. Please hit the refresh endpoint."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        return Response(stats_obj.data)
+
+from .utils.stats import calculate_and_save_ug_before_cbcs_stats
+
+class UGBeforeCBCSOverviewRefreshView(APIView):
+    """
+    Heavy API that recalculates all statistics and saves them to the cache model.
+    Restricted to University Admins.
+    """
+    permission_classes = [IsUniversityAdmin]
+
+    def post(self, request):
+        stats_obj = calculate_and_save_ug_before_cbcs_stats()
+        return Response(stats_obj.data, status=status.HTTP_201_CREATED)

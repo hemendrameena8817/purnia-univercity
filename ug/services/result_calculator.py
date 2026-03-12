@@ -102,9 +102,10 @@ class UGResultCalculator:
         cia_assessments = [a for a in assessments if 'CIA' in (a.label or '')]
         ese_assessments = [a for a in assessments if 'ESE' in (a.label or '') or 'END_TERM' in (a.label or '')]
         
-        # Find candidates for grace marks (all failed assessments within 5 marks)
+        # Find candidates for grace marks (ONLY ESE assessments within 5 marks of passing)
+        # RULE: Grace marks apply ONLY to ESE, NOT to CIA
         grace_candidates = []
-        for a in assessments:
+        for a in ese_assessments:
             # Skip if absent, already passed, or no pass marks defined
             if a.ind_is_absent or a.ind_is_pass or not a.ind_pass_marks:
                 continue
@@ -562,48 +563,52 @@ class UGResultCalculator:
         total_points = Decimal(0)
         total_registered_credits = Decimal(0)
         total_earned_credits = Decimal(0)
+        # SGPA uses COMPONENT-level fields (comb_*) separated by Theory vs Practical
+        # - component_grade_point = component_numeric_grade × component_max_credits
+        # - component_max_credits = max credits for that specific component (Theory/Practical)
+        # This properly computes separate contributions like: (Theory Grade * Theory Credits) + (Practical Grade * Practical Credits)
+        processed_components = set()
         
-        # For legacy: Each assessment row (CIA-Theory, ESE-Theory, etc.) has individual subject_gp
-        # We need to sum ALL rows, not deduplicate by paper!
-        processed_papers_for_credits = set()  # Only for credit counting
-        
-        # Iterate provided assessments (OPTIMIZED PATH)
         if assessments:
             for a in assessments:
-                # USER CLARIFICATION (2026-01-30):
-                # Legacy has individual subject_gp per assessment row
-                # SGPA = Sum(ALL subject_gp rows) / earned_credits
-                # Do NOT deduplicate by paper for grade points!
-                
-                # Fetch fields updated by Step 2 or Migration
-                # NOTE: Step 2 now stores WEIGHTED POINT (Grade*Credit) in comb_grade_point
-                weighted_point_field = Decimal(a.comb_grade_point or 0) 
-                
-                # Add weighted point from THIS row (not deduplicated)
-                total_points += weighted_point_field
-                
-                # For credits: deduplicate by paper (only count once per course)
-                if a.paper_code and a.paper_code not in processed_papers_for_credits:
-                    max_credit = Decimal(a.comb_max_credits or 0)
-                    earned_credit = Decimal(a.comb_credit_obtained or 0)
+                if not a.paper_code:
+                    continue
                     
-                    # Skip if no credits defined (e.g. non-credit course)
-                    if max_credit > 0:
-                        total_registered_credits += max_credit
-                        total_earned_credits += earned_credit
-                    
-                    processed_papers_for_credits.add(a.paper_code)
+                label_lower = str(a.label).lower()
+                if 'theory' in label_lower or a.label in ['MID_TERM', 'END_TERM']:
+                    comp_type = 'Theory'
+                else:
+                    comp_type = 'Practical'
+                
+                comp_key = (a.paper_code, comp_type)
+                
+                if comp_key in processed_components:
+                    continue
+                
+                # Use COMPONENT-level combined fields
+                weighted_point = Decimal(a.comb_grade_point or 0)   # grade × component_credits
+                max_credit = Decimal(a.comb_max_credits or 0)       # total component credits
+                earned_credit = Decimal(a.comb_credit_obtained or 0)
+                
+                total_points += weighted_point
+                
+                if max_credit > 0:
+                    total_registered_credits += max_credit
+                    total_earned_credits += earned_credit
+                
+                processed_components.add(comp_key)
                 
         else:
              pass 
 
-        # SGPA Calculation
-        # USER CLARIFICATION (2026-01-30): Use EARNED CREDITS as denominator (legacy logic)
-        # This means students who fail courses get higher SGPA (failed courses don't count in denominator)
-        if total_earned_credits == 0:
+        # SGPA Formula (Official Rule):
+        # SGPA = Σ(mᵢ × oᵢ) / Σ(oᵢ)
+        # where mᵢ = numeric grade, oᵢ = credits for EACH course (ALL courses, not just passed)
+        # Failed courses: mᵢ=0, but oᵢ still counts in denominator
+        if total_registered_credits == 0:
             return None
             
-        sgpa = total_points / total_earned_credits
+        sgpa = total_points / total_registered_credits
         
         return round(sgpa, 2)
     
@@ -781,8 +786,226 @@ class UGResultCalculator:
             return True, "Eligible"
 
         # 5. Standard Promotion (1->2, 3->4, 5->6)
-        # Using status_to_check
-        if status_to_check in ['PASS', 'PROMOTED']:
+        # Using status_to_check (Incl. BACK statuses - QUALIFIED is like PASS, PARTLY_QUALIFIED like PROMOTED)
+        if status_to_check in ['PASS', 'PROMOTED', 'QUALIFIED', 'PARTLY_QUALIFIED']:
             return True, "Eligible"
             
         return False, "Not Eligible"
+
+    ################################################################################
+    # #### BACK EXAM RESULT ####
+    ################################################################################
+
+    @staticmethod
+    def determine_back_result(
+        student_id: int,
+        semester: str,
+        back_assessments: Optional[List] = None
+    ) -> str:
+        """
+        Determine back exam result: QUALIFIED / PARTLY_QUALIFIED / DISQUALIFIED
+        
+        Rules for Regular Back Students:
+        - QUALIFIED: Passed ALL back subjects
+        - PARTLY_QUALIFIED: Passed some subjects but fails in others
+        - DISQUALIFIED: Failed in all back subjects
+        
+        Args:
+            student_id: Student ID
+            semester: Semester
+            back_assessments: Pre-fetched list of BACK exam assessments
+            
+        Returns:
+            Status string from SEMESTER_RESULT_CHOICES
+        """
+        from ug.models import StudentCourseAssessment
+
+        if back_assessments is None:
+            back_assessments = list(StudentCourseAssessment.objects.filter(
+                student_id=student_id,
+                semester=semester,
+                exam_type='BACK'
+            ))
+
+        if not back_assessments:
+            return 'DISQUALIFIED'
+
+        # Group by paper_code to count "subjects"
+        paper_codes = set(a.paper_code for a in back_assessments if a.paper_code)
+        
+        passed_papers_count = 0
+        for paper_code in paper_codes:
+            # Check if all components for this paper passed
+            paper_assessments = [a for a in back_assessments if a.paper_code == paper_code]
+            if all(UGResultCalculator.check_individual_pass(a) for a in paper_assessments):
+                passed_papers_count += 1
+
+        if passed_papers_count == len(paper_codes):
+            return 'QUALIFIED'
+        elif passed_papers_count > 0:
+            return 'PARTLY_QUALIFIED'
+        else:
+            return 'DISQUALIFIED'
+
+    @staticmethod
+    def recalculate_overall_semester_result(
+        student_id: int,
+        semester: str,
+    ) -> dict:
+        """
+        Recalculate the OVERALL semester result by combining REGULAR + BACK assessments.
+        
+        For each paper+label combo, takes the BEST result across exam types:
+          - If REGULAR passed → use REGULAR
+          - If REGULAR failed but BACK passed → use BACK
+          - If both failed → still failed
+        
+        Special Rules for Back Students:
+        - If student has appeared for the same paper previously (Regular Back):
+          The result status for the back exam session itself is Qualified/Partly/Disqualified.
+          However, this method calculates the CUMULATIVE status for the semester.
+        
+        Returns:
+            dict with:
+              - 'result': new semester result string
+              - 'all_cia_passed': bool
+              - 'all_ese_passed': bool
+              - 'best_assessments': list of best assessment per paper+label
+        """
+        from ug.models import StudentCourseAssessment, UGStudentProfile
+
+        # Determine result status logic:
+        # Check student current batch to see if they gave REGULAR exams for this semester in this batch.
+        # If no regular entries found in current batch, they are batch-restarted/rejoined.
+        from ug.models import StudentCourseAssessment
+        student = UGStudentProfile.objects.filter(id=student_id).first()
+        is_rejoined = False
+        if student and student.batch:
+            is_rejoined = not StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=semester,
+                batch__name=student.batch.name,
+                exam_type='REGULAR'
+            ).exists()
+
+        # Get ALL assessments (REGULAR + BACK) for this student+semester
+        all_assessments = list(StudentCourseAssessment.objects.filter(
+            student_id=student_id,
+            semester=semester,
+        ))
+
+        if not all_assessments:
+            return {'result': 'FAIL', 'all_cia_passed': False, 'all_ese_passed': False, 'best_assessments': []}
+
+        # Group by (paper_code, label) → pick the best result
+        from collections import defaultdict
+        groups = defaultdict(list)
+        for a in all_assessments:
+            key = (a.paper_code, a.label)
+            groups[key].append(a)
+
+        best_assessments = []
+        for key, group in groups.items():
+            # Sort: passed first, then by marks descending
+            group.sort(
+                key=lambda a: (
+                    1 if UGResultCalculator.check_individual_pass(a) else 0,
+                    a.ind_final_marks_obtained or a.ind_marks_obtained or 0
+                ),
+                reverse=True
+            )
+            best_assessments.append(group[0])  # Pick the best
+
+        # Determine result from best assessments
+        cia_best = [a for a in best_assessments if 'CIA' in (a.label or '')]
+        ese_best = [a for a in best_assessments if 'ESE' in (a.label or '')]
+
+        all_cia_passed = all(UGResultCalculator.check_individual_pass(a) for a in cia_best) if cia_best else False
+        all_ese_passed = all(UGResultCalculator.check_individual_pass(a) for a in ese_best) if ese_best else True
+
+        # Cumulative result logic (Terminology depends on student type and attempt history)
+        has_back_attempts = any(a.exam_type == 'BACK' for a in all_assessments)
+        
+        if all_cia_passed and all_ese_passed:
+            # Rejoined students always get PASS/PROMOTED/FAIL
+            if is_rejoined:
+                result = 'PASS'
+            else:
+                result = 'QUALIFIED' if has_back_attempts else 'PASS'
+        elif all_cia_passed and not all_ese_passed:
+            if is_rejoined:
+                result = 'PROMOTED'
+            else:
+                result = 'PARTLY_QUALIFIED' if has_back_attempts else 'PROMOTED'
+        else:
+            if is_rejoined:
+                result = 'FAIL'
+            else:
+                result = 'DISQUALIFIED' if has_back_attempts else 'FAIL'
+        
+        # Calculate overall SGPA from best assessments
+        overall_sgpa = UGResultCalculator.calculate_sgpa(
+            student_id, semester, assessments=best_assessments
+        )
+
+        semester_max_credit = sum(a.comb_max_credits or 0 for a in best_assessments if (a.label or '').startswith('ESE'))
+        semester_credit_earned = sum(a.comb_credit_obtained or 0 for a in best_assessments if (a.label or '').startswith('ESE'))
+
+        # USER REQUIREMENT (2026-03-07): We no longer update UGExamResult here.
+        # This prevents overwritting historical 'REGULAR' results or session statuses.
+        # The caller (step2_final_processing) is responsible for updating the specific session record.
+
+        return {
+            'result': result,
+            'sgpa': overall_sgpa,
+            'semester_max_credit': semester_max_credit,
+            'semester_credit_earned': semester_credit_earned,
+            'all_cia_passed': all_cia_passed,
+            'all_ese_passed': all_ese_passed,
+            'best_assessments': best_assessments,
+        }
+
+    @staticmethod
+    def should_cia_carry_forward(student_id: int, semester: str, paper_code: str) -> bool:
+        """
+        Check if student CIA marks should be carried forward based on user rules:
+        1. If student failed in previous session (of CIA), MUST retake.
+        2. If student did not fail previously, carry forward.
+        3. If student was 'PROMOTED' in last exam for this semester, carry forward.
+        """
+        from ug.models import StudentCourseAssessment, UGExamResult
+        
+        # Rule 3: Check if student was 'PROMOTED' in any previous session for this semester
+        promoted_previously = UGExamResult.objects.filter(
+            student_id=student_id,
+            semester=semester,
+            semester_result='PROMOTED'
+        ).exists()
+        if promoted_previously:
+            return True
+
+        # Rule 1 & 2: Check if CIA component failed in previous attempt
+        # Find latest REGULAR or previous BACK entry for this CIA
+        previous_cia_fails = StudentCourseAssessment.objects.filter(
+            student_id=student_id,
+            semester=semester,
+            paper_code=paper_code,
+            label__icontains='CIA'
+        ).filter(
+            Q(ind_is_pass=False) | Q(ind_is_absent=True)
+        )
+        
+        # If any previous CIA attempt failed, we must retake
+        if previous_cia_fails.exists():
+            return False
+            
+        # Otherwise, if they appeared before and didn't fail, carry forward
+        has_appeared_before = StudentCourseAssessment.objects.filter(
+            student_id=student_id,
+            semester=semester,
+            paper_code=paper_code,
+            label__icontains='CIA'
+        ).exists()
+        
+        return has_appeared_before
+

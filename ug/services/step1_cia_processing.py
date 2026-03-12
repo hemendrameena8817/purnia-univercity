@@ -22,6 +22,7 @@ from ug.models import (
     UGExamResult,
     ExamRegistration,
 )
+from ug.services.result_calculator import UGResultCalculator
 
 
 class CIAResultProcessingService:
@@ -35,18 +36,21 @@ class CIAResultProcessingService:
     # 1. INITIALIZATION & SETUP
     ################################################################################
     
-    def __init__(self, batch: str, semester: str, session: str):
+    def __init__(self, batch: str, semester: str, session: str, exam_type: str = 'REGULAR'):
         """
         Initialize service
         
         Args:
-            batch: Batch code (e.g., '2024-28')
+            batch: Batch code (e.g., '2024-28') - used as primary filter for REGULAR,
+                   but for BACK, all students in session are included
             semester: Semester code (e.g., '1ST', '2ND')
             session: Academic session (e.g., '2024-25')
+            exam_type: 'REGULAR' or 'BACK'
         """
         self.batch = batch
         self.semester = semester
         self.session = session
+        self.exam_type = exam_type.upper()
         self.stats = {
             'total_students': 0,
             'students_with_cia': 0,
@@ -69,14 +73,28 @@ class CIAResultProcessingService:
         """
         self._print_header()
         
-        # Get all students in batch who have assessments in this semester
-        students = UGStudentProfile.objects.filter(
-            batch__name=self.batch,
-            course_assessments__semester=self.semester
-        ).distinct()
+        # Get students by session
+        active_student_ids = StudentCourseAssessment.objects.filter(
+            session=self.session,
+            semester=self.semester,
+            exam_type=self.exam_type,
+            label__icontains='CIA'
+        ).values_list('student_id', flat=True).distinct()
+        
+        if self.batch:
+            # Filter to specific batch
+            students = UGStudentProfile.objects.filter(
+                id__in=active_student_ids,
+                batch__name=self.batch
+            )
+        else:
+            # All batches in this session
+            students = UGStudentProfile.objects.filter(
+                id__in=active_student_ids
+            )
         self.stats['total_students'] = students.count()
         
-        print(f"\n📊 Found {self.stats['total_students']:,} students in batch {self.batch} for semester {self.semester}")
+        print(f"\n📊 Found {self.stats['total_students']:,} students [{self.exam_type}] in session {self.session} for semester {self.semester}")
         print(f"{'='*100}\n")
         
         # Process each student
@@ -113,21 +131,101 @@ class CIAResultProcessingService:
             student: UGStudentProfile instance
             dry_run: If True, don't save to database
         """
-        # Get all CIA assessments for this student in semester
+        # Get CIA assessments for this student in semester + exam_type + session
         cia_assessments = StudentCourseAssessment.objects.filter(
             student=student,
             semester=self.semester,
+            session=self.session,
+            exam_type=self.exam_type,
             label__icontains='CIA'
         )
         
+        if not cia_assessments.exists() and self.exam_type == 'BACK':
+            # USER REQUIREMENT (2026-03-06): CIA Carry-Forward for Regular Back Students
+            # If a student did not fail previously in CIA, the old CIA marks should be carried forward.
+            # 1. Get all papers the student is appearing for in BACK exam
+            back_papers = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=self.semester,
+                session=self.session,
+                exam_type='BACK'
+            ).values_list('paper_code', flat=True).distinct()
+            
+            # Correct Rejoined logic (Assessment-based in Batch context)
+            is_rejoined = False
+            if student.batch:
+                is_rejoined = not StudentCourseAssessment.objects.filter(
+                    student=student,
+                    semester=self.semester,
+                    batch__name=student.batch.name,
+                    exam_type='REGULAR'
+                ).exists()
+
+            if not is_rejoined:
+                for paper_code in back_papers:
+                    # Check if student CIA should be carried forward based on the 3 rules
+                    can_carry = UGResultCalculator.should_cia_carry_forward(student.id, self.semester, paper_code)
+                    
+                    if can_carry:
+                        # Fetch CIA assessments from previous session
+                        old_cia = StudentCourseAssessment.objects.filter(
+                            student=student,
+                            semester=self.semester,
+                            paper_code=paper_code,
+                            label__icontains='CIA'
+                        ).exclude(session=self.session).order_by('-created_at')
+                        
+                        if old_cia.exists():
+                            # Create new CIA entries for current session by copying old ones
+                            new_cia_list = []
+                            for old in old_cia:
+                                # Avoid duplicates if already created
+                                if not StudentCourseAssessment.objects.filter(
+                                    student=student, semester=self.semester, session=self.session,
+                                    paper_code=paper_code, label=old.label, exam_type='BACK'
+                                ).exists():
+                                    old.pk = None # Clone
+                                    old.session = self.session
+                                    old.exam_type = 'BACK'
+                                    old.is_cia_filled = True
+                                    # Note: created_at/updated_at will be auto-set
+                                    new_cia_list.append(old)
+                            
+                            if new_cia_list and not dry_run:
+                                StudentCourseAssessment.objects.bulk_create(new_cia_list)
+                                print(f"  📎 Carried forward CIA for {student.registration_no} - {paper_code}")
+            
+            # Re-fetch CIA assessments after carry-forward
+            cia_assessments = StudentCourseAssessment.objects.filter(
+                student=student,
+                semester=self.semester,
+                session=self.session,
+                exam_type=self.exam_type,
+                label__icontains='CIA'
+            )
+
         if not cia_assessments.exists():
-            # No CIA assessments found - skip
+            # No CIA assessments found (and none carried forward) - skip
             return
         
         self.stats['students_with_cia'] += 1
         
+        # Fix ind_is_pass from raw marks (migrated data may have wrong values)
+        cia_list = list(cia_assessments)
+        pass_fixes = []
+        for a in cia_list:
+            correct_pass = UGResultCalculator.check_individual_pass(a)
+            if a.ind_is_pass != correct_pass:
+                a.ind_is_pass = correct_pass
+                pass_fixes.append(a)
+        
+        if pass_fixes and not dry_run:
+            StudentCourseAssessment.objects.bulk_update(
+                pass_fixes, ['ind_is_pass'], batch_size=500
+            )
+        
         # Check if student passed ALL CIA assessments
-        cia_passed = self._check_cia_passed(cia_assessments)
+        cia_passed = self._check_cia_passed(cia_list)
         
         # Update stats
         if cia_passed:
@@ -174,6 +272,8 @@ class CIAResultProcessingService:
         """
         Create or update UGExamResult entry
         
+        ONE record per student per semester (session is metadata, not key).
+        
         Args:
             student: UGStudentProfile instance
             cia_passed: Whether student passed CIA
@@ -181,10 +281,9 @@ class CIAResultProcessingService:
         result, created = UGExamResult.objects.get_or_create(
             student=student,
             semester=self.semester,
-            session=self.session,
             defaults={
+                'session': self.session,
                 'cia_pass': cia_passed,
-                # 'ese_pass': False,  # ESE not yet processed
                 'semester_result': 'PENDING',
                 'semester_max_credit': 0,
                 'semester_credit_earned': 0,
@@ -198,7 +297,8 @@ class CIAResultProcessingService:
         else:
             # Update existing entry
             result.cia_pass = cia_passed
-            result.save(update_fields=['cia_pass', 'updated_at'])
+            result.session = self.session  # Update session to latest
+            result.save(update_fields=['cia_pass', 'session', 'updated_at'])
             self.stats['exam_results_updated'] += 1
             
     def _create_exam_registration(self, student: UGStudentProfile):
@@ -236,9 +336,10 @@ class CIAResultProcessingService:
         print("\n" + "="*100)
         print("📊 STEP 1: CIA RESULT PROCESSING")
         print("="*100)
-        print(f"Batch:    {self.batch}")
-        print(f"Semester: {self.semester}")
-        print(f"Session:  {self.session}")
+        print(f"Batch:     {self.batch}")
+        print(f"Semester:  {self.semester}")
+        print(f"Session:   {self.session}")
+        print(f"Exam Type: {self.exam_type}")
         print("="*100)
     
     def _print_summary(self):
@@ -262,7 +363,7 @@ class CIAResultProcessingService:
         return f"{(count / self.stats['students_with_cia']) * 100:.2f}"
 
 
-def run_cia_processing(batch: str, semester: str, session: str, dry_run: bool = False) -> Dict:
+def run_cia_processing(batch: str, semester: str, session: str, exam_type: str = 'REGULAR', dry_run: bool = False) -> Dict:
     """
     Convenience function to run Step 1: CIA Result Processing
     
@@ -270,10 +371,11 @@ def run_cia_processing(batch: str, semester: str, session: str, dry_run: bool = 
         batch: Batch code (e.g., '2024-28')
         semester: Semester code (e.g., '1ST')
         session: Academic session (e.g., '2024-25')
+        exam_type: 'REGULAR' or 'BACK'
         dry_run: If True, don't save to databases
         
     Returns:
         Dictionary with processing statistics
     """
-    service = CIAResultProcessingService(batch, semester, session)
+    service = CIAResultProcessingService(batch, semester, session, exam_type)
     return service.process(dry_run=dry_run)

@@ -46,6 +46,7 @@ class PGStudentProfileSerializer(serializers.ModelSerializer):
         fields = [
             'uid',
             'first_name', 'last_name', 'hindi_name',
+            'profile_image','signature',
             'registration_no', 'roll_no',
             'father_name', 'mother_name',
             'date_of_birth', 'gender', 'caste',
@@ -190,7 +191,81 @@ class PGExamRegistrationSerializer(serializers.ModelSerializer):
             student=obj.student,
             semester__icontains=sem_str,
             label__icontains='ESE',
-        ).order_by('paper_code')
+            session=obj.session
+        ).order_by('paper_code').distinct()
 
         return AssessmentDetailSerializer(assessments, many=True).data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Attendance Serializers
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PGAttendanceStudentSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for each student's ESE assessment entry
+    returned in the attendance list API (GET /student-attendance/list/).
+
+    Includes:
+    - assessment_uid  → used by frontend to submit attendance (POST /mark/)
+    - student details (name, roll_no, registration_no, photo)
+    - course info (course_code, course_name)
+    - is_absent       → current attendance status (True = Absent, False = Present)
+    """
+    assessment_uid  = serializers.UUIDField(source='uid', read_only=True)
+    name            = serializers.SerializerMethodField()
+    roll_no         = serializers.SerializerMethodField()
+    registration_no = serializers.SerializerMethodField()
+    photo_url       = serializers.SerializerMethodField()
+    student_uid     = serializers.UUIDField(source='student.uid', read_only=True)
+    is_absent       = serializers.BooleanField(source='ind_is_absent', read_only=True)
+
+    class Meta:
+        model  = PGStudentCourseAssessment
+        fields = [
+            'assessment_uid',
+            'student_uid',
+            'name',
+            'roll_no',
+            'registration_no',
+            'photo_url',
+            'course_code',
+            'course_name',
+            'is_absent',
+        ]
+
+    def get_name(self, obj):
+        return obj.student.get_full_name() if obj.student else '-'
+
+    def get_roll_no(self, obj):
+        return obj.student.roll_no or 'N/A' if obj.student else 'N/A'
+
+    def get_registration_no(self, obj):
+        return obj.student.registration_no or 'N/A' if obj.student else 'N/A'
+
+    def get_photo_url(self, obj):
+        if obj.student and obj.student.profile_image:
+            try:
+                return obj.student.profile_image.url
+            except Exception:
+                return None
+        return None
+
+
+class PGAttendanceMarkSerializer(serializers.Serializer):
+    """
+    Write serializer for the attendance mark API (POST /student-attendance/mark/).
+
+    Fields:
+    - assessment_uid  → PGStudentCourseAssessment.uid
+    - is_absent       → True = Absent, False = Present
+    """
+    assessment_uid = serializers.UUIDField()
+    is_absent      = serializers.BooleanField()
+
+    def validate_assessment_uid(self, value):
+        if not PGStudentCourseAssessment.objects.filter(uid=value).exists():
+            raise serializers.ValidationError("Assessment not found.")
+        return value
+
 

@@ -9,7 +9,7 @@ from ug.services.semester_registration_service import SemesterRegistrationServic
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
-    CommonCourseStructure, UGExamResult
+    CommonCourseStructure, UGExamResult,ExamRegistrationPayment
 )
 
 
@@ -57,7 +57,7 @@ class UGBatchAdmin(admin.ModelAdmin):
 @admin.register(UGStudentProfile)
 class UGStudentProfileAdmin(admin.ModelAdmin):
     list_display = ('registration_no', 'first_name', 'last_name', 'roll_no', 'college', 
-                   'department', 'program', 'current_semester', 'status', 'is_active', 'batch')
+                   'major_course','minor_course','mdc_course','department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'college', 'department', 'program', 'degree', 
                   'current_semester', 'batch')
     search_fields = ('registration_no', 'roll_no', 'first_name', 'last_name', 
@@ -192,7 +192,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     )
     
     # Filters for easy navigation
-    list_filter = ('semester', 'label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass', ExamResultFilter)
+    list_filter = ('session','semester', 'label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass', ExamResultFilter)
     
     # Search by student registration number AND name
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
@@ -307,6 +307,10 @@ class ExamRegistrationAdmin(admin.ModelAdmin):
     list_filter = ('sem', 'status', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name')
     ordering = ('student', 'sem')
+    raw_id_fields = ('student',)
+    list_select_related = ('student',)
+    show_full_result_count = False
+    list_per_page = 50
 
 @admin.register(CommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
@@ -487,3 +491,10 @@ class UGExamResultAdmin(ImportExportModelAdmin):
         return qs.select_related('student')
 
 
+@admin.register(ExamRegistrationPayment)
+class ExamRegistrationPaymentAdmin(admin.ModelAdmin):
+    list_display = ('order_id', 'registration', 'amount', 'payment_status', 'created_at', 'updated_at')
+    list_filter = ('payment_status', 'created_at', 'updated_at')
+    search_fields = ('order_id', 'registration__uid')   
+    readonly_fields = ('created_at', 'updated_at')
+    raw_id_fields = ('registration',)

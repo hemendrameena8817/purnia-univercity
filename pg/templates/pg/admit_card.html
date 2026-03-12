@@ -6,12 +6,8 @@
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <title>Admit Card - PG</title>
 
-    <!-- Google Fonts for Hindi (Devanagari) Support -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-        href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&family=Noto+Sans:wght@400;600;700&display=swap"
-        rel="stylesheet" />
+    <!-- Note: WeasyPrint (PDF generator) loads system fonts only - CDN fonts are ignored in PDF mode -->
+    <!-- Noto Sans Devanagari must be installed as a system font on the server for Hindi rendering -->
 
     <style>
         @page {
@@ -26,15 +22,20 @@
         }
 
         body {
-            font-family: "Noto Sans", "Noto Sans Devanagari", Arial, sans-serif;
+            font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
             font-size: 10pt;
             line-height: 1.4;
             color: #000;
         }
 
-        /* Ensure Hindi text uses proper font */
+        /* Ensure Hindi text uses proper Devanagari system font */
         .hindi-text {
-            font-family: "Noto Sans Devanagari", "Noto Sans", sans-serif;
+            font-family: 'Noto Sans Devanagari', 'FreeSans', sans-serif;
+        }
+
+        /* English text embedded within Hindi paragraphs */
+        .english-text {
+            font-family: 'Liberation Sans', 'DejaVu Sans', Arial, sans-serif;
         }
 
         .container {
@@ -213,13 +214,13 @@
 
         .signatures-table td {
             padding: 5px;
-            vertical-align: top;
+            vertical-align: bottom;
         }
 
         .sig-line {
             font-size: 9pt;
             font-weight: normal;
-            padding-top: 40px;
+            padding-top: 5px;
         }
 
         .sig-left {
@@ -272,7 +273,7 @@
     <!-- WATERMARK -->
     {% if watermark_logo %}
     <div class="watermark">
-        <img src="data:image/png;base64,{{ watermark_logo }}" alt="Watermark" />
+        <img src="{{ watermark_logo }}" alt="Watermark" />
     </div>
     {% endif %}
 
@@ -282,8 +283,7 @@
             <tr>
                 <td style="width: 70px">
                     {% if university_logo %}
-                    <img src="data:image/png;base64,{{ university_logo }}" class="university-logo-img"
-                        alt="University Logo" />
+                    <img src="{{ university_logo }}" class="university-logo-img" alt="University Logo" />
                     {% endif %}
                 </td>
                 <td class="header-text">
@@ -300,6 +300,18 @@
             <tr>
                 <td style="vertical-align: top">
                     <table class="info-table">
+                        {% if exam %}
+                        <tr>
+                            <td class="info-label">Name of Exam</td>
+                            <td class="info-colon">:</td>
+                            <td class="info-value">{{ exam }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <td class="info-label">Subject</td>
+                            <td class="info-colon">:</td>
+                            <td class="info-value">{{student.department.name}}</td>
+                        </tr>
                         <tr>
                             <td class="info-label">Roll No.</td>
                             <td class="info-colon">:</td>
@@ -340,7 +352,7 @@
                             <td class="info-value">{{ exam_type|default:"REGULAR" }}</td>
                         </tr>
                         <tr>
-                            <td class="info-label">Name of the Exam Center</td>
+                            <td class="info-label">Name of the Exam Centre</td>
                             <td class="info-colon">:</td>
                             <td class="info-value">
                                 {{ center_code }} - {{ center_name|upper }}
@@ -359,19 +371,19 @@
                 <td class="photo-signature-wrapper">
                     <div class="photo-box">
                         {% if student_photo %}
-                        <img src="data:image/png;base64,{{ student_photo }}" class="photo-img" alt="Student Photo" />
+                        <img src="{{ student_photo }}" class="photo-img" alt="Student Photo" />
                         {% else %}
                         <span style="font-size: 9pt">PHOTO</span>
                         {% endif %}
                     </div>
                     <div class="sig-box">
                         {% if student_sig %}
-                        <img src="data:image/png;base64,{{ student_sig }}" class="sig-img" alt="Student Signature" />
+                        <img src="{{ student_sig }}" class="sig-img" alt="Student Signature" />
                         {% else %}
                         <span style="font-size: 8pt">SIGNATURE</span>
                         {% endif %}
                     </div>
-                    <div class="photo-signature-label">Photo & Signature</div>
+                    <!-- <div class="photo-signature-label">Photo & Signature</div> -->
                 </td>
             </tr>
         </table>
@@ -384,7 +396,7 @@
                     <th class="code-col">Subject Code</th>
                     <th class="subject-col">Subject Name</th>
                     <th class="time-col">Time</th>
-                    <th class="date-col">Date & Sitting</th>
+                    <th class="date-col">Date</th>
                 </tr>
             </thead>
             <tbody>
@@ -393,11 +405,11 @@
                     <td>{{ forloop.counter }}</td>
                     <td>{{ s.common_course_structure.course_code|default:"-" }}</td>
                     <td class="subject-col">
-                        {{ s.common_course_structure.course_name|default:"-" }}
+                        {{ s.assessment_course_name|default:s.common_course_structure.course_name|default:"-" }}
                     </td>
                     <td>{{ s.exam_time|default:"-" }}</td>
                     <td>
-                        {{ s.exam_date|date:"d-m-Y"|default:"-" }} / {{ s.sitting|default:"-" }}
+                        {{ s.exam_date|date:"d-m-Y"|default:"-" }}
                     </td>
                 </tr>
                 {% empty %}
@@ -411,19 +423,25 @@
         <!-- SIGNATURES -->
         <table class="signatures-table">
             <tr>
-                <td class="sig-left">
-                    <div class="sig-line">Sig. & Seal of the Principal</div>
+                <td class="sig-left" style="width: 33%;">
+                    <div class="sig-line">Sig. & Seal of the Principal / HOD</div>
                 </td>
-                <td class="sig-right">
+                <td style="width: 34%; text-align: center; vertical-align: bottom;">
+                    {% if qr_code_image %}
+                    <img src="{{ qr_code_image }}" alt="QR Code"
+                        style="width: 90px; height: 90px; display: block; margin: 0 auto 5px auto;" />
+                    {% endif %}
+                </td>
+                <td class="sig-right" style="width: 33%;">
                     {% if controller_signature %}
-                    <img src="data:image/png;base64,{{ controller_signature }}" alt="Controller Signature" style="
+                    <img src="{{ controller_signature }}" alt="Controller Signature" style="
                 max-width: 150px;
                 max-height: 50px;
                 display: block;
                 margin: 0 30px 5px auto;
               " />
                     {% endif %}
-                    <div class="sig-line" style="padding-top: 5px">
+                    <div class="sig-line">
                         Controller of Examinations
                     </div>
                 </td>
@@ -436,29 +454,22 @@
                 परीक्षार्थियों के लिए आवश्यक निर्देश:
             </div>
             <p class="hindi-text">
-                1. परीक्षार्थी निर्धारित समय से अपना प्रवेश पत्र एवं फोटो प्रमाणपत्र
-                से सत्यापित करा लें ।
+                1. परीक्षार्थी निश्चित रूप से अपना प्रवेश पत्र एवं फोटो प्रधानाचार्य से सत्यापित करा लें ।
             </p>
             <p class="hindi-text">
-                2. प्रवेश पत्र पर किसी प्रकार की त्रुटि का सुधार समसत परीक्षा विभाग से
-                करा लें ।
+                2. प्रवेश पत्र पर किसी प्रकार की त्रुटि का सुधार ससमय परीक्षा विभाग से करा लें ।
             </p>
             <p class="hindi-text">
-                3. सत्यापित प्रवेश पत्र प्रति दिन परीक्षार्थी अनिवार्य रूप से लेकर
-                परीक्षा कक्ष में उपस्थित हों ।
+                3. सत्यापित प्रवेश पत्र प्रति दिन परीक्षार्थी अनिवार्य रूप से लेकर परीक्षा कक्ष में उपस्थित हों ।
+            <p class="hindi-text">
+                4. परीक्षा भवन में प्रतिबंधित बस्तुएं जैसे मोबाइल , इलेक्ट्रोनिक गेजेट इत्यादि लाना वर्जित है।
             </p>
             <p class="hindi-text">
-                4. परीक्षा भवन में प्रतिबंधित वस्तुएँ जैसे मोबाइल , इलेक्ट्रोनिक गैजेट
-                इत्यादि लाना वर्जित है।
+                5. नेत्रहीन, <span class="english-text">physically handicapped and dyslexic</span>
+                परीक्षार्थियों को लेखन सुविधा के साथ-साथ परीक्षा अविध में 30 मिनट का अतिरिक्त समय प्रदान किया जायेगा।
             </p>
             <p class="hindi-text">
-                5. नेत्रहीन, physically handicapped and dyslexic परीक्षार्थियों को
-                लेखन सुविधा के साथ-साथ परीक्षा अवधि में 30 मिनट का अतिरिक्त समय प्रदान
-                किया जायेगा।
-            </p>
-            <p class="hindi-text">
-                6. उत्तरपुस्तिका में कहीं भी अपना नाम न लिखें , न ऐसे संकेत करें जिससे
-                उत्तरपुस्तिका पहचानी जा सके।
+                6. उत्तरपुस्तिका में कहीं भी अपना नाम न लिखें, न ऐसे संकेत करें जिससे उत्तरपुस्तिका पहचानी जा सकें।
             </p>
         </div>
     </div>

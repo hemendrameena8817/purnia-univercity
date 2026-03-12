@@ -1,7 +1,10 @@
 from django.http import HttpResponse
+from django.views import View
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from .permissions import IsExamCenterUser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import transaction
@@ -90,6 +93,101 @@ class PGCIAMarksEntryView(APIView):
             return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
             
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class PGRollSheetPDFView(View):
+    """
+    Generates and returns Exam Roll Sheet PDF for PG.
+    Query params: exam_uid, college_uid, department_uid (optional)
+    """
+    def get(self, request):
+        from colleges.models import College
+        from .utils.pdf_generator import generate_pg_roll_sheet_pdf
+        from .models import PGExam, PGDepartment
+        
+        exam_uid = request.GET.get("exam_uid")
+        college_uid = request.GET.get("college_uid")
+        department_uid = request.GET.get("department_uid")  # optional
+
+        if not all([exam_uid, college_uid]):
+            return HttpResponse("exam_uid and college_uid are required", status=400, content_type='text/plain')
+
+        exam = get_object_or_404(PGExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+        
+        department = None
+        if department_uid:
+            department = get_object_or_404(PGDepartment, uid=department_uid)
+
+        pdf_content = generate_pg_roll_sheet_pdf(exam, college, department=department)
+
+        if not pdf_content:
+            dept_info = f" ({department.name})" if department else ""
+            return HttpResponse(f"Failed to generate Roll Sheet for {college.name}{dept_info}. Ensure students are enrolled for this exam.", status=404, content_type='text/plain')
+
+        # Check if user wants to force download or view inline
+        download = request.GET.get('download', 'false').lower() == 'true'
+        disposition = 'attachment' if download else 'inline'
+        
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
+        dept_suffix = f"_{department.name.replace(' ', '_')}" if department else ""
+        response["Content-Disposition"] = f'{disposition}; filename="Roll_Sheet_{safe_college_name}{dept_suffix}_SEM_{exam.year}.pdf"'
+        return response
+
+
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PGAttendanceSheetPDFView(APIView):
+    permission_classes = [AllowAny]
+    """
+    Generates student-wise PG Attendance Sheet PDF.
+    Query params: exam_uid, college_uid, department_uid (optional)
+    """
+    def post(self, request):
+        return self.get(request)
+
+    def get(self, request):
+        from colleges.models import College
+        from .utils.pdf_generator import generate_pg_attendance_sheet_pdf
+        from .models import PGExam, PGDepartment
+
+        exam_uid = request.GET.get("exam_uid")
+        college_uid = request.GET.get("college_uid")
+        department_uid = request.GET.get("department_uid")  # optional
+
+        if not all([exam_uid, college_uid]):
+            return HttpResponse("exam_uid and college_uid are required", status=400, content_type='text/plain')
+
+        exam = get_object_or_404(PGExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+
+        department = None
+        if department_uid:
+            department = get_object_or_404(PGDepartment, uid=department_uid)
+
+        pdf_content = generate_pg_attendance_sheet_pdf(exam, college, department=department)
+
+        if not pdf_content:
+            dept_info = f" ({department.name})" if department else ""
+            return HttpResponse(
+                f"Failed to generate Attendance Sheet for {college.name}{dept_info}. Ensure students are enrolled for this exam.",
+                status=404, content_type='text/plain'
+            )
+
+        download = request.GET.get('download', 'false').lower() == 'true'
+        disposition = 'attachment' if download else 'inline'
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        safe_college_name = "".join([c if c.isalnum() else "_" for c in college.name])
+        dept_suffix = f"_{department.name.replace(' ', '_')}" if department else ""
+        response["Content-Disposition"] = f'{disposition}; filename="Attendance_Sheet_{safe_college_name}{dept_suffix}.pdf"'
+        return response
+
 
 
 class PGCollegeStudentsView(APIView):
@@ -477,120 +575,6 @@ class PGStudentFilterView(APIView):
 
 
 
-# class PGFillDataView(APIView):
-#     """
-#     API View to get 'fill data' (json_data) for a specific assessment.
-    
-#     URL: /api/pg/fill-data/<uid>/
-#     Method: GET
-#     """
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self, request, uid):
-#         # 1. Fetch the assessment
-#         try:
-#             assessment = PGStudentCourseAssessment.objects.get(uid=uid)
-#         except PGStudentCourseAssessment.DoesNotExist:
-#             return Response({
-#                 "error": "Assessment not found."
-#             }, status=status.HTTP_404_NOT_FOUND)
-
-#         # 2. Check permissions (Optional but recommended)
-#         # If the user is a college user, ensure the student belongs to their college
-#         if request.user.user_type == 'college_user':
-#             try:
-#                 college_profile = request.user.college_profile
-#                 user_college = college_profile.college
-#                 if assessment.student.college != user_college:
-#                      return Response({
-#                         "error": "Access denied. Student does not belong to your college."
-#                     }, status=status.HTTP_403_FORBIDDEN)
-#             except AttributeError:
-#                  return Response({
-#                     "error": "College profile not found."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-        
-#         # 3. Return the json_data
-#         return Response({
-#             "uid": assessment.uid,
-#             "json_data": assessment.json_data
-#         }, status=status.HTTP_200_OK)
-
-# class PGFillDataLookupView(APIView):
-#     """
-#     API View to get 'fill data' (json_data) by Student UID and Subject UID.
-    
-#     URL: /api/pg/fill-data/lookup/?student=<uid>&subject=<uid>
-#     Method: GET
-#     """
-#     authentication_classes = [JWTAuthentication]
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self, request):
-#         student_uid = request.query_params.get('student')
-#         subject_uid = request.query_params.get('subject')
-
-#         if not student_uid or not subject_uid:
-#             return Response({
-#                 "error": "Both 'student' and 'subject' query parameters are required."
-#             }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # 1. Fetch Subject to get the paper code
-#         from .models import PGCourseStructure
-#         try:
-#             subject = PGCourseStructure.objects.get(uid=subject_uid)
-#             target_code = subject.code
-#             if not target_code:
-#                  return Response({
-#                     "error": "The selected subject does not have a valid code."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-#         except PGCourseStructure.DoesNotExist:
-#             return Response({
-#                 "error": "Subject not found."
-#             }, status=status.HTTP_404_NOT_FOUND)
-
-#         # 2. Fetch Assessment matching Student and Subject Code
-#         try:
-#             # We filter by student and paper_code (or course_code which seems to be used interchangeably)
-#             # Taking the most recent one if multiple exist (though ideally unique per semester/session)
-#             assessment = PGStudentCourseAssessment.objects.filter(
-#                 student__uid=student_uid,
-#                 paper_code=target_code,
-#                 semester=subject.semester # Ensure semester matches
-#             ).order_by('-created_at').first()
-
-#             if not assessment:
-#                  return Response({
-#                     "error": "No assessment found for this student and subject."
-#                 }, status=status.HTTP_404_NOT_FOUND)
-        
-#         except Exception as e:
-#              return Response({
-#                 "error": f"Error finding assessment: {str(e)}"
-#             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-#         # 3. Check permissions
-#         if request.user.user_type == 'college_user':
-#             try:
-#                 college_profile = request.user.college_profile
-#                 user_college = college_profile.college
-#                 if assessment.student.college != user_college:
-#                      return Response({
-#                         "error": "Access denied. Student does not belong to your college."
-#                     }, status=status.HTTP_403_FORBIDDEN)
-#             except AttributeError:
-#                  return Response({
-#                     "error": "College profile not found."
-#                 }, status=status.HTTP_400_BAD_REQUEST)
-
-#         # 4. Return Data
-#         return Response({
-#             "uid": assessment.uid,
-#             "json_data": assessment.json_data
-#         }, status=status.HTTP_200_OK)
-
-
 class PGExamRegistrationDetailView(APIView):
     """
     API View to get Exam Registration details including student profile and assessments.
@@ -682,7 +666,8 @@ class PGRegistrationCardPDFView(APIView):
         # ── Find Latest REGISTERED Registration ──────────────────────────────
         registration = PGExamRegistration.objects.defer('admission_receipt').filter(
             student=student,
-            status='REGISTERED'
+            status='REGISTERED',
+            sem=1
         ).select_related('student', 'student__college', 'student__department').order_by('-created_at').first()
 
         if not registration:
@@ -731,28 +716,10 @@ class PGAdmitCardPDFView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from .models import PGStudentProfile, PGExam
-        from django.shortcuts import get_object_or_404
+        from .models import PGStudentProfile, PGExamSchedule, PGExamRegistration
         from .utils.pdf_generator import generate_pg_admit_card_pdf
-
-        # ── Resolve student from request.user ──────────────────────────────────
-        try:
-            # Need strict match? Or allow college user to view admit card? 
-            # Original code implies logged-in student.
-            # Assuming 'student' user_type for now.
-            if hasattr(request.user, 'pg_student_profile'):
-                 student = request.user.pg_student_profile
-            else:
-                 return Response({'error': 'PG Student profile not found'}, status=404)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
-            
-        # ... rest of admit card logic ... (I am overwriting the start of PGAdmitCard? No I should define *before* or *after*).
-        # Ah, replace_file_content replaces a block. I should append the new class *after* PGAdmitCardPDFView logic.
-        
-        from .models import PGStudentProfile, PGExam
-        from django.shortcuts import get_object_or_404
-        from .utils.pdf_generator import generate_pg_admit_card_pdf
+        from django.utils import timezone as tz
+        from datetime import timedelta
 
         # ── Resolve student from request.user ──────────────────────────────────
         try:
@@ -765,17 +732,27 @@ class PGAdmitCardPDFView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        # ── Auto-resolve exam via PGExamSchedule ──────────────────────────────
-        from .models import PGExamSchedule
-        from django.utils import timezone as tz
-        from datetime import timedelta
+        # ── Check Registration Status ──────────────────────────────────────────
+        registration = PGExamRegistration.objects.filter(
+            student=student,
+            status='REGISTERED',
+        ).order_by('-created_at').first()
 
+        if not registration:
+            return Response(
+                {'error': 'Admit card is only available after successful exam registration. Please complete your registration first.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # ── Auto-resolve exam via PGExamSchedule ──────────────────────────────
         # Include exams from last 30 days so recently-started exams still work
-        cutoff_date = tz.now().date() - timedelta(days=30)
+        cutoff_date = tz.now().date() - timedelta(days=60)
 
         schedule = PGExamSchedule.objects.filter(
             group__department=student.department,
-            exam_date__gte=cutoff_date          # upcoming or recently started
+            exam_date__gte=cutoff_date,          # upcoming or recently started
+            session=registration.session,
+            semester=registration.sem,
         ).select_related('exam').order_by('-exam__created_at').first()
 
         if not schedule or not schedule.exam:
@@ -787,7 +764,7 @@ class PGAdmitCardPDFView(APIView):
         exam = schedule.exam
 
         # ── Generate PDF ───────────────────────────────────────────────────────
-        pdf_content = generate_pg_admit_card_pdf(student, exam)
+        pdf_content = generate_pg_admit_card_pdf(student, exam, registration=registration)
 
         if not pdf_content:
             return Response(
@@ -798,7 +775,6 @@ class PGAdmitCardPDFView(APIView):
         download = request.GET.get("download", "false").lower() == "true"
         disposition = "attachment" if download else "inline"
         safe_reg = "".join(c if c.isalnum() else "_" for c in student.registration_no)
-
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
         response["Content-Disposition"] = (
@@ -833,7 +809,7 @@ class PGPaymentInfoView(APIView):
             except PGExamRegistration.DoesNotExist:
                 return Response({'error': 'Registration not found.'}, status=status.HTTP_404_NOT_FOUND)
         else:
-            registration = PGExamRegistration.objects.filter(student=student).order_by('-sem', '-created_at').first()
+            registration = PGExamRegistration.objects.filter(student=student).order_by('-created_at', '-sem').first()
             if not registration:
                 return Response({'error': 'No exam registration found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -904,7 +880,7 @@ class PGInitiatePaymentView(APIView):
                 prof = PGStudentProfile.objects.get(registration_no=registration_uid)
                 registration = PGExamRegistration.objects.filter(
                     student=prof
-                ).order_by('-sem', '-created_at').first()
+                ).order_by('-created_at', '-sem').first()
             except PGStudentProfile.DoesNotExist:
                 pass
 
@@ -1028,17 +1004,18 @@ class PGPaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             uid = str(payment.registration.uid)
             redirect_url = (
-                f"{frontend_url}/pg-registration/"
+                f"{frontend_url}/pg-exam-registration/pg-examformback-1st"
                 f"?uid={uid}"
                 f"&payment_status={payment.payment_status.lower()}"
                 f"&order_id={order_id}"
             )
+            print(redirect_url,"kshfskd sdkgaw idusifueh")
             return django_redirect(redirect_url)
 
         except Exception as e:
             logger.exception("Error processing PG payment response")
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
-            return django_redirect(f"{frontend_url}/pg/payment-status?error={str(e)[:100]}")
+            return django_redirect(f"{frontend_url}/pg-exam-registration/pg-examformback-1st?error={str(e)[:100]}")
 
 
 class PGStudentUploadView(APIView):
@@ -1080,7 +1057,7 @@ class PGStudentUploadView(APIView):
             registration = (
                 PGExamRegistration.objects
                 .filter(student=student)
-                .order_by('-sem', '-created_at')
+                .order_by('-created_at', '-sem')
                 .first()
             )
             if not registration:
@@ -1254,3 +1231,332 @@ class PGRegistrationStatusView(APIView):
         )
 
         return Response(registration_data, status=status.HTTP_200_OK)
+
+class PGCenterAttachedCollegesView(APIView):
+    """
+    API View to get colleges attached to the logged-in center user's college for a specific exam.
+    Only accessible by college users (exam center).
+    Example: GET /api/pg/center/attached-colleges/?exam_uid=<uid>
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def get(self, request):
+        try:
+            center_college = request.user.college_profile.college
+        except AttributeError:
+            return Response({"error": "Center college profile not found."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # exam_uid = request.query_params.get('exam_uid')
+        # if not exam_uid:
+        #     return Response({"error": "exam_uid is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        from .models import PGExamCenterMapping, PGExam
+        # exam = get_object_or_404(PGExam, uid=exam_uid)
+        
+        # Find mapping where this college is the center
+        mapping = PGExamCenterMapping.objects.filter(center=center_college).first()
+        if not mapping:
+            return Response({"colleges": [], "total": 0}, status=status.HTTP_200_OK)
+            
+        attached_colleges = mapping.attached_colleges.all().order_by('name')
+        data = [{"uid": str(c.uid), "name": c.name} for c in attached_colleges]
+        
+        return Response({"colleges": data, "total": len(data)}, status=status.HTTP_200_OK)
+
+
+class PGStudentAttendanceListView(APIView):
+    """
+    GET /api/pg/student-attendance/list/?college_uid=<uid>&department_uid=<uid>
+
+    Auto-detects today's date and currently active exam slot from PGExamSchedule.
+    Returns all REGISTERED students (via PGExamRegistration) for the given
+    college + department, along with their ind_is_absent status.
+
+    Returns attendance_open=False if no exam is scheduled today or no slot
+    is currently active.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def get(self, request):
+        from .models import PGExamSchedule, PGStudentCourseAssessment, PGExamRegistration
+        from colleges.models import College
+        from django.db.models import Q
+        from datetime import datetime
+        import re
+
+        college_uid = request.query_params.get('college_uid')
+        department_uid = request.query_params.get('department_uid')
+
+        if not all([college_uid, department_uid]):
+            return Response(
+                {"error": "college_uid and department_uid are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        college = get_object_or_404(College, uid=college_uid)
+        department = get_object_or_404(PGDepartment, uid=department_uid)
+
+        # ── Step 1: Auto-detect today's date and current time ──────────────
+        now_local = timezone.localtime(timezone.now())
+        today = now_local.date()
+        current_time = now_local.time()
+
+        # ── Step 2: Find exam schedules for today for this department ───────
+        todays_schedules = PGExamSchedule.objects.filter(
+            exam_date=today
+        ).filter(
+            Q(group__isnull=True) | Q(group__department=department)
+        ).select_related('exam', 'common_course_structure').order_by('exam_time')
+
+        if not todays_schedules.exists():
+            return Response({
+                "attendance_open": False,
+                "message": "No exam scheduled today for this department.",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 3: If any exam is scheduled today, attendance is open for
+        #           BOTH shifts until 8:00 PM (regardless of exact exam_time) ──
+        CUTOFF_HOUR = 20  # 8 PM
+
+        if current_time.hour >= CUTOFF_HOUR:
+            slot_info = list(
+                todays_schedules.values_list('exam_time', flat=True).distinct()
+            )
+            return Response({
+                "attendance_open": False,
+                "message": "Attendance window has closed for today (after 8:00 PM).",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # All today's schedules are considered active (both shifts open till 8 PM)
+        active_schedules = list(todays_schedules)
+        active_exam_time = (
+            ", ".join(
+                todays_schedules.values_list('exam_time', flat=True).distinct()
+            )
+        )
+
+        # ── Step 4: Extract exam and paper codes from active schedules ───────
+        active_exam = active_schedules[0].exam
+        relevant_paper_codes = [
+            s.common_course_structure.course_code.upper().strip()
+            for s in active_schedules
+            if s.common_course_structure and s.common_course_structure.course_code
+        ]
+
+        if not relevant_paper_codes:
+            return Response({
+                "attendance_open": True,
+                "message": "Active slot found but no paper codes configured.",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 5: Get REGISTERED students for this college + department ────
+        # Determine semester number:
+        # - First try active_exam.year (the semester field)
+        # - Fallback: extract from exam name e.g. "PG 3rd sem exam" → 3
+        sem_number = active_exam.year
+        if not sem_number and active_exam.name:
+            ordinal_map = {
+                '1st': 1, 'first': 1,
+                '2nd': 2, 'second': 2,
+                '3rd': 3, 'third': 3,
+                '4th': 4, 'fourth': 4,
+                '5th': 5, 'fifth': 5,
+                '6th': 6, 'sixth': 6,
+            }
+            name_lower = active_exam.name.lower()
+            for word, num in ordinal_map.items():
+                if word in name_lower:
+                    sem_number = num
+                    break
+            if not sem_number:
+                # fallback: first bare digit in name
+                m = re.search(r'\b(\d+)\b', active_exam.name)
+                if m:
+                    sem_number = int(m.group(1))
+
+        # Build Q filter: match by exam FK, or by session+sem
+        q_filter = Q(exam=active_exam)
+        if sem_number and active_exam.session:
+            q_filter |= Q(session=active_exam.session, sem=sem_number)
+        elif active_exam.session:
+            q_filter |= Q(session=active_exam.session)
+
+        registered_student_ids = PGExamRegistration.objects.filter(
+            q_filter,
+            student__college=college,
+            student__department=department,
+            status='REGISTERED'
+        ).values_list('student_id', flat=True).distinct()
+
+        if not registered_student_ids:
+            return Response({
+                "attendance_open": True,
+                "exam_time": active_exam_time,
+                "exam_date": str(today),
+                "message": "No registered students found for this college and department.",
+                "students": [],
+                "total": 0
+            }, status=status.HTTP_200_OK)
+
+        # ── Step 6: Get ESE assessments for these students + papers ──────────
+        student_assessments = PGStudentCourseAssessment.objects.filter(
+            student_id__in=registered_student_ids,
+            course_code__in=relevant_paper_codes,
+            label__iregex=r'^ESE'
+        ).select_related('student').order_by(
+            'student__roll_no', 'student__registration_no'
+        )
+
+        # ── Step 7: Paginate and return ───────────────────────────────────────
+        from .serializers import PGAttendanceStudentSerializer
+        from .pagination import StandardResultsSetPagination
+
+        paginator = StandardResultsSetPagination()
+        paginated_qs = paginator.paginate_queryset(student_assessments, request)
+        serializer = PGAttendanceStudentSerializer(paginated_qs, many=True)
+
+        paginated_response = paginator.get_paginated_response(serializer.data)
+        # Merge extra context into the paginated response
+        paginated_response.data.update({
+            "attendance_open": True,
+            "exam_date": str(today),
+            "exam_time": active_exam_time,
+        })
+        return paginated_response
+
+
+
+class PGAttendanceMarkView(APIView):
+    """
+    POST /api/pg/student-attendance/mark/
+
+    Marks attendance (ind_is_absent) for a student's ESE assessment.
+    Only allowed during an active exam slot (today's date + current time window).
+
+    Request Body:
+    {
+        "assessment_uid": "<uid>",   -- PGStudentCourseAssessment.uid
+        "is_absent": false           -- false = PRESENT, true = ABSENT
+    }
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def post(self, request):
+        from .models import PGExamSchedule, PGStudentCourseAssessment
+        from .serializers import PGAttendanceMarkSerializer
+        from django.db.models import Q
+        from datetime import datetime
+
+        is_bulk = isinstance(request.data, list)
+        serializer = PGAttendanceMarkSerializer(data=request.data, many=is_bulk)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data_list = serializer.validated_data if is_bulk else [serializer.validated_data]
+
+        # ── Step 1: Pre-fetch all assessments in one query ───────────────────
+        uids = [item['assessment_uid'] for item in data_list]
+        assessments_queryset = PGStudentCourseAssessment.objects.filter(
+            uid__in=uids
+        ).select_related('student', 'department')
+        
+        # Map them by UID string for easy lookup
+        assessments_map = {str(a.uid): a for a in assessments_queryset}
+
+        # ── Step 2: Window Check Logic Setup ─────────────────────────────────
+        now_local = timezone.localtime(timezone.now())
+        today = now_local.date()
+        current_time = now_local.time()
+
+        def parse_exam_time_window(exam_time_str):
+            try:
+                cleaned = exam_time_str.replace(' ', '').upper()
+                parts = cleaned.split('-')
+                if len(parts) < 2:
+                    return None, None
+                start_str = parts[0]
+                end_str = '-'.join(parts[1:])
+                start = datetime.strptime(start_str, '%I:%M%p').time()
+                end = datetime.strptime(end_str, '%I:%M%p').time()
+                return start, end
+            except Exception:
+                return None, None
+
+        schedule_cache = {}
+        results = []
+        to_update = []
+        updated_at_now = timezone.now()
+
+        # ── Step 3: Process Logic ────────────────────────────────────────────
+        for item in data_list:
+            uid_str = str(item['assessment_uid'])
+            is_absent = item['is_absent']
+            
+            assessment = assessments_map.get(uid_str)
+            if not assessment:
+                results.append({"assessment_uid": uid_str, "status": "error", "error": "Assessment not found."})
+                continue
+
+            # Check window (cached)
+            course_code_key = (assessment.course_code or '').upper().strip()
+            dept_id_key = assessment.department_id
+            cache_key = f"{course_code_key}_{dept_id_key}"
+
+            if cache_key not in schedule_cache:
+                schedules_today = PGExamSchedule.objects.filter(
+                    exam_date=today,
+                    common_course_structure__course_code__iexact=course_code_key
+                ).filter(
+                    Q(group__isnull=True) | Q(group__department=dept_id_key)
+                )
+
+                active_slot_exists = False
+                for sched in schedules_today:
+                    if not sched.exam_time:
+                        continue
+                    start_t, end_t = parse_exam_time_window(sched.exam_time)
+                    if start_t and end_t and start_t <= current_time <= end_t:
+                        active_slot_exists = True
+                        break
+                schedule_cache[cache_key] = active_slot_exists
+
+            if not schedule_cache[cache_key]:
+                err_msg = f"Attendance is not open for {course_code_key}. No active exam slot right now."
+                if not is_bulk:
+                    return Response({"error": err_msg}, status=status.HTTP_403_FORBIDDEN)
+                results.append({"assessment_uid": uid_str, "status": "error", "error": err_msg})
+                continue
+
+            # Update in-memory
+            assessment.ind_is_absent = is_absent
+            assessment.updated_at = updated_at_now
+            to_update.append(assessment)
+
+            results.append({
+                "assessment_uid": uid_str,
+                "status": "success",
+                "student": assessment.student.get_full_name(),
+                "course_code": assessment.course_code,
+                "is_absent": assessment.ind_is_absent,
+            })
+
+        # ── Step 4: Bulk Update DB ───────────────────────────────────────────
+        if to_update:
+            PGStudentCourseAssessment.objects.bulk_update(to_update, ['ind_is_absent', 'updated_at'])
+
+        return Response({
+            "message": f"Processed {len(data_list)} attendance records.",
+            "results": results if is_bulk else results[0]
+        }, status=status.HTTP_200_OK)
+
+
+

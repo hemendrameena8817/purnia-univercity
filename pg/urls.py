@@ -13,15 +13,21 @@ from .views import (
     PGStudentUploadView,
     PGRegistrationStatusView,
     PGRegistrationCardPDFView,
+    PGRollSheetPDFView,
+    PGAttendanceSheetPDFView,
+    PGCenterAttachedCollegesView,
+    PGStudentAttendanceListView,
+    PGAttendanceMarkView,
+
 )
 
 urlpatterns = [
     path('cia-marks/entry/', PGCIAMarksEntryView.as_view(), name='cia-marks-entry'),
     path('college-students/', PGCollegeStudentsView.as_view(), name='college-students'),
     path('departments/', PGDepartmentDropdownView.as_view(), name='departments'),
-    # path('batches/', PGBatchDropdownView.as_view(), name='batches'),
     path('subjects/', PGSubjectDropdownView.as_view(), name='subjects'),
     path('students/filter/', PGStudentFilterView.as_view(), name='pg-student-filter'),
+    #student exam registrations
     path('exam-registration/', PGExamRegistrationDetailView.as_view(), name='pg-exam-registration'),
     path('admit-card/', PGAdmitCardPDFView.as_view(), name='pg-admit-card'),
     path('registration-card/', PGRegistrationCardPDFView.as_view(), name='pg-registration-card'),
@@ -33,6 +39,12 @@ urlpatterns = [
     path('student-image-upload/', PGStudentUploadView.as_view(), name='pg-student-image-upload'),
     # Registration status (public — used after CC Avenue redirect)
     path('<uuid:uid>/status/', PGRegistrationStatusView.as_view(), name='pg-registration-status'),
-    # path('fill-data/lookup/', PGFillDataLookupView.as_view(), name='fill-data-lookup'),
-    # path('fill-data/<uuid:uid>/', PGFillDataView.as_view(), name='fill-data'),
+    path('roll-sheet/pdf/', PGRollSheetPDFView.as_view(), name='pg-roll-sheet-pdf'),
+    path('attendance-sheet/pdf/', PGAttendanceSheetPDFView.as_view(), name='pg-attendance-sheet-pdf'),
+
+
+    ##center api for attendence sheet
+    path('center/attached-colleges/', PGCenterAttachedCollegesView.as_view(), name='pg-center-attached-colleges'),
+    path('student-attendance/list/', PGStudentAttendanceListView.as_view(), name='pg-student-attendance-list'),
+    path('student-attendance/mark/', PGAttendanceMarkView.as_view(), name='pg-student-attendance-mark'),
 ]

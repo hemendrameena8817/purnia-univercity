@@ -5,11 +5,14 @@ Run this script after ALL ESE marks have been entered.
 It calculates final grades, SGPAs, semester results, and manages next-semester registration.
 
 Usage:
-    # Dry run (no database changes)
-    poetry run python ug/services/run_step2_final_processing.py --batch 2024-28 --semester 1ST --dry-run
+    # Dry run - Regular exams
+    poetry run python ug/services/run_step2_final_processing.py --batch 2024-28 --semester 1ST --session 2024-25 --dry-run
     
-    # Production run
+    # Production run - Regular exams
     poetry run python ug/services/run_step2_final_processing.py --batch 2024-28 --semester 1ST --session 2024-25
+    
+    # Back exams (processes all batches in that session)
+    poetry run python ug/services/run_step2_final_processing.py --batch 2023-27 --semester 1ST --session 2024-25 --exam-type BACK
 """
 
 import os
@@ -52,8 +55,9 @@ Examples:
     parser.add_argument(
         '--batch',
         type=str,
-        required=True,
-        help='Batch code (e.g., 2024-28)'
+        required=False,
+        default=None,
+        help='Batch code (e.g., 2024-28). Optional - if omitted, all batches in session are processed.'
     )
     
     parser.add_argument(
@@ -88,6 +92,14 @@ Examples:
         help='Resume processing from last processed student (skip completed)'
     )
     
+    parser.add_argument(
+        '--exam-type',
+        type=str,
+        default='REGULAR',
+        choices=['REGULAR', 'BACK'],
+        help='Exam type: REGULAR or BACK (default: REGULAR)'
+    )
+    
     args = parser.parse_args()
     
     ################################################################################
@@ -97,15 +109,19 @@ Examples:
     if not args.dry_run:
         print(f"\n⚠️  PRODUCTION MODE")
         print(f"This will CALCULATE FINAL RESULTS and UPDATE DATABASE for:")
-        print(f"  Batch:    {args.batch}")
-        print(f"  Semester: {args.semester}")
-        print(f"  Session:  {args.session}")
+        print(f"  Batch:     {args.batch}")
+        print(f"  Semester:  {args.semester}")
+        print(f"  Session:   {args.session}")
+        print(f"  Exam Type: {args.exam_type}")
         if args.registration_no:
-            print(f"  Student:  {args.registration_no}")
+            print(f"  Student:   {args.registration_no}")
         print("\nActions:")
         print("  1. Update course-level marks & grades")
         print("  2. Update SGPA & Semester Result")
-        print("  3. Create Next-Semester Registrations (for Pass/Promoted)")
+        if args.exam_type == 'REGULAR':
+            print("  3. Create Next-Semester Registrations (for Pass/Promoted)")
+        else:
+            print("  3. Recalculate overall semester result (REGULAR+BACK combined)")
         
         response = input("\nContinue? (yes/no): ")
         if response.lower() != 'yes':
@@ -121,6 +137,7 @@ Examples:
         semester=args.semester,
         session=args.session,
         registration_no=args.registration_no,
+        exam_type=args.exam_type,
         dry_run=args.dry_run,
         resume=args.resume
     )

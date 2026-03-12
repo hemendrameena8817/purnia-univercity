@@ -327,3 +327,222 @@ class RegistrationCardView(APIView):
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UGExamRegistrationDetailView(APIView):
+    """
+    API View to get Exam Registration details including student profile and assessments.
+    Student is identified from the JWT token (no student_uid param needed).
+    
+    Query Parameters:
+    - sem: Semester (optional, returns most recent registration if not provided)
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ug.models import UGStudentProfile
+        from django.utils import timezone
+
+        try:
+            student = UGStudentProfile.objects.select_related(
+                'department', 'degree', 'program', 'college'
+            ).get(user=request.user)
+        except UGStudentProfile.DoesNotExist:
+            return Response(
+                {'error': 'No UG student profile found for this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        from ug.services.ug_registration_eligiblity import check_ug_registration_eligibility
+        from ug.serializers import UGExamRegistrationSerializer
+        from django.utils import timezone as tz
+
+        sem = request.query_params.get('sem')
+        response_data = check_ug_registration_eligibility(student, semester=sem)
+
+        # Pull out the raw registration object (private key set by service)
+        registration_obj = response_data.pop('_registration', None)
+
+        if registration_obj is not None:
+            # Build registration_window here in the view
+            def fmt_date(dt):
+                if not dt:
+                    return None
+                return tz.localtime(dt).strftime('%d %b %Y, %I:%M %p')
+
+            response_data['registration_window'] = {
+                'start_date': fmt_date(registration_obj.start_date),
+                'end_date': fmt_date(registration_obj.end_date),
+                'status': registration_obj.status,
+            }
+
+            # Serialize registration
+            response_data['registration'] = UGExamRegistrationSerializer(registration_obj).data
+
+        status_code = status.HTTP_200_OK
+        if not response_data.get('eligible') and 'reason' in response_data:
+             if 'No exam registration record found' in response_data['reason']:
+                 status_code = status.HTTP_404_NOT_FOUND
+
+        return Response(response_data, status=status_code)
+
+
+class UGStudentUploadView(APIView):
+    """
+    POST /ug/student-image-upload/
+    Uploads student's photo, signature, and other details.
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        import logging
+        from ug.models import UGStudentProfile, ExamRegistration, ExamRegistrationPayment
+
+        logger = logging.getLogger(__name__)
+
+        # ── 1. Resolve student from JWT ───────────────────────────────────────
+        try:
+            student = UGStudentProfile.objects.get(user=request.user)
+        except UGStudentProfile.DoesNotExist:
+            return Response(
+                {'error': 'No UG student profile found for this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # ── 2. Resolve target registration ────────────────────────────────────
+        registration_uid = request.data.get('registration_uid')
+        if registration_uid:
+            try:
+                registration = ExamRegistration.objects.get(
+                    uid=registration_uid, student=student
+                )
+            except ExamRegistration.DoesNotExist:
+                return Response(
+                    {'error': 'Registration not found.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            registration = (
+                ExamRegistration.objects
+                .filter(student=student)
+                .order_by('-sem', '-created_at')
+                .first()
+            )
+            if not registration:
+                return Response(
+                    {'error': 'No exam registration found for this student.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+        # ── 3. Verify payment success ─────────────────────────────────────────
+        if registration.status != 'REGISTERED':
+            payment_success = ExamRegistrationPayment.objects.filter(
+                registration=registration,
+                payment_status='SUCCESS'
+            ).exists()
+
+            if not payment_success:
+                latest_status = (
+                    registration.payments.order_by('-created_at')
+                    .values_list('payment_status', flat=True)
+                    .first()
+                ) or 'NO_PAYMENT'
+                return Response(
+                    {
+                        'error': (
+                            'Payment not completed. Please complete your fee '
+                            'payment before uploading documents.'
+                        ),
+                        'payment_status': latest_status,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # ── 4. Apply uploads / field updates ──────────────────────────────────
+        updated_fields = []
+
+        profile_image = request.FILES.get('profile_image')
+        if profile_image:
+            student.profile_image = profile_image
+            updated_fields.append('profile_image')
+
+        signature = request.FILES.get('signature')
+        if signature:
+            student.signature = signature
+            updated_fields.append('signature')
+
+        gender = request.data.get('gender')
+        VALID_GENDERS = {'Male', 'Female', 'Other'}
+        if gender:
+            if gender not in VALID_GENDERS:
+                return Response(
+                    {'error': f"Invalid gender. Must be one of: {', '.join(sorted(VALID_GENDERS))}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            student.gender = gender
+            updated_fields.append('gender')
+
+        religion = request.data.get('religion')
+        if religion:
+            student.religion = religion
+            updated_fields.append('religion')
+
+        nationality = request.data.get('nationality')
+        if nationality:
+            student.nationality = nationality
+            updated_fields.append('nationality')
+
+        caste = request.data.get('caste')
+        if caste:
+            student.caste = caste
+            updated_fields.append('caste')
+
+        medium = request.data.get('medium')
+        if medium:
+            student.medium_of_student = medium
+            updated_fields.append('medium_of_student')
+
+        # ── 5. Handle ExamRegistration uploads / updates ────────────────────
+        reg_updated_fields = []
+        
+        # New Field: Admission Receipt
+        admission_receipt = request.FILES.get('admission_receipt')
+        if admission_receipt:
+            registration.admission_receipt = admission_receipt
+            reg_updated_fields.append('admission_receipt')
+
+        if not updated_fields and not reg_updated_fields:
+            return Response(
+                {
+                    'error': (
+                        'No fields provided. Send at least one of: '
+                        'profile_image, signature, gender, admission_receipt, religion, nationality, caste.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if updated_fields:
+            student.save(update_fields=updated_fields)
+            logger.info(
+                f"UG student {student.registration_no} updated fields: {updated_fields}"
+            )
+
+        # ── 6. Mark registration as REGISTERED (if needed) & Save Registration ──
+        if registration.status != 'REGISTERED':
+            registration.status = 'REGISTERED'
+            reg_updated_fields.append('status')
+            logger.info(
+                f"ExamRegistration uid={registration.uid} marked REGISTERED "
+                f"for student {student.registration_no}"
+            )
+        
+        if reg_updated_fields:
+            registration.save(update_fields=reg_updated_fields)
+
+        return Response(
+            {'message': 'Success'},
+            status=status.HTTP_200_OK
+        )

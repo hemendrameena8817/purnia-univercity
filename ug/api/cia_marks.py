@@ -16,9 +16,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
-
+from ug.models import SemesterRegistration, StudentCourseAssessment
 from accounts.permissions import CanManageMarks
-
+from ug.models import UGDepartment
+from colleges.models import College
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db.models import Q
 
 # course_type prefixes that map to each filter category
 COURSE_TYPE_PREFIXES = {
@@ -33,34 +36,43 @@ COURSE_TYPE_PREFIXES = {
 CIA_LABELS = ['CIA-Theory', 'CIA-Practical']
 
 
-class CIAStudentListView(APIView):
+class UGDepartmentListView(APIView):
     """
-    GET /api/ug/cia/students/
+    GET /api/ug/cia/departments/
 
-    Required query params:
-      - sem         : semester number (e.g. 3)
-      - session     : e.g. 2025-26
-      - course_type : MJC | MIC | MDC | AEC | SEC | VAC
-
-    Optional query params:
-      - department_code : filter by assessment department code (for MJC/MIC/MDC)
-      - college_code    : university admin only — scope to a specific college
-      - label           : CIA-Theory | CIA-Practical (default: all CIA labels)
-
-    Returns a list of students with their CIA assessment records.
+    Returns all published departments to be shown in the UI dropdown.
     """
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, CanManageMarks]
 
     def get(self, request):
-        from ug.models import SemesterRegistration, StudentCourseAssessment
 
+        departments = UGDepartment.objects.filter(is_publish=True).order_by('name')
+        data = [{'uid': str(d.uid), 'code': d.code, 'name': d.name} for d in departments]
+
+        return Response({
+            'count': len(data),
+            'departments': data
+        })
+
+
+class CIAStudentListView(APIView):
+    """
+    GET /api/ug/cia/students/
+    """
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
         # ── Validate required params ──────────────────────────────────────────
         sem = request.GET.get('sem')
         session = request.GET.get('session')
         course_type_filter = request.GET.get('course_type', '').upper().strip()
-        department_code = request.GET.get('department_code', '').upper().strip()
+        department_uid = request.GET.get('department_uid', '').strip()
         label_filter = request.GET.get('label', '').strip()
+        entry_status = request.GET.get('entry_status', 'all').lower().strip()
+
+        exam_type = request.GET.get('exam_type', 'REGULAR').upper().strip()
 
         errors = {}
         if not sem or not sem.isdigit():
@@ -69,149 +81,169 @@ class CIAStudentListView(APIView):
             errors['session'] = 'Required (e.g. 2025-26).'
         if not course_type_filter or course_type_filter not in COURSE_TYPE_PREFIXES:
             errors['course_type'] = f'Required. Must be one of: {", ".join(COURSE_TYPE_PREFIXES)}'
+        if exam_type not in ('REGULAR', 'BACK'):
+            errors['exam_type'] = 'Must be REGULAR or BACK.'
         if errors:
             return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
         sem = int(sem)
-
-        # ── Determine college scope ───────────────────────────────────────────
-        college = None
-        if request.user.user_type == 'university_admin':
-            college_code = request.GET.get('college_code', '').strip()
-            if college_code:
-                from colleges.models import College
-                college = College.objects.filter(college_code=college_code).first()
-                if not college:
-                    return Response(
-                        {'error': f"College '{college_code}' not found."},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-        else:
-            # College user — auto-scope to their college
-            if not hasattr(request.user, 'college_profile') or not request.user.college_profile:
-                return Response(
-                    {'error': 'No college profile associated with this user.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-            college = request.user.college_profile.college
-            if not college:
-                return Response(
-                    {'error': 'No college linked to your profile.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-        # ── Get REGISTERED students for this sem/session ──────────────────────
-        reg_qs = SemesterRegistration.objects.filter(
-            sem=sem,
-            session=session,
-            status='REGISTERED',
-        )
-        if college:
-            reg_qs = reg_qs.filter(student__college=college)
-
-        student_ids = list(reg_qs.values_list('student_id', flat=True).distinct())
-
-        if not student_ids:
-            return Response({
-                'college': college.name if college else 'All',
-                'sem': sem,
-                'session': session,
-                'course_type': course_type_filter,
-                'count': 0,
-                'students': []
-            })
-
-        # ── Build semester text for assessment filter ─────────────────────────
         SEM_TEXT_MAP = {
             1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH',
             5: '5TH', 6: '6TH', 7: '7TH', 8: '8TH',
         }
         semester_text = SEM_TEXT_MAP.get(sem, str(sem))
 
-        # ── Fetch CIA assessments filtered by course_type prefix ──────────────
-        prefix = COURSE_TYPE_PREFIXES[course_type_filter]
-
-        # CIA labels filter
-        if label_filter and label_filter in CIA_LABELS:
-            labels_to_fetch = [label_filter]
+        # ── Determine college scope ───────────────────────────────────────────
+        college = None
+        if request.user.user_type == 'university_admin':
+            college_code = request.GET.get('college_code', '').strip()
+            if college_code:
+                college = College.objects.filter(college_code=college_code).first()
+                if not college:
+                    return Response({'error': 'College not found.'}, status=404)
         else:
-            labels_to_fetch = CIA_LABELS
+            # College User - use college mapped directly to UserAccount
+            college = getattr(request.user, 'college', None)
+            if not college:
+                return Response({'error': 'No college associated with your account.'}, status=403)
 
-        qs = StudentCourseAssessment.objects.filter(
-            student_id__in=student_ids,
-            semester=semester_text,
-            session=session,
-            label__in=labels_to_fetch,
-        ).filter(
-            course_type__startswith=prefix
-        ).select_related(
-            'student', 'student__college', 'department'
-        ).order_by(
-            'student__college__name',
-            'student__registration_no',
-            'course_type',
-            'label',
+        # ── Fetch Assessments directly ────────────────────────────────────────
+        prefix = COURSE_TYPE_PREFIXES[course_type_filter]
+        
+        # We always check for both Theory and Practical to pair them
+        labels_to_fetch = ['CIA-Theory', 'CIA-Practical']
+        
+        # Build optimized query matching the index [college_code, session, semester, course_type]
+        # and ensuring alignment with student's UserAccount college mapping
+        filter_kwargs = {
+            'session': session,
+            'semester': semester_text,
+            'label__in': labels_to_fetch,
+            'course_type__startswith': prefix,
+            'student__user__college': college  # Map via UserAccount as requested
+        }
+        
+        if college:
+            filter_kwargs['college_code'] = college.college_code
+
+        qs = StudentCourseAssessment.objects.filter(**filter_kwargs).select_related(
+            'student', 'student__user', 'student__college', 'department'
         )
 
-        # Optional: filter by department code (for MJC/MIC/MDC)
-        if department_code and course_type_filter in ('MJC', 'MIC', 'MDC'):
-            qs = qs.filter(department__code=department_code)
-
-        # ── Serialize ─────────────────────────────────────────────────────────
-        results = []
-        for a in qs:
-            s = a.student
-            results.append({
+        # Department filtering: Only for MJC, MIC, MDC (Major/Minor)
+        if course_type_filter in ('MJC', 'MIC', 'MDC'):
+            if department_uid:
+                qs = qs.filter(department__uid=department_uid)
+        # For SEC, AEC, VAC - logic is to return all assessments for all students (department is ignored)
+        
+        # ── Grouping by Student & Paper ──────────────
+        # We fetch all to group faithfully, as pagination must be on the result rows.
+        all_assessments = list(qs.order_by('student__registration_no', 'paper_code', 'label'))
+        
+        grouped_map = {}
+        for a in all_assessments:
+            key = (a.student_id, (a.paper_code or "").upper().strip())
+            if key not in grouped_map:
+                s = a.student
+                grouped_map[key] = {
+                    'student_name': f"{s.first_name or ''} {s.last_name or ''}".strip(),
+                    'registration_no': s.registration_no,
+                    'roll_no': s.roll_no,
+                    'paper_code': a.paper_code,
+                    'course_name': a.course_name,
+                    'course_type': a.course_type,
+                    'course_code': a.course_code,
+                    'department': a.department.name if a.department else None,
+                    'cia_theory': None,
+                    'cia_practical': None
+                }
+            
+            comp_data = {
                 'assessment_uid': str(a.uid),
-                'registration_no': s.registration_no,
-                'student_name': f"{s.first_name or ''} {s.last_name or ''}".strip(),
-                'roll_no': s.roll_no,
-                'college_name': s.college.name if s.college else None,
-                'college_code': s.college.college_code if s.college else None,
-                'department': a.department.name if a.department else None,
-                'department_code': a.department.code if a.department else None,
-                'course_name': a.course_name,
-                'course_type': a.course_type,
-                'paper_code': a.paper_code,
-                'label': a.label,
                 'ind_max_marks': a.ind_max_marks,
                 'ind_marks_obtained': str(a.ind_marks_obtained) if a.ind_marks_obtained is not None else None,
                 'ind_is_absent': a.ind_is_absent,
-            })
+                'is_cia_filled': a.is_cia_filled,
+                'cia_filled_on': a.cia_filled_on.isoformat() if a.cia_filled_on else None,
+                'is_carried_forward': (a.exam_type == 'BACK' and a.created_at == a.updated_at) # Simplistic check or use custom flag
+            }
+            if a.label == 'CIA-Theory':
+                grouped_map[key]['cia_theory'] = comp_data
+            else:
+                grouped_map[key]['cia_practical'] = comp_data
+
+        # ── Final Pairing & Filtering ─────────────────────────────────────────
+        final_rows = []
+        is_history = request.GET.get('history', 'false').lower() == 'true'
+
+        for row in grouped_map.values():
+            theory = row.get('cia_theory')
+            pract = row.get('cia_practical')
+            
+            has_filled = False
+            has_pending = False
+            
+            if theory:
+                if theory['is_cia_filled']: has_filled = True
+                else: has_pending = True
+            else:
+                row['cia_theory'] = "N/A"
+                
+            if pract:
+                if pract['is_cia_filled']: has_filled = True
+                else: has_pending = True
+            else:
+                row['cia_practical'] = "N/A"
+            
+            # Apply Filter based on history param
+            if is_history:
+                # History mode: Show rows that have at least one component filled
+                if has_filled:
+                    final_rows.append(row)
+            else:
+                # Pending mode (default): Show rows that have at least one component pending
+                if has_pending:
+                    final_rows.append(row)
+
+        # ── Pagination ────────────────────────────────────────────────────────
+        page = request.GET.get('page', 1)
+        page_size = request.GET.get('page_size', 50)
+        
+        try:
+            page_size = int(page_size)
+            if page_size > 50: page_size = 50
+        except ValueError:
+            page_size = 50
+            
+        paginator = Paginator(final_rows, page_size)
+        
+        try:
+            paginated_page = paginator.page(page)
+        except (PageNotAnInteger, EmptyPage):
+            paginated_page = paginator.page(1)
 
         return Response({
             'college': college.name if college else 'All',
             'sem': sem,
             'session': session,
             'course_type': course_type_filter,
-            'count': len(results),
-            'students': results,
+            'exam_type': exam_type,
+            'history_mode': is_history,
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'current_page': paginated_page.number,
+            'students': paginated_page.object_list,
         })
 
 
 class CIAMarksSaveView(APIView):
     """
     PATCH /api/ug/cia/marks/
-
-    Save CIA marks for one or more StudentCourseAssessment records.
-
-    Request body:
-    {
-        "marks": [
-            {
-                "assessment_uid": "uuid",
-                "ind_marks_obtained": 22,
-                "ind_is_absent": false
-            },
-            ...
-        ]
-    }
     """
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, CanManageMarks]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request):
-        from ug.models import StudentCourseAssessment
 
         marks_data = request.data.get('marks', [])
         if not marks_data or not isinstance(marks_data, list):
@@ -220,12 +252,12 @@ class CIAMarksSaveView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ── Scope: determine which student_ids this user can edit ─────────────
+        # ── Scope: determine which college this user belongs to ───────────
         college = None
         if request.user.user_type != 'university_admin':
-            if not hasattr(request.user, 'college_profile') or not request.user.college_profile:
-                return Response({'error': 'No college profile.'}, status=status.HTTP_403_FORBIDDEN)
-            college = request.user.college_profile.college
+            college = getattr(request.user, 'college', None)
+            if not college:
+                return Response({'error': 'No college associated with your account.'}, status=status.HTTP_403_FORBIDDEN)
 
         # ── Fetch and validate all assessments ────────────────────────────────
         uids = []
@@ -239,6 +271,10 @@ class CIAMarksSaveView(APIView):
                 continue
 
             ind_marks = entry.get('ind_marks_obtained')
+            # Handle empty string as None
+            if isinstance(ind_marks, str) and ind_marks.strip() == "":
+                ind_marks = None
+                
             is_absent = entry.get('ind_is_absent', False)
 
             if not is_absent:
@@ -263,10 +299,11 @@ class CIAMarksSaveView(APIView):
             return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
         # ── Fetch matching assessments from DB ────────────────────────────────
-        qs = StudentCourseAssessment.objects.filter(uid__in=uids).select_related('student__college')
+        # Use indexed college_code for optimization
+        qs = StudentCourseAssessment.objects.filter(uid__in=uids).select_related('student__user')
 
         if college:
-            qs = qs.filter(student__college=college)
+            qs = qs.filter(college_code=college.college_code)
 
         found_uids = {str(a.uid): a for a in qs}
 
@@ -298,6 +335,12 @@ class CIAMarksSaveView(APIView):
 
             assessment.ind_marks_obtained = marks
             assessment.ind_is_absent = is_absent
+            
+            # Update CIA fill status
+            from django.utils import timezone
+            assessment.is_cia_filled = True
+            assessment.cia_filled_on = timezone.now()
+            
             to_update.append(assessment)
 
         if validation_errors:
@@ -305,7 +348,7 @@ class CIAMarksSaveView(APIView):
 
         StudentCourseAssessment.objects.bulk_update(
             to_update,
-            ['ind_marks_obtained', 'ind_is_absent']
+            ['ind_marks_obtained', 'ind_is_absent', 'is_cia_filled', 'cia_filled_on']
         )
 
         return Response({

@@ -1,16 +1,139 @@
-def generate_pg_admit_card_pdf(student, exam):
+import re as _re
+import logging
+logger = logging.getLogger(__name__)
+
+# ── Common Semester/Roman Mappings ───────────────────────────────────────
+_roman_str_to_int = {
+    'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+    'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10,
+}
+roman_to_arabic = {k: str(v) for k, v in _roman_str_to_int.items()}
+roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV': '15'})
+roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
+
+def generate_pg_admit_card_pdf(student, exam, registration=None):
     from weasyprint import HTML
     import os
-    import logging
     from django.conf import settings
     from django.template.loader import get_template
-    from pg.models import PGExamCenterMapping, PGExamSchedule, PGExamRegistration
+    from pg.models import PGExamCenterMapping, PGExamSchedule, PGExamRegistration, PGStudentCourseAssessment
     from pup_umis_backend.utils.file_utils import image_to_base64
+    import qrcode
+    import base64
+    from io import BytesIO
 
-    logger = logging.getLogger(__name__)
+    def _get_base64_image(image_field_or_path):
+        """
+        Convert a Django ImageField, filesystem path, or HTTP URL to a base64
+        data-URI suitable for embedding directly in HTML.
+        """
+        if not image_field_or_path:
+            return None
 
-    # ── Static images path ─────────────────────────────────────────────────────
-    STATIC_IMAGES = os.path.join(settings.BASE_DIR, "static", "images", "common")
+        import base64
+        from io import BytesIO
+        try:
+            from PIL import Image, ImageOps
+            PIL_AVAILABLE = True
+        except ImportError:
+            PIL_AVAILABLE = False
+
+        try:
+            import requests
+            raw = None
+
+            # 1. Django FileField / ImageField — try .open() first (works for S3 + local)
+            if hasattr(image_field_or_path, 'open'):
+                try:
+                    with image_field_or_path.open('rb') as f:
+                        raw = f.read()
+                except Exception:
+                    pass
+
+            # 2. Local path fallback
+            if raw is None and hasattr(image_field_or_path, 'path'):
+                try:
+                    if os.path.exists(image_field_or_path.path):
+                        with open(image_field_or_path.path, 'rb') as f:
+                            raw = f.read()
+                except Exception:
+                    pass
+
+            # 3. Plain filesystem path string
+            if raw is None and isinstance(image_field_or_path, str) and os.path.exists(image_field_or_path):
+                with open(image_field_or_path, 'rb') as f:
+                    raw = f.read()
+
+            # 4. HTTP URL (string or .url attribute)
+            if raw is None:
+                url = None
+                if isinstance(image_field_or_path, str) and image_field_or_path.startswith('http'):
+                    url = image_field_or_path
+                elif hasattr(image_field_or_path, 'url'):
+                    try:
+                        url = image_field_or_path.url
+                        if not url.startswith('http'):
+                            url = None
+                    except Exception:
+                        url = None
+                if url:
+                    try:
+                        resp = requests.get(url, timeout=5)
+                        if resp.status_code == 200:
+                            raw = resp.content
+                    except Exception:
+                        pass
+
+            if raw is None:
+                return None
+
+            if PIL_AVAILABLE:
+                img = Image.open(BytesIO(raw))
+                try:
+                    img = ImageOps.exif_transpose(img)
+                except Exception:
+                    pass
+                
+                # Transparency handling: RGBA -> RGB (white background)
+                if img.mode in ('RGBA', 'LA'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                buf = BytesIO()
+                img.save(buf, format='JPEG', quality=85)
+                raw = buf.getvalue()
+                mime = 'image/jpeg'
+            else:
+                mime = 'image/png'
+
+            b64 = base64.b64encode(raw).decode('utf-8')
+            return f"data:{mime};base64,{b64}"
+
+        except Exception as e:
+            logger.error(f"Image encode error: {e}")
+            return None
+
+    def _load_static_image(relative_path):
+        # 1. Try common static path (local dev)
+        common_path = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', relative_path)
+        if os.path.exists(common_path):
+            return _get_base64_image(common_path)
+
+        # 2. Try static/images/ directly (live server often serves from here)
+        direct_path = os.path.join(settings.BASE_DIR, 'static', 'images', relative_path)
+        if os.path.exists(direct_path):
+            return _get_base64_image(direct_path)
+
+        # 3. Try UG static (for shared signatures)
+        ug_path = os.path.join(settings.BASE_DIR, 'ug', 'static', 'ug', 'images', relative_path)
+        if os.path.exists(ug_path):
+            return _get_base64_image(ug_path)
+
+        return None
 
     # ── Exam Center ────────────────────────────────────────────────────────────
     exam_center = None
@@ -24,44 +147,171 @@ def generate_pg_admit_card_pdf(student, exam):
             exam_center = mapping.center
 
     # ── Exam Registration ──────────────────────────────────────────────────────
-    registration = PGExamRegistration.objects.filter(
-        student=student,
-        session=getattr(exam, 'session', None),
-    ).order_by('-created_at').first()
-
-    # Fallback: latest registration for this student
     if not registration:
+        # Prefer registration matching the exam's session, then fall back to the
+        # most recent REGISTERED record (view already guarantees one exists).
         registration = PGExamRegistration.objects.filter(
-            student=student
+            student=student,
+            status='REGISTERED',
+            session=getattr(exam, 'session', None),
         ).order_by('-created_at').first()
 
+        if not registration:
+            registration = PGExamRegistration.objects.filter(
+                student=student,
+                status='REGISTERED',
+            ).order_by('-created_at').first()
+
+    exam_type = registration.exam_type if registration else "REGULAR"
+
     # ── Exam Schedules ─────────────────────────────────────────────────────────
+    # Schedules hold ONE generic row per group (e.g. CC-X for all CC papers).
+    # They give us date/time/sitting only; actual subjects come from assessments.
     schedules_query = PGExamSchedule.objects.filter(
         exam=exam
     ).select_related('common_course_structure', 'group').order_by('exam_date', 'exam_time')
 
-    # Filter by student's department group
+    # Filter by student's department group if possible
     if student.department:
         dept_schedules = schedules_query.filter(group__department=student.department)
         if dept_schedules.exists():
             schedules_query = dept_schedules
 
-    schedules = schedules_query
+    # Build THREE lookups for matching assessment subjects to exam schedules:
+    # 1. schedule_by_course_code: 'CC-1' → schedule  ← most accurate (exact match)
+    # 2. schedule_by_course_type: 'CC' → schedule    ← fallback (only if course_type is unique)
+    # 3. schedule_by_prefix: 'CC' → schedule         ← last prefix fallback
+    schedule_by_course_code = {}   # exact: 'CC-1', 'EC-2', etc.
+    schedule_by_course_type = {}   # broad: 'CC', 'EC', etc. (may overwrite if multiple groups)
+    schedule_by_prefix = {}        # prefix fallback
+    schedule_default = schedules_query.first()  # last resort fallback
+    for s in schedules_query:
+        ccs = s.common_course_structure
+        if ccs:
+            # Exact course_code match — most reliable (unique per paper)
+            if ccs.course_code:
+                schedule_by_course_code[ccs.course_code.upper()] = s
+                # Prefix fallback (e.g. 'CC-1' → key 'CC')
+                prefix = ccs.course_code.split('-')[0].upper()
+                schedule_by_prefix[prefix] = s
+            # course_type fallback (may be overwritten for same-type schedules)
+            if ccs.course_type:
+                schedule_by_course_type[ccs.course_type.upper()] = s
 
+    # ── Get subjects from student's ESE assessments ────────────────────────────
+    # Standardized Semester Label Mapping (bridging int vs string labels)
+    sem_variants = set()
+    if registration and registration.sem:
+        s_int = registration.sem
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                sem_variants.add(v_up)
+                sem_variants.add(f"SEM-{v_up}")
+                sem_variants.add(f"SEM {v_up}")
+                sem_variants.add(f"SEMESTER-{v_up}")
+                sem_variants.add(f"SEMESTER {v_up}")
+
+    assessment_filter = dict(
+        student=student,
+        label__icontains='ESE',
+        session=registration.session if registration else exam.session,
+    )
+    if sem_variants:
+        assessment_filter['semester__in'] = list(sem_variants)
+    if exam_type in ['BACK', 'IMPROVEMENT']:
+        assessment_filter['exam_type__iexact'] = exam_type
+
+    # Build subject rows (deduplicated by paper_code)
+    from types import SimpleNamespace
+    seen_papers = set()
+    schedules = []
+    for a in PGStudentCourseAssessment.objects.filter(**assessment_filter).order_by('paper_code'):
+        key = a.paper_code or a.course_code or ''
+        if not key or key in seen_papers:
+            continue
+        seen_papers.add(key)
+
+        # Find correct schedule for this subject's date/time:
+        # Priority: course_type match → course_code prefix → paper_code prefix → fallback
+        sched = None
+        # 1. Exact course_code match (most accurate: 'CC-1', 'EC-2', etc.)
+        if a.course_code:
+            sched = schedule_by_course_code.get(a.course_code.upper())
+        # 2. Exact paper_code match
+        if not sched and a.paper_code:
+            sched = schedule_by_course_code.get(a.paper_code.upper())
+        # 3. course_type match (broad: 'CC', 'EC', 'AECC', 'SEC')
+        if not sched and a.course_type:
+            sched = schedule_by_course_type.get(a.course_type.upper())
+        # 4. Prefix from course_code
+        if not sched and a.course_code:
+            sched = schedule_by_prefix.get(a.course_code.split('-')[0].upper())
+        # 5. Prefix from paper_code
+        if not sched and a.paper_code:
+            sched = schedule_by_prefix.get(a.paper_code.split('-')[0].upper())
+        # 6. Last resort
+        if not sched:
+            sched = schedule_default
+
+        schedules.append(SimpleNamespace(
+            common_course_structure=SimpleNamespace(
+                course_code=a.course_code or '-',
+                course_name=a.course_name or '-',
+            ),
+            assessment_course_name=a.course_name or '-',
+            exam_date=sched.exam_date if sched else None,
+            exam_time=sched.exam_time if sched else '-',
+            sitting=sched.sitting if sched else '-',
+        ))
+
+    # ── QR Code ─────────────────────────────────────────────────────────────────
+    qr_code_image = None
+    try:
+        qr_data = (
+            f"Session: {registration.student.batch if registration else '-'}\n"
+            f"Candidate Name: {student.first_name}\n"
+            f"Registration No: {student.registration_no}\n"
+            f"Exam Center: {exam_center.center_code if exam_center else '-'} - {exam_center.name if exam_center else '-'}\n"
+            f"College: {student.college.name if student.college else '-'}\n"
+            f"Exam Type: {exam_type}"
+        )
+
+        qr = qrcode.QRCode(version=1, box_size=6, border=2)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+
+        buf = BytesIO()
+        qr_img.save(buf, format='PNG')
+        qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        qr_code_image = f"data:image/png;base64,{qr_b64}"
+    except Exception as e:
+        logger.warning(f"QR code generation failed: {e}")
     # ── Context ────────────────────────────────────────────────────────────────
     context = {
+        "exam": exam.name,
         "student": student,
         "registration": registration,
-        "exam_type": registration.exam_type if registration else "REGULAR",
+        "exam_type": exam_type,
         "center_mapping": mapping,
         "center_name": exam_center.name if exam_center else "-",
         "center_code": exam_center.center_code if exam_center else "-",
         "schedules": schedules,
-        "university_logo": image_to_base64(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
-        "watermark_logo": image_to_base64(os.path.join(STATIC_IMAGES, "purnea-logo.png")),
-        "student_photo": image_to_base64(student.profile_image.path if student.profile_image else None),
-        "student_sig": image_to_base64(student.signature.path if student.signature else None),
-        "controller_signature": image_to_base64(os.path.join(settings.BASE_DIR, "static", "images", "controller-of-examination-signature.png")),
+        "university_logo": _load_static_image("purnea-logo.png"),
+        "watermark_logo": _load_static_image("purnea-logo.png"),
+        "student_photo": _get_base64_image(student.profile_image),
+        "student_sig": _get_base64_image(student.signature),
+        "controller_signature": _load_static_image("controller-of-examination-signature.png"),
+        "qr_code_image": qr_code_image,
     }
 
     html_string = get_template("pg/admit_card.html").render(context)
@@ -73,3 +323,854 @@ def generate_pg_admit_card_pdf(student, exam):
     except Exception as e:
         logger.error(f"PG Admit Card PDF generation failed: {e}")
         return None
+
+
+
+def generate_pg_roll_sheet_pdf(exam, college, department=None, registration_no=None):
+    """
+    Generates and returns Exam Roll Sheet PDF for PG.
+
+    When `department` is provided, only that department's roll sheet is produced.
+    When `registration_no` is provided, only that student is included.
+    When `department` is None and `registration_no` is None, ONE PDF is produced
+    containing a page/section for EVERY department that has registered students.
+    """
+    from weasyprint import HTML
+    from django.conf import settings
+    from django.template.loader import get_template
+    from pg.models import (
+        PGExamRegistration,
+        PGExamSchedule,
+        PGCommonCourseStructure,
+        PGExamCenterMapping,
+        PGStudentCourseAssessment,
+        PGDepartment,
+    )
+    from pup_umis_backend.utils.file_utils import image_to_base64
+    import os
+    ey = str(exam.year) if exam.year else ""
+    sem_variants_int = set()
+
+    # 1. From exam.year directly
+    if ey.isdigit():
+        sem_variants_int.add(int(ey))
+
+    if exam.name:
+        # 2. Roman numeral in name: "SEM-III", "SEM III", "SEMESTER-III" → 3
+        roman_m = _re.search(
+            r'\b(?:SEM|SEMESTER)[-\s]*(I{1,3}|IV|VI{0,3}|IX|X)\b',
+            exam.name, _re.IGNORECASE
+        )
+        if roman_m:
+            rn = roman_m.group(1).upper()
+            if rn in _roman_str_to_int:
+                sem_variants_int.add(_roman_str_to_int[rn])
+
+        # 3. Small digit (1-8) only — avoids picking up years like 2025
+        digit_m = _re.search(r'(?<!\d)([1-8])(?!\d)', exam.name)
+        if digit_m:
+            sem_variants_int.add(int(digit_m.group(1)))
+
+    sem_variants_int = list(sem_variants_int)
+    sem_variants = set()
+    for s_int in sem_variants_int:
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                sem_variants.add(v_up)
+                sem_variants.add(f"SEM-{v_up}")
+                sem_variants.add(f"SEM {v_up}")
+                sem_variants.add(f"SEMESTER-{v_up}")
+                sem_variants.add(f"SEMESTER {v_up}")
+    
+    sem_variants = list(sem_variants)
+    logger.info(f"Roll sheet sem filter: exam.year={exam.year}, name={exam.name}, sem_variants_int={sem_variants_int}, sem_variants={sem_variants}")
+
+    # Whether exam.session is a real session year-range like "2025-26"
+    _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
+
+    def normalize_code(code):
+        if not code:
+            return ""
+        code = code.upper().strip().replace(" ", "-")
+        m = _re.match(r'^([A-Z]+)(\d+)$', code)
+        if m:
+            code = f"{m.group(1)}-{m.group(2)}"
+        if "-" in code:
+            parts = code.rsplit("-", 1)
+            prefix, suffix = parts[0], parts[1]
+            if suffix in roman_to_arabic:
+                return f"{prefix}-{roman_to_arabic[suffix]}"
+            return code
+        if code in roman_to_arabic:
+            return roman_to_arabic[code]
+        return code
+
+    def get_suffix(code):
+        nc = normalize_code(code)
+        return nc.split("-")[-1] if "-" in nc else nc
+
+    # ── Base registrations ───────────────────────────────────────────────────
+    regs_qs = PGExamRegistration.objects.filter(
+        exam=exam,
+        student__college=college,
+        status='REGISTERED',
+    )
+    if sem_variants_int:
+        # Filter primarily by semester.
+        regs_qs = regs_qs.filter(sem__in=sem_variants_int)
+    elif _is_year_range:
+        regs_qs = regs_qs.filter(session=exam.session)
+        # else: no reliable filter, return all registered for this college
+
+    if department:
+        regs_qs = regs_qs.filter(student__department=department)
+
+    if registration_no:
+        regs_qs = regs_qs.filter(student__registration_no=registration_no)
+
+    regs_qs = regs_qs.select_related(
+        'student', 'student__department', 'student__program', 'student__degree'
+    ).order_by('student__roll_no', 'student__registration_no')
+
+    if not regs_qs.exists():
+        logger.warning(
+            f"[ROLLSHEET] No registrations for exam='{exam.name}' "
+            f"session={exam.session} (is_year_range={_is_year_range}), "
+            f"sem={sem_variants_int}, college='{college.name}'"
+        )
+        return None
+
+    # ── Exam center ──────────────────────────────────────────────────────────
+    center_name = "-"
+    cm = PGExamCenterMapping.objects.filter(exams=exam, attached_colleges=college).first()
+    if cm and cm.center:
+        center_name = cm.center.name
+
+    # ── All schedules for this exam ──────────────────────────────────────────
+    schedules_all = PGExamSchedule.objects.filter(
+        exam=exam
+    ).select_related('common_course_structure', 'group').order_by('exam_date', 'exam_time')
+
+    # ── Controller signature (same path logic as admit card) ─────────────────
+    def _find_static_image(filename):
+        """Finds a static image the same way generate_pg_admit_card_pdf does."""
+        # 1. static/images/common/ (local dev)
+        p = os.path.join(settings.BASE_DIR, 'static', 'images', 'common', filename)
+        if os.path.exists(p):
+            return p
+        # 2. static/images/ directly (live server)
+        p = os.path.join(settings.BASE_DIR, 'static', 'images', filename)
+        if os.path.exists(p):
+            return p
+        # 3. MEDIA_ROOT/common/
+        p = os.path.join(settings.MEDIA_ROOT, 'common', filename)
+        if os.path.exists(p):
+            return p
+        # 4. STATIC_ROOT
+        for base in [getattr(settings, 'STATIC_ROOT', '')] + list(getattr(settings, 'STATICFILES_DIRS', [])):
+            if base:
+                for sub in ['images/common', 'images', 'common', '']:
+                    p = os.path.join(base, sub, filename) if sub else os.path.join(base, filename)
+                    if os.path.exists(p):
+                        return p
+        return None
+
+    ctrl_sig_path = _find_static_image("controller-of-examination-signature.png")
+    ctrl_sig_b64 = image_to_base64(ctrl_sig_path) if ctrl_sig_path else None
+    if not ctrl_sig_b64:
+        logger.warning(f"[ROLLSHEET] Signature not found for: controller-of-examination-signature.png")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Helper: build one roll-sheet section for the given list of registrations
+    # ─────────────────────────────────────────────────────────────────────────
+    def _build_section(dept_regs, dept_obj):
+        """Returns (subjects, student_data, meta_dict) for one department."""
+        stu_ids = [r.student_id for r in dept_regs]
+
+        code_to_id = {}
+        norm_to_id = {}
+        subjects = []
+        seen_norms = set()
+
+        if dept_obj is not None:
+            # Derive sessions and semesters from actual registrations in this dept
+            dept_sessions = list(set(r.session for r in dept_regs if r.session))
+            if not dept_sessions:
+                dept_sessions = [exam.session] if exam.session else []
+
+            dept_sems = list(set(r.sem for r in dept_regs if r.sem is not None))
+            dept_sem_variants = set()
+            for s_int in dept_sems:
+                s_str = str(s_int)
+                roman_s = roman_map_inv.get(s_str, "")
+                variants = [s_str, roman_s]
+                if s_str == '1': variants.extend(['1ST', 'FIRST'])
+                elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+                elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+                elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+                for v in variants:
+                    if v:
+                        v_up = v.upper()
+                        dept_sem_variants.add(v_up)
+                        dept_sem_variants.add(f"SEM-{v_up}")
+                        dept_sem_variants.add(f"SEM {v_up}")
+                        dept_sem_variants.add(f"SEMESTER-{v_up}")
+                        dept_sem_variants.add(f"SEMESTER {v_up}")
+
+            # Derive columns from actual ESE assessments of this dept's students.
+            ese_rows = PGStudentCourseAssessment.objects.filter(
+                student_id__in=stu_ids,
+                label__iregex=r'^ESE',
+                semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
+                session__in=dept_sessions,
+            ).values('course_code', 'course_name').distinct()
+
+            for row in ese_rows:
+                nc = normalize_code(row['course_code'])
+                if nc and nc not in seen_norms:
+                    seen_norms.add(nc)
+                    subjects.append({'id': nc, 'code': row['course_code'] or '-',
+                                     'course_name': row['course_name'] or '-', 'norm_code': nc})
+                    code_to_id[(row['course_code'] or '').upper()] = nc
+                    norm_to_id[nc] = nc
+
+            # Supplement with dept-specific schedule subjects
+            for s in schedules_all.filter(group__department=dept_obj):
+                if s.common_course_structure:
+                    subj = s.common_course_structure
+                    nc = normalize_code(subj.course_code)
+                    if nc and nc not in seen_norms:
+                        seen_norms.add(nc)
+                        subjects.append({'id': nc, 'code': subj.course_code or '-',
+                                         'course_name': subj.course_name or '-', 'norm_code': nc})
+                        code_to_id[(subj.course_code or '').upper()] = nc
+                        norm_to_id[nc] = nc
+        else:
+            # No specific department: use schedules + common course structure
+            for s in schedules_all:
+                if s.common_course_structure:
+                    subj = s.common_course_structure
+                    nc = normalize_code(subj.course_code)
+                    if nc not in seen_norms:
+                        seen_norms.add(nc)
+                        subjects.append({'id': subj.id, 'code': subj.course_code or '-',
+                                         'course_name': subj.course_name or '-', 'norm_code': nc})
+                        code_to_id[(subj.course_code or '').upper()] = subj.id
+                        norm_to_id[nc] = subj.id
+
+            for css in PGCommonCourseStructure.objects.filter(semester__in=sem_variants):
+                nc = normalize_code(css.course_code)
+                if nc and nc not in seen_norms:
+                    seen_norms.add(nc)
+                    subjects.append({'id': css.id, 'code': css.course_code or '-',
+                                     'course_name': css.course_name or '-', 'norm_code': nc})
+                    code_to_id[(css.course_code or '').upper()] = css.id
+                    norm_to_id[nc] = css.id
+
+        suffix_map = {get_suffix(s['code']): s['id'] for s in subjects}
+
+        # ── Look up best course name from assessments ─────────────────────
+        asmts = PGStudentCourseAssessment.objects.filter(
+            student_id__in=stu_ids,
+            label__iregex=r'^(ESE|CIA)',
+            session__in=dept_sessions,
+            semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
+        ).values('student_id', 'course_code', 'course_name', 'label', 'semester', 'session')
+
+        sn = {}   # (student_id, subj_id) -> best display name
+        sn_tgt = {}  # same key -> was it from target session/sem?
+
+        for a in asmts:
+            raw = a['course_code'] or ""
+            nc = normalize_code(raw)
+            sid = code_to_id.get(raw.upper()) or norm_to_id.get(nc)
+            if not sid:
+                sid = suffix_map.get(get_suffix(raw))
+            if not sid:
+                continue
+
+            cname = (a['course_name'] or "").strip()
+            if not cname or cname == "-":
+                continue
+
+            key = (a['student_id'], sid)
+            is_tgt = (a['semester'] in sem_variants)  # session may differ; use semester only
+            cur = sn.get(key)
+            better = not cur
+            if cur:
+                cur_tgt = sn_tgt.get(key, False)
+                if is_tgt and not cur_tgt:
+                    better = True
+                elif is_tgt == cur_tgt:
+                    cur_code = normalize_code(cur) == nc
+                    new_code = normalize_code(cname) == nc
+                    if cur_code and not new_code:
+                        better = True
+                    elif cur_code == new_code and a['label'].upper().startswith('ESE'):
+                        better = True
+            if better:
+                sn[key] = cname
+                sn_tgt[key] = is_tgt
+
+        # ── Sort subjects: normal subjects first, AECC/AEC last ──────────────
+        def _sort(s):
+            nc = s['norm_code'] or ""
+            prefix = nc.split('-')[0] if '-' in nc else nc
+            is_aecc = 1 if prefix in ('AECC', 'AEC') else 0
+            m = _re.search(r'(\d+)', nc)
+            return (is_aecc, int(m.group(1))) if m else (is_aecc, s['code'])
+        subjects.sort(key=_sort)
+
+        # ── Student rows ──────────────────────────────────────────────────
+        def real_name(name, snorm):
+            return bool(name) and name != "-" and normalize_code(name) != snorm
+
+        rows = []
+        for reg in dept_regs:
+            stu = reg.student
+            if reg.exam_type == 'REGULAR':
+                stu_sids = [s['id'] for s in subjects]
+            else:
+                # Derive student-specific variants for more accuracy
+                stu_sem_variants = set()
+                if reg.sem:
+                    s_int = reg.sem
+                    s_str = str(s_int)
+                    r_s = roman_map_inv.get(s_str, "")
+                    variants = [s_str, r_s]
+                    if s_str == '1': variants.extend(['1ST', 'FIRST'])
+                    elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+                    elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+                    elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+                    for v in variants:
+                        if v:
+                            v_u = v.upper()
+                            stu_sem_variants.add(v_u)
+                            stu_sem_variants.add(f"SEM-{v_u}")
+                            stu_sem_variants.add(f"SEM {v_u}")
+                            stu_sem_variants.add(f"SEMESTER-{v_u}")
+                            stu_sem_variants.add(f"SEMESTER {v_u}")
+
+                sa = PGStudentCourseAssessment.objects.filter(
+                    student=stu, 
+                    semester__in=list(stu_sem_variants) if stu_sem_variants else sem_variants, 
+                    label__icontains='ESE', 
+                    session=reg.session if reg.session else exam.session
+                )
+                stu_sids = []
+                for a in sa:
+                    ac = (a.course_code or "").upper()
+                    sid = code_to_id.get(ac) or norm_to_id.get(normalize_code(ac))
+                    if not sid:
+                        sid = suffix_map.get(get_suffix(ac))
+                    if sid:
+                        stu_sids.append(sid)
+
+            row_subjects = []
+            for subj in subjects:
+                sid = subj['id']
+                registered = sid in stu_sids
+                display = ""
+                if registered:
+                    aname = sn.get((stu.id, sid))
+                    sname = subj.get('course_name')
+                    snorm = subj['norm_code']
+                    if real_name(aname, snorm):
+                        display = aname
+                    elif real_name(sname, snorm):
+                        display = sname
+                    else:
+                        display = subj['code']
+                row_subjects.append({'id': sid, 'is_registered': registered, 'display_name': display})
+
+            rows.append({
+                'name': stu.get_full_name(),
+                'roll_no': stu.roll_no or "-",
+                'registration_no': stu.registration_no or "-",
+                'row_subjects': row_subjects,
+            })
+
+        # ── Meta from first student ───────────────────────────────────────
+        disc, degree, syllabus = "-", "Post Graduation", "-"
+        inst = dept_obj.name if dept_obj else (college.name or "-")
+        first = dept_regs[0] if hasattr(dept_regs, '__getitem__') else next(iter(dept_regs), None)
+        if first is None and hasattr(dept_regs, 'first'):
+            first = dept_regs.first()
+        if first and first.student:
+            st = first.student
+            if st.program:
+                disc = st.program.name
+            if st.degree:
+                degree = st.degree.name
+            if st.json_data and 'syllabus' in st.json_data:
+                syllabus = st.json_data['syllabus']
+
+        return subjects, rows, {
+            'discipline_name': disc,
+            'degree_name': degree,
+            'syllabus_year': syllabus,
+            'institute_name': inst,
+        }
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Build per-department sections
+    # ─────────────────────────────────────────────────────────────────────────
+    dept_sections = []
+
+    if department:
+        subjs, rows, meta = _build_section(regs_qs, department)
+        if rows:
+            dept_sections.append({'department_name': department.name,
+                                   'subjects': subjs, 'student_data': rows, **meta})
+    else:
+        dept_ids = (regs_qs.exclude(student__department__isnull=True)
+                    .values_list('student__department_id', flat=True).distinct())
+        for dept in PGDepartment.objects.filter(id__in=dept_ids).order_by('name'):
+            d_regs = regs_qs.filter(student__department=dept)
+            subjs, rows, meta = _build_section(d_regs, dept)
+            if rows:
+                dept_sections.append({'department_name': dept.name,
+                                       'subjects': subjs, 'student_data': rows, **meta})
+
+        no_dept = regs_qs.filter(student__department__isnull=True)
+        if no_dept.exists():
+            subjs, rows, meta = _build_section(no_dept, None)
+            if rows:
+                dept_sections.append({'department_name': 'General',
+                                       'subjects': subjs, 'student_data': rows, **meta})
+
+    if not dept_sections:
+        logger.warning(f"No sections built for Exam: {exam.name}, College: {college.name}")
+        return None
+
+    # ── Render & generate PDF ────────────────────────────────────────────────
+    context = {
+        "exam": exam,
+        "college": college,
+        "batch_name": exam.batch or "-",
+        "session_name": exam.session or "-",
+        "college_name": college.name or "-",
+        "center_name": center_name,
+        "semester": str(exam.year) if exam.year else "-",
+        "department_sections": dept_sections,
+        "controller_signature": ctrl_sig_b64,
+    }
+
+    html_string = get_template("pg/roll_sheet.html").render(context)
+
+    try:
+        pdf_file = HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf()
+        logger.info(f"PG Roll Sheet OK: {college.name}, {len(dept_sections)} dept(s), {len(pdf_file)} bytes")
+        return pdf_file
+    except Exception as e:
+        logger.error(f"PG Roll Sheet PDF generation failed: {e}")
+        return None
+
+
+def _roman_to_int(roman):
+    """Convert Roman numeral string to integer."""
+    roman_map = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100}
+    res = 0
+    for i in range(len(roman)):
+        if i > 0 and roman_map.get(roman[i], 0) > roman_map.get(roman[i-1], 0):
+            res += roman_map.get(roman[i], 0) - 2 * roman_map.get(roman[i-1], 0)
+        else:
+            res += roman_map.get(roman[i], 0)
+    return res
+
+def generate_pg_attendance_sheet_pdf(exam, college, department=None, registration_no=None):
+    """
+    Generates student-wise PG Attendance Sheet PDF.
+    One page per student with: photo, barcode, exam schedule table.
+    department: optional PGDepartment — if given, only that dept's students.
+    registration_no: optional — if given, generate for ONLY this student.
+    """
+    from weasyprint import HTML
+    from django.conf import settings
+    from django.template.loader import get_template
+    from pg.models import (
+        PGExamRegistration,
+        PGExamSchedule,
+        PGExamCenterMapping,
+        PGStudentCourseAssessment,
+    )
+    from pup_umis_backend.utils.file_utils import image_to_base64, generate_barcode_base64
+    import os, re as _re, logging
+    from django.utils import timezone
+
+    logger = logging.getLogger(__name__)
+
+    ey = str(exam.year) if exam.year else ""
+    sem_variants_int = set()
+    if ey.isdigit():
+        sem_variants_int.add(int(ey))
+    if exam.name:
+        roman_m = _re.search(r'\b(?:SEM|SEMESTER)[-\s]*(I{1,3}|IV|VI{0,3}|IX|X)\b', exam.name, _re.IGNORECASE)
+        if roman_m:
+            rn = roman_m.group(1).upper()
+            if rn in _roman_str_to_int:
+                sem_variants_int.add(_roman_str_to_int[rn])
+        digit_m = _re.search(r'(?<!\d)([1-8])(?!\d)', exam.name)
+        if digit_m:
+            sem_variants_int.add(int(digit_m.group(1)))
+    sem_variants_int = list(sem_variants_int)
+    sem_variants = set()
+    for s_int in sem_variants_int:
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                sem_variants.add(v_up)
+                sem_variants.add(f"SEM-{v_up}")
+                sem_variants.add(f"SEM {v_up}")
+                sem_variants.add(f"SEMESTER-{v_up}")
+                sem_variants.add(f"SEMESTER {v_up}")
+    
+    sem_variants = list(sem_variants)
+    logger.info(f"[ATTENDANCE] sem_variants_int={sem_variants_int}, sem_variants={sem_variants}")
+
+    _is_year_range = bool(_re.match(r'^\d{4}-\d{2,4}$', exam.session or ''))
+
+    # ── Fetch registrations ──────────────────────────────────────────────────
+    regs_qs = PGExamRegistration.objects.filter(
+        exam=exam,
+        student__college=college,
+        status='REGISTERED',
+    )
+    if sem_variants_int:
+        # Filter primarily by semester.
+        regs_qs = regs_qs.filter(sem__in=sem_variants_int)
+    elif _is_year_range:
+        regs_qs = regs_qs.filter(session=exam.session)
+
+    if department:
+        regs_qs = regs_qs.filter(student__department=department)
+
+    if registration_no:
+        regs_qs = regs_qs.filter(student__registration_no=registration_no)
+
+    regs_qs = regs_qs.select_related(
+        'student', 'student__department', 'student__program'
+    ).order_by('student__roll_no', 'student__registration_no')
+
+    regs_list = list(regs_qs)
+    if not regs_list:
+        dept_info = f" ({department.name})" if department else ""
+        logger.warning(f"[ATTENDANCE] No registrations for exam='{exam.name}', college='{college.name}'{dept_info}")
+        return None
+
+    # ── Center mapping ───────────────────────────────────────────────────────
+    center_name = "-"
+    cm = PGExamCenterMapping.objects.filter(exams=exam, attached_colleges=college).first()
+    if cm and cm.center:
+        center_name = cm.center.name
+
+    # ── All schedules ────────────────────────────────────────────────────────
+    all_schedules = PGExamSchedule.objects.filter(
+        exam=exam
+    ).select_related('common_course_structure', 'group').prefetch_related('group__department').order_by('exam_date', 'exam_time')
+
+    # ── Pre-fetch ESE codes for all students in one query (Avoid N+1) ────────
+    student_ids = [r.student_id for r in regs_list]
+    
+    # Derive sessions and semesters from actual registrations
+    distinct_sessions = list(set(r.session for r in regs_list if r.session))
+    if not distinct_sessions:
+        distinct_sessions = [exam.session] if exam.session else []
+
+    distinct_sems = list(set(r.sem for r in regs_list if r.sem is not None))
+    distinct_sem_variants = set()
+    for s_int in distinct_sems:
+        s_str = str(s_int)
+        roman_s = roman_map_inv.get(s_str, "")
+        variants = [s_str, roman_s]
+        if s_str == '1': variants.extend(['1ST', 'FIRST'])
+        elif s_str == '2': variants.extend(['2ND', 'SECOND'])
+        elif s_str == '3': variants.extend(['3RD', 'THIRD'])
+        elif s_str == '4': variants.extend(['4TH', 'FOURTH'])
+        for v in variants:
+            if v:
+                v_up = v.upper()
+                distinct_sem_variants.add(v_up)
+                distinct_sem_variants.add(f"SEM-{v_up}")
+                distinct_sem_variants.add(f"SEM {v_up}")
+                distinct_sem_variants.add(f"SEMESTER-{v_up}")
+                distinct_sem_variants.add(f"SEMESTER {v_up}")
+
+    ese_filter = dict(
+        student_id__in=student_ids,
+        label__iregex=r'^ESE',
+        session__in=distinct_sessions,
+    )
+    if distinct_sem_variants:
+        ese_filter['semester__in'] = list(distinct_sem_variants)
+    elif sem_variants:
+        ese_filter['semester__in'] = sem_variants
+    assessments = PGStudentCourseAssessment.objects.filter(**ese_filter).values('student_id', 'course_code', 'course_name')
+
+    student_ese_map = {}  # student_id -> { course_code_upper : course_name }
+    for a in assessments:
+        sid = a['student_id']
+        code = (a['course_code'] or "").upper().strip()
+        name = a['course_name'] or ""
+        if sid not in student_ese_map:
+            student_ese_map[sid] = {}
+        if code:
+            student_ese_map[sid][code] = name
+
+    # ── University logo ──────────────────────────────────────────────────────
+    def _find_logo():
+        # Try different possible locations
+        possible_paths = [
+            os.path.join(settings.BASE_DIR, "static", "images", "common", "purnea-logo.png"),
+            os.path.join(settings.BASE_DIR, "static", "images", "purnea-logo.png"),
+            os.path.join(settings.BASE_DIR, "ug", "static", "ug", "images", "purnea-logo.png"),
+            os.path.join(settings.MEDIA_ROOT, "common", "purnea-logo.png"),
+        ]
+        for p in possible_paths:
+            if os.path.exists(p):
+                return image_to_base64(p)
+        return None
+
+    university_logo = _find_logo()
+
+    # ── Build per-student attendance data ────────────────────────────────────
+    total_regs = len(regs_list)
+    logger.info(f"[ATTENDANCE] Processing {total_regs} registrations for {college.name} in batches of 50.")
+
+    # ── Context (Global) ─────────────────────────────────────────────────────
+    sem_display = str(sem_variants_int[0]) if sem_variants_int else (exam.session or '-')
+    global_context = {
+        'university_logo': university_logo,
+        'exam_header': f"{exam.name} (Semester {sem_display})",
+        'center_name': center_name,
+        'batch': exam.batch or '-',
+        'session': exam.session or '-',
+        'course_name': 'Post Graduation',
+        'semester': sem_display,
+        'syllabus': exam.batch.split('-')[0] if exam.batch and '-' in exam.batch else '-',
+        'college_name': college.name,
+    }
+
+    # ── Batch Processing ─────────────────────────────────────────────────────
+    BATCH_SIZE = 20  # Reduced from 50 to 10-20 to avoid 502/Gateway Timeouts
+    all_pages = []
+    template = get_template('pg/attendance_sheet.html')
+    
+    import time
+
+    # Pre-calculate schedule map for faster lookup (MOVE OUTSIDE LOOP)
+    # code_to_schedules: code -> list of schedules
+    # schedule_id_to_dept_ids: id -> set of department IDs
+    code_to_schedules = {}
+    schedule_id_to_dept_ids = {}
+    for s in all_schedules:
+        if s.common_course_structure:
+            code = (s.common_course_structure.course_code or "").upper().strip()
+            if code:
+                if code not in code_to_schedules:
+                    code_to_schedules[code] = []
+                code_to_schedules[code].append(s)
+        
+        # Pre-cache department IDs for the schedule's group
+        if s.group:
+            schedule_id_to_dept_ids[s.id] = set(s.group.department.values_list('id', flat=True))
+        else:
+            schedule_id_to_dept_ids[s.id] = set()
+    # ── Photo Optimization Helper ────────────────────────────────────────────
+    def _get_optimized_base64_photo(image_field):
+        if not image_field:
+            return None
+        
+        try:
+            from PIL import Image, ImageOps
+            import io
+            import base64
+            
+            # Open the image (works for S3 and local)
+            with image_field.open('rb') as f:
+                img = Image.open(f)
+                
+                # Convert to RGB (in case of RGBA/P)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                    
+                # Resize if larger than 150px width (standard for attendance sheets)
+                max_width = 150
+                if img.width > max_width:
+                    ratio = max_width / float(img.width)
+                    height = int(float(img.height) * float(ratio))
+                    img = img.resize((max_width, height), Image.Resampling.LANCZOS)
+                
+                # Compress and convert to base64
+                buf = io.BytesIO()
+                img.save(buf, format='JPEG', quality=75) # High compression JPEG
+                return base64.b64encode(buf.getvalue()).decode('utf-8')
+        except Exception as e:
+            logger.warning(f"Photo optimization failed for {image_field}: {e}")
+            # Fallback to simple base64 if possible
+            try:
+                from pup_umis_backend.utils.file_utils import image_to_base64
+                return image_to_base64(image_field.path)
+            except:
+                return None
+
+    for i in range(0, total_regs, BATCH_SIZE):
+        batch_regs = regs_list[i : i + BATCH_SIZE]
+        batch_attendance_data = []
+
+        start_time = time.time()
+        logger.info(f"[ATTENDANCE] Rendering batch {i//BATCH_SIZE + 1} ({i} to {min(i+BATCH_SIZE, total_regs)})")
+
+        for reg in batch_regs:
+            student = reg.student
+            student_paper_names = student_ese_map.get(student.id, {})
+            ese_codes_upper = set(student_paper_names.keys())
+
+            # Filter schedules relevant to this student:
+            # Must match both: 
+            # 1. Course Code (from student's ESE assessment)
+            # 2. Department (if the schedule has a group assigned)
+            student_schedules_raw = []
+            dept_id = student.department_id
+            
+            for code in ese_codes_upper:
+                if code in code_to_schedules:
+                    for s in code_to_schedules[code]:
+                        dept_ids = schedule_id_to_dept_ids.get(s.id, set())
+                        # If no group/depts assigned, allow for all. 
+                        # If depts assigned, must match student's dept.
+                        if not dept_ids or dept_id in dept_ids:
+                            if s not in student_schedules_raw:
+                                student_schedules_raw.append(s)
+                
+            def _get_paper_sort_key(s):
+                code = (s.common_course_structure.course_code or "").upper().strip()
+                # 1. AECC always last
+                is_aecc = 1 if "AECC" in code else 0
+                
+                # 2. Extract Roman numeral (e.g., from 'CC-XIV' extract 'XIV')
+                roman_part = ""
+                if '-' in code:
+                    roman_part = code.split('-')[-1]
+                
+                roman_val = _roman_to_int(roman_part) if roman_part else 0
+                
+                # Fallback to date if Roman conversion fails
+                date_val = s.exam_date or timezone.now().date()
+                
+                return (is_aecc, roman_val, date_val)
+
+            # Sort by custom Roman sequence + push AECC last
+            student_schedules_raw.sort(key=_get_paper_sort_key)
+
+            student_schedules = []
+            for s in student_schedules_raw:
+                code_upper = (s.common_course_structure.course_code or "").upper().strip()
+                # Prioritize name from assessment record, fallback to common structure name
+                name = student_paper_names.get(code_upper) or s.common_course_structure.course_name or '-'
+                
+                student_schedules.append({
+                    'date': s.exam_date.strftime('%d-%m-%Y') if s.exam_date else '-',
+                    'exam_time': s.exam_time or '',
+                    'sitting': s.sitting or '',
+                    'subject_name': name,
+                    'subject_code': s.common_course_structure.course_code or '-',
+                })
+
+            # Barcode
+            barcode_text = (
+                f"Roll:{student.roll_no or ''} "
+                f"Reg:{student.registration_no or ''} "
+                f"Name:{student.get_full_name()}"
+            )
+            try:
+                barcode_base64 = generate_barcode_base64(barcode_text)
+            except Exception:
+                barcode_base64 = None
+
+            # Photo (OPTIMIZED)
+            photo_base64 = _get_optimized_base64_photo(student.profile_image)
+
+            dept_name = student.department.name if student.department else "-"
+
+            batch_attendance_data.append({
+                'name': student.get_full_name(),
+                'roll_no': student.roll_no or 'N/A',
+                'registration_no': student.registration_no or 'N/A',
+                'department_name': dept_name,
+                'college_name': college.name,
+                'photo': photo_base64,
+                'barcode': barcode_base64,
+                'schedules': student_schedules,
+            })
+
+        # Render this batch
+        batch_context = global_context.copy()
+        batch_context['attendance_data'] = batch_attendance_data
+        
+        html_string = template.render(batch_context)
+        
+        try:
+            # Render batch to a list of pages
+            batch_doc = HTML(string=html_string, base_url=settings.BASE_DIR).render()
+            all_pages.extend(batch_doc.pages)
+            
+            end_time = time.time()
+            logger.info(f"[ATTENDANCE] Batch {i//BATCH_SIZE + 1} rendered in {end_time - start_time:.2f}s. Total pages: {len(all_pages)}")
+        except Exception as e:
+            logger.error(f"[ATTENDANCE] Rendering batch starting at {i} failed: {e}")
+            continue
+        
+        # Explicitly clear memory
+        del batch_attendance_data
+        del html_string
+        del batch_doc
+        import gc
+        gc.collect()
+
+    if not all_pages:
+        logger.warning(f"[ATTENDANCE] No pages generated for exam='{exam.name}'")
+        return None
+
+    try:
+        # Merge all pages into final PDF
+        # We pick the metadata from the first page's document or a dummy one
+        final_doc = all_pages[0]._page_maker.set_metadata(all_pages) if hasattr(all_pages[0], '_page_maker') else None
+        
+        # WeasyPrint document creation from pages
+        # Actually, the standard way is using the first batch's document as a base if possible,
+        # but creating a new one from collected pages is safer.
+        from weasyprint import Document
+        # In newer WeasyPrint versions, you can just do Document(all_pages, doc.metadata, doc.url_fetcher)
+        # But we don't have the original doc easily. 
+        # Safer: use one doc as a container.
+        
+        # Re-rendering a small empty doc to get a container
+        base_doc = HTML(string="<html></html>").render()
+        base_doc.pages = all_pages
+        
+        pdf_file = base_doc.write_pdf()
+        logger.info(f"[ATTENDANCE] Optimized PDF generated: {college.name}, {total_regs} students, {len(pdf_file)} bytes")
+        return pdf_file
+        
+    except Exception as e:
+        logger.error(f"[ATTENDANCE] Final PDF assembly failed: {e}")
+        return None
+
