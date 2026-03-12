@@ -27,7 +27,7 @@ django.setup()
 from staging.models import StagingLLBResultCurrent
 from llb.models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile,
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
+    LLBCourseStructure, CommonCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
 )
 from colleges.models import College
 
@@ -38,6 +38,7 @@ courses_cache = {}
 sessions_cache = {}
 batches_cache = {}
 subjects_cache = {}
+common_subjects_cache = {}
 exams_cache = {}
 colleges_cache = {}
 users_cache = {}
@@ -119,29 +120,87 @@ def get_or_create_batch(batch_code):
         print(f"  Created batch: {batch.name}")
     return batch
 
-def get_or_create_subject(subject_name, maximum_mark, pass_mark):
-    """Get or create LLB course structure (common subject)"""
-    if subject_name in subjects_cache:
-        return subjects_cache[subject_name]
+def clean_subject_name(name):
+    """Clean and normalize subject name (same as migrate_course_structures.py)"""
+    if not name:
+        return 'Unknown Subject'
+    
+    # Remove newlines, extra spaces, and normalize
+    name = name.replace('\n', ' ').replace('\r', ' ')
+    name = ' '.join(name.split())
+    name = name.strip()
+    
+    # Remove -T1, -P1, -PS1 suffixes (staging data inconsistencies)
+    import re
+    name = re.sub(r'-T\d+$', '', name)
+    name = re.sub(r'-P\d+$', '', name)
+    name = re.sub(r'-PS\d+$', '', name)
+    name = name.strip()
+    
+    return name or 'Unknown Subject'
+
+def get_course_code(paper_code):
+    """Generate course_code based on paper_code (same as migrate_course_structures.py)"""
+    if not paper_code or paper_code == 'UNKNOWN':
+        return 'UNKNOWN'
     
     try:
-        full_marks = int(maximum_mark) if maximum_mark else 100
-        pass_marks = int(pass_mark) if pass_mark else 33
+        if len(paper_code) >= 6 and paper_code.startswith('LLB'):
+            code_part = paper_code[-3:]
+            paper_num = int(code_part[1:])
+            
+            roman_numerals = {
+                1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V',
+                6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X',
+                11: 'XI', 12: 'XII', 13: 'XIII', 14: 'XIV', 15: 'XV'
+            }
+            
+            return roman_numerals.get(paper_num, str(paper_num))
+        else:
+            return 'UNKNOWN'
     except:
-        full_marks = 100
-        pass_marks = 33
+        return 'UNKNOWN'
+
+def get_or_create_subject(subject_name, maximum_mark, pass_mark, semester, paper_code=None, status=None):
+    """
+    Get existing LLB course structure (does NOT create new ones).
+    Course structures should be created first using migrate_course_structures.py
     
-    subject, created = LLBCourseStructure.objects.get_or_create(
-        name=subject_name or 'Unknown Subject',
-        defaults={
-            'full_marks': full_marks,
-            'pass_marks': pass_marks
-        }
-    )
-    subjects_cache[subject_name] = subject
-    if created:
-        print(f"  Created subject: {subject.name}")
-    return subject
+    Uses paper_code as the primary identifier to avoid spelling variation issues.
+    Returns the matching LLBCourseStructure or None if not found.
+    """
+    semester = semester or ''
+    paper_code = paper_code or 'UNKNOWN'
+    
+    # Determine assessment type from status
+    assessment_label = get_assessment_label(status)
+    
+    # Cache key uses paper_code to match migrate_course_structures.py
+    cache_key = f"{paper_code}_{semester}_{assessment_label}"
+    if cache_key in subjects_cache:
+        return subjects_cache[cache_key]
+    
+    # Try to get existing LLBCourseStructure using paper_code (do NOT create)
+    try:
+        subject = LLBCourseStructure.objects.get(
+            paper_code=paper_code,  # Use paper_code field
+            semester=semester,
+            status=assessment_label
+        )
+        subjects_cache[cache_key] = subject
+        return subject
+    except LLBCourseStructure.DoesNotExist:
+        print(f"  ⚠️  Warning: Course structure not found: {paper_code} ({semester}) [{assessment_label}]")
+        return None
+    except LLBCourseStructure.MultipleObjectsReturned:
+        # If multiple found, get the first one
+        subject = LLBCourseStructure.objects.filter(
+            paper_code=paper_code,
+            semester=semester,
+            status=assessment_label
+        ).first()
+        subjects_cache[cache_key] = subject
+        return subject
 
 def get_or_create_exam(session_code, exam_type, batch=None, semester=None):
     """Get or create LLB exam"""
@@ -273,6 +332,7 @@ def migrate_data():
     
     migrated_count = 0
     error_count = 0
+    skipped_count = 0
     
     # Group by student (college_reg_no + session_code)
     current_student_key = None
@@ -289,8 +349,16 @@ def migrate_data():
             subject = get_or_create_subject(
                 record.subject_name,
                 record.maximum_mark,
-                record.pass_mark
+                record.pass_mark,
+                record.semester_code,
+                record.paper_code,
+                record.status  # Pass status to differentiate CIA/ESE
             )
+            
+            # Skip if course structure not found
+            if subject is None:
+                skipped_count += 1
+                continue
             
             # Create/get user and student profile (outside transaction to avoid FK issues)
             student_key = f"{record.college_reg_no}_{record.session_code}"
@@ -392,12 +460,13 @@ def migrate_data():
     
     print(f"\nMigration completed!")
     print(f"Successfully migrated: {migrated_count}")
+    print(f"Skipped (course structure not found): {skipped_count}")
     print(f"Errors: {error_count}")
     print(f"\nSummary:")
     print(f"  Courses: {len(courses_cache)}")
     print(f"  Sessions: {len(sessions_cache)}")
     print(f"  Batches: {len(batches_cache)}")
-    print(f"  Subjects: {len(subjects_cache)}")
+    print(f"  Course Structures (retrieved): {len(subjects_cache)}")
     print(f"  Exams: {len(exams_cache)}")
     print(f"  Colleges: {len(colleges_cache)}")
     print(f"  Students: {len(students_cache)}")

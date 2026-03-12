@@ -31,14 +31,15 @@ class LLBStudentProfileAdmin(admin.ModelAdmin):
 
 @admin.register(LLBCourseStructure)
 class LLBCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'full_marks', 'pass_marks')
+    list_display = ('name', 'semester', 'status', 'full_marks', 'pass_marks')
+    list_filter = ('semester', 'status')
     search_fields = ('name',)
 
 @admin.register(CommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'course_code', 'full_marks', 'cia_max_marks', 'ese_max_marks')
+    list_display = ('name', 'semester', 'course_code', 'full_marks', 'cia_max_marks', 'ese_max_marks')
     search_fields = ('name', 'course_code')
-    list_filter = ('course_code',)
+    list_filter = ('semester', 'course_code')
 
 @admin.register(LLBExam)
 class LLBExamAdmin(admin.ModelAdmin):
@@ -58,8 +59,8 @@ class LLBStudentExamResultAdmin(admin.ModelAdmin):
 class LLBStudentCourseAssessmentAdmin(admin.ModelAdmin):
     list_display = ('student', 'course', 'course_structure', 'label', 'semester', 'ind_marks_obtained', 'ind_is_pass')
     list_filter = ('label', 'semester', 'session', 'batch', 'exam_type')
-    search_fields = ('student__roll_no', 'student__registration_no', 'course_structure__name', 'course_code')
-    raw_id_fields = ('student', 'exam_result', 'course', 'course_structure', 'batch')
+    search_fields = ('student__roll_no', 'student__registration_no', 'course_structure__name', 'paper_code')
+    raw_id_fields = ('student', 'exam_result', 'exam', 'course', 'course_structure', 'batch')
     list_select_related = ('student', 'exam_result', 'course', 'course_structure', 'batch')
 
 @admin.register(LLBExamCenterMapping)

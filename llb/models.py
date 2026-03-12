@@ -2,7 +2,6 @@ from django.db import models
 import uuid
 from pup_umis_backend.options import GENDER_CHOICES, CASTE_CHOICES
 
-
 class LLBCourse(models.Model):
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)  
@@ -85,6 +84,10 @@ class LLBCourseStructure(models.Model):
     """Individual course structure for LLB subjects (CIA and ESE separate)"""
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255)
+    course_code = models.CharField(max_length=100, help_text="Course Code", null=True, blank=True)
+    paper_code = models.CharField(max_length=100, help_text="Paper Code",  null=True, blank=True)
+    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester Code from staging")
+    status = models.CharField(max_length=200, null=True, blank=True, help_text="Assessment type: CIA or ESE")
     full_marks = models.PositiveIntegerField(default=100)
     pass_marks = models.PositiveIntegerField(default=33)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -97,7 +100,9 @@ class CommonCourseStructure(models.Model):
     """Combined course structure for LLB subjects (one entry per subject)"""
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=255, help_text="Subject Name (e.g., Constitutional Law-I)")
-    course_code = models.CharField(max_length=100, help_text="Course Code")
+    semester = models.CharField(max_length=20, null=True, blank=True, help_text="Semester Code from staging")
+    course_code = models.CharField(max_length=100, help_text="Course Code",  null=True, blank=True)
+    paper_code = models.CharField(max_length=100, help_text="Paper Code",  null=True, blank=True)
     full_marks = models.PositiveIntegerField(help_text="Total Full Marks (CIA + ESE)")
     pass_marks = models.PositiveIntegerField(help_text="Total Pass Marks")
     cia_max_marks = models.PositiveIntegerField(help_text="CIA Maximum Marks")

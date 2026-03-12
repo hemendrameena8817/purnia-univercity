@@ -29,9 +29,27 @@
       position: relative;
     }
 
+    body::before {
+      content: "";
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 400px;
+      height: 400px;
+      background-image: url('data:image/png;base64,{{ watermark_logo }}');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      opacity: 0.08;
+      z-index: -1;
+      pointer-events: none;
+    }
+
     .content-wrapper {
       position: relative;
       height: 100%;
+      z-index: 1;
     }
 
     /* Top Section: MSNO and Logo */
@@ -410,7 +428,7 @@
       <div class="header">
         <div class="marksheet-title">MARKSHEET</div>
         <div class="exam-details">
-          <strong>{{ exam_name }} {{exam_year}}, Session({{ batch_year}}),</strong><br />
+          <strong>{{ exam_name }} {{exam_year}}, Session &nbsp;({{ batch_year}}),</strong><br />
           <strong>held in the month of {{ exam_month_year|upper }}</strong>
         </div>
       </div>
@@ -434,9 +452,9 @@
             <td class="value">{{ student.father_name|default:"-" }}</td>
           </tr>
           <tr>
-            <td class="label">Hons Subject</td>
+            <td class="label">Course</td>
             <td class="colon">:</td>
-            <td class="value">{{ hons_subject|default:"LLB" }}</td>
+            <td class="value">{{ course }}</td>
             <td class="label">Mother's Name</td>
             <td class="colon">:</td>
             <td class="value">{{ student.mother_name|default:"-" }}</td>
@@ -464,7 +482,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for assessment in result.student_assessments_result.all %}
+          {% for assessment in assessments %}
           <tr>
             <td class="text-left-subject">{{ forloop.counter }}</td>
             <td class="text-left-subject">{{ assessment.course_structure.name|default:"-" }}</td>
@@ -481,10 +499,10 @@
               <strong>AGGREGATE</strong>
             </td>
             <td class="text-left-subject">&nbsp;</td>
-            <td style="margin-left: 10px"><strong>800</strong></td>
+            <td style="margin-left: 10px"><strong>{{ total_full_marks|default:0 }}</strong></td>
             <td class="text-left-subject">&nbsp;</td>
             <td>
-              <strong>{{ result.total_marks|default:0 }}{% if result.grace %}<sup>+{{ result.grace|default:0 }}</sup>{% endif %}</strong>
+              <strong>{{ total_obtained_marks|default:0 }}{% if result.grace %}<sup>+{{ result.grace|default:0 }}</sup>{% endif %}</strong>
             </td>
           </tr>
         </tbody>
@@ -492,15 +510,13 @@
 
       <!-- Result -->
       <div class="result-section">
-        <strong>Result</strong>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;&nbsp;&nbsp;&nbsp;<strong>{{
-          result.result_status|default:"-"|upper }}</strong>
+        <strong>Result</strong>&nbsp;&nbsp;:&nbsp;&nbsp;<strong>{{ result_display|default:"-"|upper }}</strong>
       </div>
 
       <!-- Publication Date -->
       <div class="publication-date">
         Date of
-        Publication&nbsp;&nbsp;&nbsp;&nbsp;:&nbsp;&nbsp;&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y"
-          }}</strong>
+        Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
       </div>
 
       <!-- Bottom Section: Remarks, QR Code, Signature Space -->

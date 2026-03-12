@@ -1,4 +1,5 @@
 from rest_framework import generics
+from django.db.models import Prefetch
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
     LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
@@ -8,6 +9,18 @@ from .serializers import (
     LLBStudentProfileSerializer, LLBCourseStructureSerializer, LLBExamSerializer,
     LLBStudentExamResultSerializer, LLBStudentCourseAssessmentSerializer
 )
+
+def normalize_semester(semester):
+    """Convert semester names to consistent format (1ST, 2ND, etc.)"""
+    semester_mapping = {
+        '1st': '1ST', 'first': '1ST', '1': '1ST',
+        '2nd': '2ND', 'second': '2ND', '2': '2ND', 
+        '3rd': '3RD', 'third': '3RD', '3': '3RD',
+        '4th': '4TH', 'fourth': '4TH', '4': '4TH',
+        '5th': '5TH', 'fifth': '5TH', '5': '5TH',
+        '6th': '6TH', 'sixth': '6TH', '6': '6TH'
+    }
+    return semester_mapping.get(semester.lower(), semester.upper())
 
 # Course Views
 class LLBCourseListView(generics.ListCreateAPIView):
@@ -59,6 +72,11 @@ class LLBStudentProfileListView(generics.ListAPIView):
         if course:
             queryset = queryset.filter(course_id=course)
             
+        semester = self.request.query_params.get('semester')
+        if semester:
+            semester_normalized = normalize_semester(semester)
+            queryset = queryset.filter(course_assessments__semester=semester_normalized).distinct()
+            
         return queryset
 
 class LLBStudentProfileCreateView(generics.CreateAPIView):
@@ -81,8 +99,25 @@ class LLBCourseStructureDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # Exam Views
 class LLBExamListView(generics.ListCreateAPIView):
-    queryset = LLBExam.objects.all()
     serializer_class = LLBExamSerializer
+    
+    def get_queryset(self):
+        queryset = LLBExam.objects.all()
+        
+        semester = self.request.query_params.get('semester')
+        if semester:
+            semester_normalized = normalize_semester(semester)
+            queryset = queryset.filter(semester=semester_normalized)
+            
+        session = self.request.query_params.get('session')
+        if session:
+            queryset = queryset.filter(session__icontains=session)
+            
+        batch = self.request.query_params.get('batch')
+        if batch:
+            queryset = queryset.filter(batch_id=batch)
+            
+        return queryset
 
 class LLBExamDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = LLBExam.objects.all()
@@ -107,6 +142,11 @@ class LLBStudentExamResultListView(generics.ListAPIView):
         if status:
             queryset = queryset.filter(result_status=status)
             
+        semester = self.request.query_params.get('semester')
+        if semester:
+            semester_normalized = normalize_semester(semester)
+            queryset = queryset.filter(exam__semester=semester_normalized)
+            
         return queryset
 
 class LLBStudentExamResultCreateView(generics.CreateAPIView):
@@ -123,9 +163,28 @@ class LLBStudentCourseAssessmentListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = LLBStudentCourseAssessment.objects.all()
+        
         exam_result_id = self.request.query_params.get('exam_result')
         if exam_result_id:
             queryset = queryset.filter(exam_result_id=exam_result_id)
+            
+        semester = self.request.query_params.get('semester')
+        if semester:
+            semester_normalized = normalize_semester(semester)
+            queryset = queryset.filter(semester=semester_normalized)
+            
+        student = self.request.query_params.get('student')
+        if student:
+            queryset = queryset.filter(student_id=student)
+            
+        exam = self.request.query_params.get('exam')
+        if exam:
+            queryset = queryset.filter(exam_id=exam)
+            
+        label = self.request.query_params.get('label')
+        if label:
+            queryset = queryset.filter(label__icontains=label)
+            
         return queryset
 
 class LLBStudentCourseAssessmentDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -146,36 +205,34 @@ from django.shortcuts import get_object_or_404
 class LLBResultPDFView(View):
     """
     Generates and returns a single PDF marksheet for viewing/downloading.
-    URL: /results/<registration_no>/pdf/?part=1
-    Example: /results/1946B370095/pdf/?part=1
-    part parameter specifies which result to return (1=latest, 2=second latest, etc.)
+    URL: /results/<registration_no>/pdf/?semester=1ST
+    Example: /results/1946B370095/pdf/?semester=1ST
+    semester parameter specifies which semester to return (1ST, 2ND, 3RD, etc.)
     """
     def get(self, request, registration_no):
-        # Get part parameter, default to 1 (latest)
-        part = request.GET.get('part', '1')
-        try:
-            part = int(part)
-            if part < 1:
-                part = 1
-        except ValueError:
-            part = 1
+        semester = request.GET.get('semester', '1')
+        semester_normalized = normalize_semester(semester)
         
         results = LLBStudentExamResult.objects.select_related(
             'student', 'student__user', 'student__course', 'student__college', 'exam'
-        ).prefetch_related('student_assessments_result', 'student_assessments_result__course_structure').filter(
-            student__registration_no=registration_no
-        ).order_by('-created_at')
+        ).filter(
+            student__registration_no=registration_no,
+            student_assessments_result__semester=semester_normalized
+        ).distinct().order_by('-created_at')
         
         if not results.exists():
-            raise Http404(f"No results found for registration number: {registration_no}")
+            raise Http404(f"No results found for registration number: {registration_no} in semester {semester_normalized}")
         
-        # Check if requested part exists
-        if results.count() < part:
-            raise Http404(f"Only {results.count()} result(s) found for registration number: {registration_no}. Requested part: {part}")
+        # Get the latest result for that semester
+        result = results.first()
         
-        result = results[part - 1]  # Get the requested result (0-indexed)
+        # Manually filter assessments by semester and attach to result
+        filtered_assessments = result.student_assessments_result.filter(semester=semester_normalized).select_related('course_structure').order_by('paper_code')
         
-        pdf_content = generate_marksheet_pdf(result)
+        # Temporarily override the assessments with filtered ones
+        result._filtered_assessments = filtered_assessments
+        
+        pdf_content = generate_marksheet_pdf(result, semester=semester_normalized)
         
         if not pdf_content:
             return HttpResponse("Failed to generate PDF", status=500, content_type='text/plain')
