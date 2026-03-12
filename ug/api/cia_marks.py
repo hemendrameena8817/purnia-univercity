@@ -127,14 +127,18 @@ class CIAStudentListView(APIView):
             filter_kwargs['college_code'] = college.college_code
 
         qs = StudentCourseAssessment.objects.filter(**filter_kwargs).select_related(
-            'student', 'student__user', 'student__college', 'department'
+            'student', 'student__user', 'student__college', 'student__major_course', 'department'
         )
 
         # Department filtering: Only for MJC, MIC, MDC (Major/Minor)
         if course_type_filter in ('MJC', 'MIC', 'MDC'):
             if department_uid:
                 qs = qs.filter(department__uid=department_uid)
-        # For SEC, AEC, VAC - logic is to return all assessments for all students (department is ignored)
+        elif course_type_filter in ('AEC', 'SEC'):
+            if department_uid:
+                qs = qs.filter(
+                    student__major_course__uid=department_uid,
+                )
         
         # ── Grouping by Student & Paper ──────────────
         # We fetch all to group faithfully, as pagination must be on the result rows.
