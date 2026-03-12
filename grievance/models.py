@@ -40,10 +40,15 @@ class Grievance(models.Model):
     """
     Grievance/Complaint system for users.
     Auto-generates unique grievance number in format: GRVXXXXXXXXXX
+    Grievance number is generated only after successful payment.
     """
     
     uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    grievance_number = models.CharField(max_length=20, unique=True, editable=False, db_index=True)
+    grievance_number = models.CharField(max_length=20, unique=True, null=True, blank=True, editable=False, db_index=True)
+    
+    # Payment tracking
+    is_payment_completed = models.BooleanField(default=False)
+    payment_amount = models.DecimalField(max_digits=10, decimal_places=2, default=100.00, help_text="Fixed payment amount for grievance submission")
     
     # User Information
     user = models.ForeignKey(
@@ -140,14 +145,15 @@ class Grievance(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        # Auto-generate grievance number if not exists
-        if not self.grievance_number:
+        # Auto-generate grievance number only after payment is completed
+        if not self.grievance_number and self.is_payment_completed:
             self.grievance_number = self.generate_grievance_number()
         
         # Initial routing based on Category flags
         if self._state.adding:
-            self.is_assigned_to_college = self.category.is_assigned_to_college
-            self.is_assigned_to_university = self.category.is_assigned_to_university
+            if hasattr(self, 'category') and self.category:
+                self.is_assigned_to_college = self.category.is_assigned_to_college
+                self.is_assigned_to_university = self.category.is_assigned_to_university
             
         # Standard Resolution Logic
         if self.status in ['resolved', 'canceled']:
@@ -336,4 +342,47 @@ class GrievanceAttachment(models.Model):
         super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.file_name} - {self.grievance.grievance_number}"
+        grievance_ref = self.grievance.grievance_number if self.grievance and self.grievance.grievance_number else "Pending"
+        return f"{self.file_name} - {grievance_ref}"
+
+
+class GrievancePayment(models.Model):
+    """
+    Model to track payments for Grievance submissions via CC Avenue.
+    """
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('ABORTED', 'Aborted'),
+    ]
+
+    grievance = models.ForeignKey(
+        Grievance,
+        on_delete=models.CASCADE,
+        related_name='payments'
+    )
+    order_id = models.CharField(max_length=100, unique=True, help_text="Unique order ID sent to CC Avenue")
+    tracking_id = models.CharField(max_length=100, null=True, blank=True, help_text="CC Avenue tracking ID")
+    bank_ref_no = models.CharField(max_length=100, null=True, blank=True)
+    
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    
+    payment_mode = models.CharField(max_length=50, null=True, blank=True)
+    card_name = models.CharField(max_length=50, null=True, blank=True)
+    
+    # Raw response from CC Avenue
+    raw_response = models.JSONField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Grievance Payment'
+        verbose_name_plural = 'Grievance Payments'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        user_name = self.grievance.contact_person_name if self.grievance else "Unknown"
+        return f"{self.order_id} - {user_name} - {self.payment_status}"

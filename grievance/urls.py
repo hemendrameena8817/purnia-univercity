@@ -5,6 +5,8 @@ from .views import (
     GrievanceCommentListView,
     GrievanceCommentCreateView,
     GrievanceStatsView,
+    GrievancePaymentInitiateView,
+    GrievancePaymentResponseView,
     GrievanceCategoryListView,
     GrievanceAttachmentUploadView,
 )
@@ -21,6 +23,11 @@ urlpatterns = [
     
     # Get grievance statistics
     path('stats/', GrievanceStatsView.as_view(), name='grievance-stats'),
+    
+    # Payment endpoints
+    path('payment-response/', GrievancePaymentResponseView.as_view(), name='grievance-payment-response'),
+    
+    path('<uuid:grievance_uid>/initiate-payment/', GrievancePaymentInitiateView.as_view(), name='grievance-payment-initiate'),
     
     # Retrieve or update a specific grievance (by ID or grievance_number)
     path('<str:identifier>/', GrievanceDetailView.as_view(), name='grievance-detail'),
