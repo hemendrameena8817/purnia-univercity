@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Statement of Marks</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 15mm 15mm 15mm 15mm;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      position: relative;
+    }
+
+    body {
+      font-family: "Times New Roman", Times, serif;
+      font-size: 10pt;
+      line-height: 1.3;
+      position: relative;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 400px;
+      height: 400px;
+      background-image: url('data:image/png;base64,{{ watermark_logo }}');
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      opacity: 0.08;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .content-wrapper {
+      position: relative;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Top Section: MSNO and Logo */
+    .top-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .msno-serial {
+      font-size: 7pt;
+      font-weight: bold;
+    }
+
+    .sl-no {
+      font-size: 9pt;
+      font-weight: bold;
+      text-align: right;
+    }
+
+    .logo-section {
+      text-align: left;
+      margin-bottom: 8px;
+    }
+
+    .university-logo-img {
+      width: 60px;
+      height: 60px;
+      display: block;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-top: 60px;
+    }
+
+    .university-name-hindi {
+      font-size: 18pt;
+      font-weight: bold;
+      margin-bottom: 2px;
+      letter-spacing: 0.5px;
+    }
+
+    .university-name-english {
+      font-size: 16pt;
+      font-weight: bold;
+      margin-bottom: 12px;
+      letter-spacing: 1px;
+    }
+
+    .marksheet-title {
+      font-size: 13pt;
+      font-weight: bold;
+      margin-bottom: 2px;
+      text-decoration: underline;
+    }
+
+    .exam-details {
+      font-size: 10pt;
+      line-height: 1.4;
+    }
+
+    /* Student Details Grid */
+    .student-details {
+      width: 100%;
+      margin-bottom: 2px;
+    }
+
+    .student-details td {
+      vertical-align: top;
+      font-size: 10pt;
+    }
+
+    .student-details .label {
+      width: 18%;
+      font-weight: normal;
+    }
+
+    .student-details .colon {
+      width: 3%;
+      text-align: center;
+    }
+
+    .student-details .value {
+      font-weight: bold;
+    }
+
+    /* Marks Table */
+    .marks-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 8px;
+      font-size: 10pt;
+    }
+
+    .marks-table th,
+    .marks-table td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .marks-table th {
+      font-weight: bold;
+      background-color: transparent;
+      padding: 5px 6px;
+      font-size: 10pt;
+    }
+
+    .marks-table .sl-col {
+      width: 6%;
+    }
+
+    .marks-table .subject-col {
+      width: 36%;
+      text-align: left;
+      padding-left: 8px;
+    }
+
+    .marks-table .papers-col {
+      width: 18%;
+    }
+
+    .marks-table .full-marks-col {
+      width: 13%;
+    }
+
+    .marks-table .pass-marks-col {
+      width: 13%;
+    }
+
+    .marks-table .obtained-col {
+      width: 14%;
+    }
+
+    .marks-table .subject-name {
+      text-align: left;
+      padding-left: 8px;
+    }
+
+    .marks-table .subject-name span {
+      font-weight: bold;
+    }
+
+    .marks-table .total-row {
+      font-weight: bold;
+    }
+
+    .marks-table .grand-total-row {
+      font-weight: bold;
+      background-color: #f9f9f9;
+    }
+
+    .detail-row {
+      margin-bottom: 2px;
+      line-height: 1.3;
+    }
+
+    .detail-label {
+      display: inline-block;
+      width: 180px;
+      font-weight: normal;
+    }
+
+    .detail-colon {
+      display: inline-block;
+      width: 8px;
+    }
+
+    .detail-value {
+      display: inline-block;
+      font-weight: bold;
+    }
+
+    /* Signature Section */
+    .signature-section {
+      position: fixed;
+      bottom: 10px;
+      left: 0;
+      width: 100%;
+    }
+
+    .signature-grid {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .signature-grid td {
+      text-align: center;
+      vertical-align: bottom;
+      padding: 0 5px;
+      font-size: 10pt;
+      font-weight: bold;
+    }
+
+    .signature-grid .controller-cell {
+      text-align: right;
+    }
+
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+
+    /* Marks Table */
+    .marks-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 11pt;
+      table-layout: fixed;
+    }
+
+    .marks-table th,
+    .marks-table td {
+      border: 1px solid #000;
+      padding: 1px 6px;
+      text-align: center;
+      line-height: 1.1;
+    }
+
+    .marks-table th {
+      font-weight: bold;
+      background-color: transparent;
+      padding: 3px 6px;
+    }
+
+    .marks-table .text-left-subject {
+      text-align: center;
+      padding-left: 10px;
+      padding-top: 2px;
+      padding-bottom: 2px;
+    }
+
+    .marks-table .aggregate-text {
+      text-align: left;
+      padding-left: 10px;
+    }
+
+    .marks-table .aggregate-row {
+      font-weight: bold;
+    }
+
+    .marks-table .aggregate-row td {
+      padding: 6px;
+      padding-top: 5px;
+      padding-bottom: 0px;
+    }
+
+    /* Result Section */
+    .result-section {
+      margin-bottom: 8px;
+      font-size: 11pt;
+      padding-bottom: 20px;
+    }
+
+    .result-section strong {
+      font-weight: bold;
+    }
+
+    .publication-date {
+      margin-bottom: 40px;
+      font-size: 11pt;
+    }
+
+    /* Bottom Section with Remarks, QR, Signature */
+    .bottom-section {
+      width: 100%;
+      margin-top: 15px;
+      margin-bottom: 25px;
+    }
+
+    .bottom-section table {
+      width: 100%;
+      border: none;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .bottom-section td {
+      vertical-align: top;
+      padding: 0;
+    }
+
+    .remarks {
+      font-size: 10pt;
+      line-height: 1.4;
+    }
+
+    .remarks strong {
+      font-weight: bold;
+    }
+
+    .qr-wrapper {
+      width: 97px;
+      height: 97px;
+      padding: 5px;
+      border: 1px solid #000;
+      box-sizing: border-box;
+      margin: 0 auto;
+    }
+
+    .qr-code {
+      width: 85px;
+      height: 85px;
+      display: block;
+    }
+
+    .signature-space {
+      height: 80px;
+    }
+
+    /* Final Signature Lines */
+    .signature-lines {
+      width: 100%;
+      height: 230px;
+      page-break-inside: avoid;
+    }
+
+    .signature-lines table {
+      width: 100%;
+      border: none;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .signature-lines td {
+      text-align: center;
+      vertical-align: bottom;
+      padding: 0 10px;
+    }
+
+    .signature-line {
+      display: inline-block;
+      width: 100%;
+      padding-top: 3px;
+      font-size: 11pt;
+      font-weight: bold;
+    }
+
+    @media print {
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .letterhead-space {
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page-border">
+    <div class="content-wrapper">
+      <!-- Top Section -->
+      <div class="top-section">
+        <div>
+          <div class="msno-serial">
+            MSNO.-{{ exam_year|default:"NA" }}-{{ student.roll_no }}
+          </div>
+          <div class="logo-section">
+            {% if university_logo %}
+            <img src="data:image/png;base64,{{ university_logo }}" class="university-logo-img" alt="University Logo" />
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="header">
+        <div class="marksheet-title">MARKSHEET</div>
+        <div class="exam-details">
+          <strong>{{ exam_name }} {{exam_year}}, Session &nbsp;({{ batch_year}}),</strong><br />
+          <strong>held in the month of {{ exam_month_year|upper }}</strong>
+        </div>
+      </div>
+
+      <!-- Student Details Table -->
+        <table class="student-details">
+          <tr>
+            <td class="label">ROLL NO.</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.roll_no }}</td>
+            <td class="label">Name of Candidate</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.user.get_full_name }}</td>
+          </tr>
+          <tr>
+            <td class="label">REG. NO.</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.registration_no }}</td>
+            <td class="label">Father's Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.father_name|default:"-" }}</td>
+          </tr>
+          <tr>
+            <td class="label">Course</td>
+            <td class="colon">:</td>
+            <td class="value">{{ course }}</td>
+            <td class="label">Mother's Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.mother_name|default:"-" }}</td>
+          </tr>
+          <tr>
+            <td class="label">College Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.college.name }}</td>
+            <td class="label">Centre Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ center_name|default:"-" }}</td>
+          </tr>
+        </table>
+
+      <!-- Marks Table -->
+      <table class="marks-table">
+        <thead>
+          <tr>
+            <th class="sl-col">Sl.No.</th>
+            <th class="subject-col">Subject</th>
+            <th class="papers-col">Papers</th>
+            <th class="full-marks-col">Full Marks</th>
+            <th class="pass-marks-col">Pass Marks</th>
+            <th class="obtained-col">Marks<br />Obtained</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for assessment in assessments %}
+          <tr>
+            <td class="text-left-subject">{{ forloop.counter }}</td>
+            <td class="text-left-subject">{{ assessment.course_structure.name|default:"-" }}</td>
+            <td class="text-left-subject">{{ assessment.course_structure.course_code|default:"-" }}</td>
+            <td class="text-left-subject">{{ assessment.course_structure.full_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ assessment.course_structure.pass_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">
+              <strong>{{ assessment.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="aggregate-row">
+            <td colspan="2" class="text-left" style="padding-left: 30px; text-align: left">
+              <strong>AGGREGATE</strong>
+            </td>
+            <td class="text-left-subject">&nbsp;</td>
+            <td style="margin-left: 10px"><strong>{{ total_full_marks|default:0|floatformat:0 }}</strong></td>
+            <td class="text-left-subject">&nbsp;</td>
+            <td>
+              <strong>{{ total_obtained_marks|default:0|floatformat:0 }}{% if result.grace %}<sup>+{{ result.grace|default:0|floatformat:0 }}</sup>{% endif %}</strong>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Result -->
+      <div class="result-section">
+        <strong>Result</strong>&nbsp;&nbsp;:&nbsp;&nbsp;<strong>{{ result_display|default:"-"|upper }}</strong>
+      </div>
+
+      <!-- Publication Date -->
+      <div class="publication-date">
+        Date of
+        Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+      </div>
+
+      <!-- Bottom Section: Remarks, QR Code, Signature Space -->
+      <div class="bottom-section">
+        <table>
+          <tr>
+            <td style="width: 35%">
+              <div class="remarks">
+                <strong>Remarks -</strong><br />
+                1. In Order to Pass each<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;paper 33% &amp; 45% marks in<br />
+                &nbsp;&nbsp;&nbsp;&nbsp;aggregate.<br />
+                2. 1st Class - 65%
+              </div>
+            </td>
+            <td style="width: 10%; text-align: center">
+              {% if qr_code %}
+              <div class="qr-wrapper">
+                <img src="data:image/png;base64,{{ qr_code }}" class="qr-code" alt="QR Code" />
+              </div>
+              {% endif %}
+            </td>
+            <td style="width: 35%">
+              <div class="signature-space"></div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Signature Section -->
+      <div class="signature-section">
+        <table class="signature-grid">
+          <tr>
+            <td style="width: 23%; text-align: left">Assistant</td>
+            <td style="width: 23%">S.O</td>
+            <td style="width: 23%">Tabulator</td>
+            <td class="controller-cell" style="width: 31%">
+              {% if controller_signature %}
+              <img src="data:image/png;base64,{{ controller_signature }}" style="
+                    height: 48px;
+                    display: inline-block;
+                    margin-bottom: 5px;
+                    margin-right: 20px;
+                    position: fixed;
+                    bottom: 30px;
+                    right: 20px;
+                  " alt="Signature" />
+              {% endif %} Controller of Examinations
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

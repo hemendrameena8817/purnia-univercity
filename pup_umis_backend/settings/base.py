@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "voc_new_registration",
     "captcha",
     'plw',
+    'llb',
     'mca_sem',
     'btech',
     'mba_sem',

@@ -707,3 +707,78 @@ class DisciplineMasterDump(models.Model):
         
     def __str__(self):
         return f"{self.discipline_code} - {self.discipline_name}"
+
+
+class StagingLLBResultCurrent(models.Model):
+    """
+    Staging table for LLB_result_current from purnea_exm_new database.
+    Contains semester-wise results for LLB students.
+    All fields are CharField to match dump data exactly.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    # All 40 columns from database
+    source_id = models.CharField(max_length=50, null=True, blank=True)
+    user_id = models.CharField(max_length=30, null=True, blank=True)
+    college_roll_no = models.CharField(max_length=30, null=True, blank=True)
+    college_reg_no = models.CharField(max_length=30, null=True, blank=True)
+    student_name = models.CharField(max_length=80, null=True, blank=True)
+    fathers_name = models.CharField(max_length=80, null=True, blank=True)
+    mothers_name = models.CharField(max_length=80, null=True, blank=True)
+    semester_code = models.CharField(max_length=20, null=True, blank=True)
+    batch_code = models.CharField(max_length=20, null=True, blank=True)
+    session_code = models.CharField(max_length=20, null=True, blank=True)
+    course_code = models.CharField(max_length=20, null=True, blank=True)
+    discipline_code = models.CharField(max_length=20, null=True, blank=True)
+    paper_code = models.CharField(max_length=30, null=True, blank=True)
+    subject_code = models.CharField(max_length=80, null=True, blank=True)
+    subject_name = models.CharField(max_length=80, null=True, blank=True)
+    status = models.CharField(max_length=10, null=True, blank=True)
+    exam_type = models.CharField(max_length=20, null=True, blank=True)
+    maximum_mark = models.CharField(max_length=10, null=True, blank=True)
+    pass_mark = models.CharField(max_length=10, null=True, blank=True)
+    mark_secured = models.CharField(max_length=10, null=True, blank=True)
+    mark_secured_his = models.CharField(max_length=10, null=True, blank=True)
+    subject_total_mark = models.CharField(max_length=10, null=True, blank=True)
+    subject_result = models.CharField(max_length=10, null=True, blank=True)
+    final_result = models.CharField(max_length=10, null=True, blank=True)
+    grand_total_mark = models.CharField(max_length=10, null=True, blank=True)
+    total_secured_mark = models.CharField(max_length=10, null=True, blank=True)
+    total_secured_mark_his = models.CharField(max_length=10, null=True, blank=True)
+    total_per = models.CharField(max_length=10, null=True, blank=True)
+    agreegate = models.CharField(max_length=30, null=True, blank=True)
+    institute_code = models.CharField(max_length=10, null=True, blank=True)
+    record_status = models.IntegerField(null=True, blank=True)
+    grade = models.CharField(max_length=30, null=True, blank=True)
+    sub_grace_chk = models.CharField(max_length=10, null=True, blank=True)
+    sub_wise_grace_chk = models.CharField(max_length=10, null=True, blank=True)
+    total_grace_chk = models.CharField(max_length=10, null=True, blank=True)
+    final_grace_list = models.CharField(max_length=10, null=True, blank=True)
+    grace_chk = models.CharField(max_length=10, null=True, blank=True)
+    hon = models.CharField(max_length=10, null=True, blank=True)
+    spfc_chk = models.CharField(max_length=10, null=True, blank=True)
+    previous_course_code = models.CharField(max_length=20, null=True, blank=True)
+
+    # Meta fields
+    is_migrated = models.BooleanField(default=False)
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'LLB Result Current'
+        verbose_name_plural = 'LLB Result Current'
+        indexes = [
+            models.Index(fields=['user_id']),
+            models.Index(fields=['college_roll_no']),
+            models.Index(fields=['college_reg_no']),
+            models.Index(fields=['semester_code']),
+            models.Index(fields=['batch_code']),
+            models.Index(fields=['session_code']),
+            models.Index(fields=['course_code']),
+            models.Index(fields=['institute_code']),
+        ]
+        
+    def __str__(self):
+        return f"{self.college_roll_no} - {self.student_name} - {self.subject_name}"
+
+
