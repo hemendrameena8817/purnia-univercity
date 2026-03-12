@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Statement of Marks - BBA Part III</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 35px;
+        margin-bottom: 40px; /* Increased to prevent footer cutoff */
+        position: relative;
+        margin-top: 0;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Times New Roman", Times, serif;
+        font-size: 10.5pt;
+        line-height: 1.3;
+      }
+      .content-wrapper {
+        width: 100%;
+        position: relative;
+      }
+      .top-left-section{
+        position: absolute;
+        top: 25px;
+        left: 20px;
+        width: 150px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        z-index: 10;
+      }
+
+      .university-logo-img{
+        width: 65px;
+        height: 65px;
+        display: block;
+        {% comment %} margin-bottom: 5px; {% endcomment %}
+      }
+
+      .msno-container{
+        font-size: 8.5pt;
+        font-weight: bold;
+        white-space: nowrap;
+      }
+
+      .header{
+        text-align: center;
+        padding-top: 130px; /* Reduced from 150px to reclaim space */
+        margin-bottom: 15px;
+        width: 100%;
+      }
+
+      .header h2{
+        margin: 0 0 5px 0;
+        font-size: 16pt;
+        font-weight: bold;
+        text-decoration: underline;
+      }
+      .header p {
+        margin: 0 auto;
+        width: 85%;
+        font-size: 10pt;
+        line-height: 1.3;
+      }
+      .bold { font-weight: bold; }
+
+      /* Student Info */
+      .student-info {
+        width: 100%;
+        margin-bottom: 8px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 10pt;
+      }
+      .info-column {
+        width: 49%;
+      }
+      .info-row {
+        display: flex;
+        margin-bottom: 2px;
+      }
+      .info-label {
+        width: 110px;
+        font-weight: normal;
+      }
+      .info-colon {
+        width: 15px;
+        text-align: center;
+      }
+      .info-value {
+        font-weight: bold;
+        flex: 1;
+      }
+
+      /* Marks Table */
+      .marks-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #000;
+        margin-bottom: 10px;
+        font-size: 8pt;
+        table-layout: fixed;
+      }
+      .marks-table th, .marks-table td {
+        border: 1px solid #000;
+        padding: 2px 1px; /* Reduced padding for space */
+        text-align: center;
+        vertical-align: middle;
+        word-wrap: break-word;
+      }
+      .marks-table th {
+        font-weight: bold;
+        {% comment %} background-color: #f2f2f2; {% endcomment %}
+      }
+      .marks-table .sl-col { width: 5%; }
+      .marks-table .sub-col { width: 33%; text-align: center; padding-left: 5px; }
+      .marks-table .part-col { width: 5%; }
+      .marks-table .paper-col { width: 7%; }
+      .marks-table .theory-col { width: 14%; }
+      .marks-table .internal-col { width: 14%; }
+      .marks-table .total-col { width: 11%; }
+      .marks-table .obt-col { width: 11%; }
+
+      .inner-header th {
+        border-top: none;
+      }
+
+      /* Result/Words Table */
+      .footer-details-table {
+        width: 100%;
+        margin-bottom: 5px;
+        border: none;
+      }
+      .footer-details-table td {
+        vertical-align: top;
+        padding: 0;
+        border: none;
+      }
+      .result-line {
+        font-size: 10.5pt;
+        font-weight: bold;
+        margin-bottom: 3px;
+      }
+      .date-line {
+        font-size: 10pt;
+        margin-bottom: 2px;
+      }
+      .hons-words {
+        text-align: right;
+        font-size: 10.5pt;
+        font-weight: bold;
+      }
+
+      /* Classification/QR Section */
+      .classification-qr-table {
+        width: 100%;
+        margin-top: 5px;
+        border: none;
+      }
+      .classification-qr-table td {
+        vertical-align: top;
+        border: none;
+        padding: 0;
+      }
+      .classification-list {
+        font-size: 9.5pt;
+        line-height: 1.4;
+      }
+      .qr-wrapper {
+        width: 90px;
+        height: 90px;
+        padding: 5px;
+        {% comment %} border: 1px solid #000; {% endcomment %}
+        box-sizing: border-box;
+        margin: 0 auto;
+      }
+      .qr-code {
+        width: 78px;
+        height: 78px;
+        display: block;
+      }
+
+      .signature-lines {
+        width: 100%;
+        margin-top: 30px;
+        page-break-inside: avoid;
+      }
+      .signature-lines table {
+        width: 100%;
+        border: none;
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      .signature-lines td {
+        text-align: center;
+        vertical-align: bottom;
+        font-size: 11pt;
+        font-weight: bold;
+      }
+
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="content-wrapper">
+      <div class="top-left-section">
+        <div class="msno-container">
+          MSNO.-{{ student.session.name|default:"N/A" }}-{{ student.roll_no }}
+        </div>
+        {% if university_logo %}
+        <img
+          src="data:image/png;base64,{{ university_logo }}"
+          class="university-logo-img"
+          alt="University Logo"
+        />
+        {% endif %}
+      </div>
+
+      <div class="header">
+        <h2>STATEMENT OF MARKS</h2>
+        <p>
+          <strong
+            >Bachelor of Business Administration Vocational (Honours) Part - III Examination {{ student.exam_year|default:"2025" }}, Session ({{ batch_year|default:"2022-2025" }}), held in
+            the month of {{ exam_month_year|default:"August, 2025" }}</strong
+          >
+        </p>
+      </div>
+
+      <div class="student-info">
+        <div class="info-column">
+          <div class="info-row">
+            <span class="info-label">Roll No</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ student.roll_no }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Reg. No</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ student.registration_no }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Course</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">BBA(Honours)</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">College Name</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ student.college.name }}</span>
+          </div>
+        </div>
+        <div class="info-column">
+          <div class="info-row">
+            <span class="info-label">Name of Candidate</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ student.get_full_name|upper }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Father's Name</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ student.father_name|default:"-" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Mother's Name</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ student.mother_name|default:"-" }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Exam Centre</span>
+            <span class="info-colon">:</span>
+            <span class="info-value">{{ center_name|upper|default:"-" }}</span>
+          </div>
+        </div>
+      </div>
+
+      <table class="marks-table">
+        <thead>
+          <tr>
+            <th rowspan="2" class="sl-col">Sl.No.</th>
+            <th rowspan="2" class="sub-col">Subject</th>
+            <th rowspan="2" class="part-col">Part</th>
+            <th rowspan="2" class="paper-col">Papers</th>
+            <th colspan="3" class="theory-col">Theory</th>
+            <th colspan="3" class="internal-col">Internal</th>
+            <th rowspan="2" class="total-col">Total Marks</th>
+            <th rowspan="2" class="obt-col">Marks Obtained</th>
+          </tr>
+          <tr class="inner-header">
+            <th>Full Marks</th>
+            <th>Pass Marks</th>
+            <th>Marks Obtained</th>
+            <th>Full Marks</th>
+            <th>Pass Marks</th>
+            <th>Marks Obtained</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for part in parts %}
+            {% for subject in part.subjects %}
+            <tr>
+              {% if forloop.first %}
+              <td rowspan="{{ part.subjects|length }}" class="bold">{{ forloop.parentloop.counter }}</td>
+              {% endif %}
+              <td class="sub-col bold">{{ subject.name }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ part.subjects|length }}" class="bold">{{ part.name }}</td>
+              {% endif %}
+              <td>{{ subject.paper_no }}</td>
+              <td>{{ subject.theory.max|floatformat:0 }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ part.subjects|length }}" class="bold">{{ part.total_pass|default:126 }}</td> <!-- Example pass mark for group -->
+              {% endif %}
+              <td>{{ subject.theory.obtained|floatformat:0 }}</td>
+              <td>{{ subject.internal.max|floatformat:0 }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ part.subjects|length }}" class="bold">{{ part.internal_pass|default:54 }}</td>
+              {% endif %}
+              <td>{{ subject.internal.obtained|floatformat:0 }}</td>
+              <td class="bold">{{ subject.total_max|floatformat:0 }}</td>
+              <td class="bold">{{ subject.total_obtained|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+          {% endfor %}
+
+          <!-- Honours Total Row -->
+          <tr class="bold">
+            <td colspan="4" style="text-align: right;">Total of Honours</td>
+            <td>{{ hons_total_max|floatformat:0 }}</td>
+            <td> </td>
+            <td> </td>
+            <td> </td>
+            <td> </td>
+            <td> </td>
+            <td>{{ hons_total_max|floatformat:0 }}</td>
+            <td>{{ hons_total_marks|floatformat:0 }}</td>
+          </tr>
+
+          <!-- Subsidiary Part -->
+          {% for s_part in subsidiary_parts %}
+            {% for sub in s_part.subjects %}
+            <tr>
+              {% if forloop.first %}
+              <td rowspan="{{ s_part.subjects|length }}" class="bold">{{ s_part.sl_no }}</td>
+              {% endif %}
+              <td class="sub-col">Subsidiary-{{ forloop.counter }}: {{ sub.name }}</td>
+              {% if forloop.first %}
+              <td rowspan="{{ s_part.subjects|length }}">{{ s_part.name }}</td>
+              {% endif %}
+              <td>THEORY</td>
+              <td>{{ sub.theory.max|floatformat:0 }}</td>
+              <td>{{ sub.theory.pass|floatformat:0 }}</td>
+              <td>{{ sub.theory.obtained|floatformat:0 }}</td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td class="bold">{{ sub.total_max|floatformat:0 }}</td>
+              <td class="bold">{{ sub.total_obtained|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+          {% endfor %}
+
+          <!-- General Studies -->
+          {% for gs in general_studies %}
+          <tr>
+            <td class="bold">6</td>
+            <td class="sub-col">{{ gs.name }}</td>
+            <td>3rd</td>
+            <td>THEORY</td>
+            <td>{{ gs.theory.max|floatformat:0 }}</td>
+            <td>{{ gs.theory.pass|floatformat:0 }}</td>
+            <td>{{ gs.theory.obtained|floatformat:0 }}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td class="bold">{{ gs.total_max|floatformat:0 }}</td>
+            <td class="bold">{{ gs.total_obtained|floatformat:0 }}</td>
+          </tr>
+          {% endfor %}
+
+          <!-- Grand Total Row -->
+          {% comment %} <tr class="bold" style="background-color: #f2f2f2;"> {% endcomment %}
+            <td colspan="4" style="text-align: right;">Grand Total</td>
+            <td>{{ grand_total_max|floatformat:0 }}</td>
+            <td></td>
+            <td>{{ grand_total|floatformat:0 }}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>{{ grand_total_max|floatformat:0 }}</td>
+            <td>{{ grand_total|floatformat:0 }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Footer Section -->
+      <table style="width: 100%; border: none; border-collapse: collapse; margin-top: 10px;">
+        <tr>
+          <!-- Left: Result, Dates, Classification -->
+          <td style="width: 50%; vertical-align: top; border: none; padding: 0;">
+            <div class="result-line">Result: {{ result_status|upper }}</div>
+            <div class="date-line">Date of Issue:</div>
+            <div class="date-line">Date of Publication: {{ publication_date }}</div>
+            
+            <div class="classification-list" style="margin-top: 15px;">
+              <table style="border: none; border-collapse: collapse; font-size: 10pt;">
+                <tr><td style="padding: 2px 0; width: 170px;">1st Class with Distinction</td><td>: 75%</td></tr>
+                <tr><td style="padding: 2px 0;">1st Class</td><td>: 60%</td></tr>
+                <tr><td style="padding: 2px 0;">2nd Class</td><td>: 45%</td></tr>
+              </table>
+            </div>
+          </td>
+          
+          <!-- Right: Honours Words (Top) and QR Code (Downside) -->
+          <td style="width: 50%; vertical-align: top; border: none; padding: 0;">
+            <div class="hons-words" style="text-align: right; margin-bottom: 20px;">
+              Honours Marks in Word &nbsp;: {{ hons_total_words }}
+            </div>
+            
+            <div style="text-align: center; width: 100%;">
+              <div style="display: inline-block; width: 150px; text-align: center;">
+                {% if qr_code %}
+                <div class="qr-wrapper" style="margin: 0 auto;">
+                  <img src="data:image/png;base64,{{ qr_code }}" class="qr-code" alt="QR Code" />
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Final Signature Lines -->
+      <div class="signature-lines" style="margin-top: 40px;">
+        <table style="width: 100%; table-layout: fixed; border: none;">
+          <tr>
+            <td style="text-align: center; width: 15%; vertical-align: bottom;">Assistant</td>
+            <td style="text-align: center; width: 25%; vertical-align: bottom;">S.O.</td>
+            <td style="text-align: center; width: 25%; vertical-align: bottom;">Tabulator</td>
+            <td style="text-align: center; width: 35%; vertical-align: bottom;">
+              {% if controller_signature %}
+              <div style="margin-bottom: 5px; margin-right: 0px;">
+                <img src="data:image/png;base64,{{ controller_signature }}" style="height: 50px; display: inline-block;" alt="Controller Signature" />
+              </div>
+              {% endif %}
+              Controller of Examinations
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

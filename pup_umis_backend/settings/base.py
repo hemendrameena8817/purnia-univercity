@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     'btech',
     'mba_sem',
     'ug_before_cbcs',
+    'bba_year',
+    'bca_hons_year',
 ]
 
 
