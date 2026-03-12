@@ -1257,12 +1257,22 @@ class PGCenterAttachedCollegesView(APIView):
         # Find mapping where this college is the center
         mapping = PGExamCenterMapping.objects.filter(center=center_college).first()
         if not mapping:
-            return Response({"colleges": [], "total": 0}, status=status.HTTP_200_OK)
+            return Response({
+                "colleges": [], 
+                "total": 0,
+                "center_code": center_college.center_code,
+                "college_code": center_college.college_code
+            }, status=status.HTTP_200_OK)
             
         attached_colleges = mapping.attached_colleges.all().order_by('name')
         data = [{"uid": str(c.uid), "name": c.name} for c in attached_colleges]
         
-        return Response({"colleges": data, "total": len(data)}, status=status.HTTP_200_OK)
+        return Response({
+            "colleges": data, 
+            "total": len(data), 
+            "center_code": center_college.center_code,
+            "college_code": center_college.college_code
+        }, status=status.HTTP_200_OK)
 
 
 class PGStudentAttendanceListView(APIView):
