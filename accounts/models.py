@@ -63,6 +63,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     PROFILE_TYPE_CHOICES = [
         ("mca_sem", "MCA Semester"),
         ("plw", "Pre-Law"),
+        ("llb", "LLB"),
         ("ug", "Undergraduate"),
         ("pg", "Postgraduate"),
         ("btech", "B.Tech"),

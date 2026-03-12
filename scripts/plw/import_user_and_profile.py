@@ -1,43 +1,39 @@
 """
-Import PLW Results Script
+Import PLW Users and Profiles Only Script
 
-This script imports student profiles, exams, and results from an Excel file.
-It creates Users, Students, Exams, and Results with Details.
+This script imports ONLY users and PLW student profiles from an Excel file.
+It does NOT import results - only creates the basic user accounts and profiles.
 
 HOW TO RUN:
 -----------
 poetry run python manage.py shell
 
 Then:
->>> from scripts.plw.import_plw_results import run_import
->>> run_import('old_data/FINAL_LLB_PART_1.xlsx')
->>> run_import('old_data/PRE_LAW_PART_I_USER_PROFILE_MARKS_SHEET.xlsx')
+>>> from scripts.plw.import_user_and_profile import run_import
+>>> run_import('old_data/student_profiles.xlsx')
 
 OR run directly:
-poetry run python scripts/plw/import_plw_results.py --file "old_data/Pre_Law_Sample.xlsx"
+poetry run python scripts/plw/import_user_and_profile.py --file "old_data/profiles.xlsx"
 
 Required Excel Columns:
 - Roll Number
 - Name of Candidate
 - Reg No
 - Batch (e.g., 2021-2024)
-- Session (e.g., 2021-24) or derive from Batch
+- Session (e.g., 2021-24)
 - College
-- Course (e.g., Pre-Law) - will be mapped to existing courses in database
-- PLW Exam
-- Result (Status e.g., PASS)
-- Total (Total Marks)
-- Exam Center (optional)
+- Course (e.g., Pre-Law)
 - Father Name (optional)
-- Mother Name
-- Subject Columns (English-I, etc.)
+- Mother Name (optional)
+- DOB (optional)
+- Mobile (optional)
 """
 
 import os
 import sys
 import pandas as pd
 import argparse
-from datetime import date
+from datetime import date, datetime
 from django.db import transaction
 from django.contrib.auth import get_user_model
 
@@ -50,19 +46,11 @@ if __name__ == '__main__':
     django.setup()
 
 from plw.models import (
-    PLWStudentProfile, PLWExam, PLWResult, PLWResultDetail, 
-    PLWSubject, PLWBatch, PLWSession, PLWCourse
+    PLWStudentProfile, PLWBatch, PLWSession, PLWCourse
 )
 from colleges.models import College
 
 User = get_user_model()
-
-# Columns that are NOT subjects
-NON_SUBJECT_COLUMNS = [
-    'Roll Number', 'Name of Candidate', 'Reg No', 'Total', 'Result', 
-    'College', 'Batch', 'Session', 'Father Name', 'PLW Exam', 'Exam Center',
-    'Mother Name', 'DOB', 'Mobile', 'Course', 'Grace'
-]
 
 def get_or_create_user(reg_no, full_name):
     """
@@ -86,6 +74,28 @@ def get_or_create_user(reg_no, full_name):
     print(f"Created User: {reg_no}")
     return user
 
+def parse_date(date_value):
+    """Parse date from various formats"""
+    if pd.isna(date_value) or str(date_value).strip() == '':
+        return None
+    
+    try:
+        if isinstance(date_value, datetime):
+            return date_value.date()
+        elif isinstance(date_value, date):
+            return date_value
+        elif isinstance(date_value, str):
+            # Try common date formats
+            for fmt in ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y/%m/%d']:
+                try:
+                    return datetime.strptime(date_value.strip(), fmt).date()
+                except ValueError:
+                    continue
+    except:
+        pass
+    
+    return None
+
 def run_import(file_path):
     if not os.path.exists(file_path):
         print(f"Error: File not found at {file_path}")
@@ -96,23 +106,43 @@ def run_import(file_path):
     
     print("Columns:", df.columns.tolist())
     
-    # Identify Subject Columns dynamically
-    subject_cols = [col for col in df.columns if col not in NON_SUBJECT_COLUMNS and "Unnamed" not in str(col)]
-    print(f"Identified Subjects: {subject_cols}")
+    # --- COLUMN VALIDATION ---
+    print("\nValidating required columns...")
+    required_columns = ['Roll Number', 'Name of Candidate', 'Reg No', 'Batch', 'Session', 'College', 'Course']
+    
+    # Convert DataFrame columns to exact case-sensitive match
+    df_columns = df.columns.tolist()
+    missing_columns = []
+    
+    for required_col in required_columns:
+        if required_col not in df_columns:
+            missing_columns.append(required_col)
+    
+    if missing_columns:
+        print("\nVALIDATION FAILED! Missing required columns:")
+        for col in missing_columns:
+            print(f"  - '{col}'")
+        print("\nAvailable columns:", df_columns)
+        return
+    
+    print("All required columns found!")
     
     # --- PHASE 1: VALIDATION ---
     print("\nStarting Validation Pass...")
     errors = []
     
-    # Cache to avoid duplicate DB lookups for the same values
+    # Cache to avoid duplicate DB lookups
     cache = {
-        'colleges': {}, 'sessions': {}, 'batches': {}, 
-        'courses': {}, 'exams': {}, 'subjects': {}
+        'colleges': {}, 'sessions': {}, 'batches': {}, 'courses': {}
     }
 
     for index, row in df.iterrows():
         row_num = index + 2
         
+        # Skip empty rows
+        if pd.isna(row.get('Roll Number')) and pd.isna(row.get('Reg No')):
+            continue
+            
         # 1. College
         college_name = str(row['College']).strip()
         if college_name not in cache['colleges']:
@@ -133,7 +163,6 @@ def run_import(file_path):
         # 3. Batch
         batch_name = str(row['Batch']).strip()
         if batch_name not in cache['batches']:
-            # Also check session link for batch
             sess = cache['sessions'].get(session_name)
             if sess:
                 cache['batches'][batch_name] = PLWBatch.objects.filter(name=batch_name, session=sess).first()
@@ -148,29 +177,20 @@ def run_import(file_path):
             cache['courses'][course_name] = PLWCourse.objects.filter(name__iexact=course_name).first()
         if not cache['courses'][course_name]:
             errors.append(f"Row {row_num}: Course '{course_name}' not found.")
-
-        # 5. Exam
-        exam_name = str(row['PLW Exam']).strip()
-        if exam_name not in cache['exams']:
-            # Match ONLY by name now, as requested
-            exam = PLWExam.objects.filter(name__iexact=exam_name).first()
             
-            if not exam:
-                errors.append(f"Row {row_num}: Exam '{exam_name}' not found in database.")
+        # 5. Validate required data
+        if pd.isna(row.get('Roll Number')) or str(row['Roll Number']).strip() == '':
+            errors.append(f"Row {row_num}: Roll Number is required.")
             
-            cache['exams'][exam_name] = exam
-
-        # 6. Subjects
-        for sub_col in subject_cols:
-            subject_name = str(sub_col).strip()
-            if subject_name not in cache['subjects']:
-                cache['subjects'][subject_name] = PLWSubject.objects.filter(name__iexact=subject_name).first()
-            if not cache['subjects'][subject_name]:
-                errors.append(f"Row {row_num}: Subject '{subject_name}' not found. Please create it or check spelling.")
+        if pd.isna(row.get('Reg No')) or str(row['Reg No']).strip() == '':
+            errors.append(f"Row {row_num}: Reg No is required.")
+            
+        if pd.isna(row.get('Name of Candidate')) or str(row['Name of Candidate']).strip() == '':
+            errors.append(f"Row {row_num}: Name of Candidate is required.")
 
     if errors:
         print("\nVALIDATION FAILED! Please fix the following errors before re-running:")
-        for err in errors[:50]: # Show first 50 errors
+        for err in errors[:50]:
             print(f"  - {err}")
         if len(errors) > 50:
             print(f"  ... and {len(errors)-50} more errors.")
@@ -180,8 +200,8 @@ def run_import(file_path):
 
     # --- PHASE 2: IMPORT ---
     stats = {
-        'students_created': 0, 'students_updated': 0,
-        'results_created': 0, 'results_updated': 0
+        'users_created': 0, 'users_existing': 0,
+        'profiles_created': 0, 'profiles_updated': 0
     }
 
     for index, row in df.iterrows():
@@ -195,28 +215,22 @@ def run_import(file_path):
                 session_obj = cache['sessions'][str(row['Session']).strip()]
                 batch_obj = cache['batches'][str(row['Batch']).strip()]
                 course = cache['courses'][str(row.get('Course', 'Pre-Law')).strip()]
-                exam_obj = cache['exams'][str(row['PLW Exam']).strip()]
                 
                 father_name = str(row.get('Father Name', '')).strip() if not pd.isna(row.get('Father Name')) else ""
                 mother_name = str(row.get('Mother Name', '')).strip() if not pd.isna(row.get('Mother Name')) else ""
-                exam_center = str(row.get('Exam Center', '')).strip() if not pd.isna(row.get('Exam Center')) else ""
                 
-                total_marks = row['Total']
-                result_status = str(row['Result']).strip()
+                dob = parse_date(row.get('DOB'))
+                mobile = str(row.get('Mobile', '')).strip() if not pd.isna(row.get('Mobile')) else ""
                 
-                grace_marks = row.get('Grace')
-                if pd.isna(grace_marks) or str(grace_marks).strip() == '':
-                    grace_marks = None
-                else:
-                    try:
-                        grace_marks = int(grace_marks)
-                    except:
-                        grace_marks = None
-                
-                # 2. User
+                # 1. User
                 user = get_or_create_user(reg_no, name)
+                if user:
+                    if user.first_name == name.strip():  # User was just created
+                        stats['users_created'] += 1
+                    else:
+                        stats['users_existing'] += 1
                 
-                # 6. Student Profile
+                # 2. Student Profile
                 student, created = PLWStudentProfile.objects.update_or_create(
                     registration_no=reg_no,
                     defaults={
@@ -226,49 +240,17 @@ def run_import(file_path):
                         'mother_name': mother_name,
                         'college': college,
                         'course': course,
-                        'batch': batch_obj
+                        'batch': batch_obj,
+                        'date_of_birth': dob,
+                        'mobile': mobile
                     }
                 )
-                if created: stats['students_created'] += 1
-                else: stats['students_updated'] += 1
-
-                # 8. Result
-                try:
-                    t_marks = int(total_marks)
-                except:
-                    t_marks = 0
-
-                result_obj, created = PLWResult.objects.update_or_create(
-                    student=student,
-                    exam=exam_obj,
-                    defaults={
-                        'total_marks': t_marks,
-                        'grace': grace_marks,
-                        'result_status': result_status,
-                        'exam_center': exam_center
-                    }
-                )
-                if created: stats['results_created'] += 1
-                else: stats['results_updated'] += 1
-                
-                # 9. Result Details (Subjects)
-                for sub_col in subject_cols:
-                    marks_val = row[sub_col]
-                    if pd.isna(marks_val) or str(marks_val).strip() == '':
-                        continue
-                        
-                    try:
-                        obtained = int(marks_val)
-                    except:
-                        obtained = 0
-                    
-                    subject_obj = cache['subjects'][sub_col]
-                    
-                    PLWResultDetail.objects.update_or_create(
-                        result=result_obj,
-                        subject=subject_obj,
-                        defaults={'marks_obtained': obtained}
-                    )
+                if created:
+                    stats['profiles_created'] += 1
+                    print(f"Created Profile: {reg_no} - {name}")
+                else:
+                    stats['profiles_updated'] += 1
+                    print(f"Updated Profile: {reg_no} - {name}")
 
         except Exception as e:
             print(f"Error processing row {index + 2} (Roll: {row.get('Roll Number')}): {e}")
@@ -276,12 +258,12 @@ def run_import(file_path):
             traceback.print_exc()
 
     print("\nImport Completed!")
-    print(f"Students Created: {stats['students_created']}, Updated: {stats['students_updated']}")
-    print(f"Results Created: {stats['results_created']}, Updated: {stats['results_updated']}")
+    print(f"Users Created: {stats['users_created']}, Existing: {stats['users_existing']}")
+    print(f"Profiles Created: {stats['profiles_created']}, Updated: {stats['profiles_updated']}")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Import PLW Results from Excel')
+    parser = argparse.ArgumentParser(description='Import PLW Users and Profiles Only')
     parser.add_argument('--file', type=str, required=True, help='Path to the Excel file')
     args = parser.parse_args()
     

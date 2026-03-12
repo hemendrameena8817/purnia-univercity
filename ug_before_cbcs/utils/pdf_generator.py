@@ -52,51 +52,61 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
+def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None, custom_results=None):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons Part 1 marksheet.
-    """
-    """
-    Generate marksheet PDF for UG Before CBCS student using simplified models.
     
     Args:
         student: UGBeforeCBCSStudentProfile instance
         exam_part: Part number as string ('1', '2', or '3')
+        exam_type: Optional exam type filter (REGULAR, BACK)
+        course_code: Optional course code filter
+        batch_code: Optional batch code filter
+        custom_results: Optional list of pre-filtered results to use instead of querying
     
     Returns:
-        PDF bytes or None
+        Context dictionary or None
     """
     # Convert part to uppercase format (PART1, PART2, PART3)
     part_code = f"PART{exam_part}"
 
-    # 1. Get student results for this part, filtering by exam_type if provided
-    results_query = UGBeforeCBCSStudentResult.objects.filter(
-        student=student,
-        exam__part=part_code
-    )
-    
-    if exam_type:
-        results_query = results_query.filter(exam_type__iexact=exam_type)
+    # Use custom results if provided, otherwise query
+    if custom_results:
+        results = custom_results
+        if not results:
+            logger.warning(f"No custom results provided for {student.registration_no} / {part_code}")
+            return None
+        first_result = results[0]
+        exam = first_result.exam
+    else:
+        # 1. Get student results for this part, filtering by exam_type if provided
+        results_query = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam__part=part_code
+        )
         
-    if course_code:
-        results_query = results_query.filter(exam__course_code__iexact=course_code)
-        
-    if batch_code:
-        results_query = results_query.filter(exam__batch_code=batch_code)
-        
-    first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
+        if exam_type:
+            results_query = results_query.filter(exam_type__iexact=exam_type)
+            
+        if course_code:
+            results_query = results_query.filter(exam__course_code__iexact=course_code)
+            
+        if batch_code:
+            results_query = results_query.filter(exam__batch_code=batch_code)
+            
+        first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
-    if not first_result:
-        logger.warning(f"No results found for {student.registration_no} / {part_code}")
-        return None
+        if not first_result:
+            logger.warning(f"No results found for {student.registration_no} / {part_code}")
+            return None
 
-    exam = first_result.exam
+        exam = first_result.exam
 
-    # 2. Get all student results for this exam
-    results = UGBeforeCBCSStudentResult.objects.filter(
-        student=student,
-        exam=exam
-    ).order_by('paper_code')
+        # 2. Get all student results for this exam
+        results = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam=exam
+        ).order_by('paper_code')
 
     # 3. Get exam summary
     # Exam summary fields are now part of StudentResult; aggregate as needed.
@@ -500,3 +510,290 @@ def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, co
         print("PDF ERROR:", error_msg) 
         logger.error(f"Error generating PDF: {e}")
         return None, error_msg
+
+def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=None, session_code=None):
+    """
+    Get the latest consolidated marksheet context.
+    Combines ALL papers (REGULAR + BACK), with the latest session_code taking precedence for duplicates.
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam_part: Part number as string ('1', '2', or '3')
+        course_code: Optional course code filter
+        session_code: Optional specific session code filter
+    
+    Returns:
+        Context dictionary for marksheet generation
+    """
+    part_code = f"PART{exam_part}"
+    
+    # Get ALL results for this part
+    all_results = UGBeforeCBCSStudentResult.objects.filter(
+        student=student,
+        exam__part=part_code
+    )
+    
+    if course_code:
+        all_results = all_results.filter(exam__course_code__iexact=course_code)
+    
+    if session_code:
+        all_results = all_results.filter(exam__session_code=session_code)
+    
+    all_results = all_results.select_related('exam').order_by('exam__session_code')
+    
+    if not all_results.exists():
+        logger.warning(f"No results found for {student.registration_no} / {part_code}")
+        return None
+    
+    # Build a map with latest session_code taking precedence
+    # Key: (paper_code, status), Value: result object
+    latest_papers = {}
+    
+    for result in all_results:
+        key = (result.paper_code, result.status)
+        
+        # If key exists, compare session_codes and keep the latest
+        if key in latest_papers:
+            existing_session = latest_papers[key].exam.session_code if latest_papers[key].exam else ''
+            current_session = result.exam.session_code if result.exam else ''
+            
+            # Keep the one with the later session_code
+            if current_session > existing_session:
+                latest_papers[key] = result
+                logger.info(f"Override: {result.paper_code} {result.status} - {existing_session} → {current_session}")
+        else:
+            latest_papers[key] = result
+    
+    # Now use the existing context function with these filtered results
+    # We'll pass the results as a custom queryset
+    return get_ug_old_ba_hons_part1_context(
+        student, 
+        exam_part=exam_part, 
+        exam_type=None,  # Don't filter by exam_type
+        course_code=course_code, 
+        batch_code=None,
+        custom_results=list(latest_papers.values())
+    )
+
+def get_center_info_for_student(student, exam):
+    """
+    Get the examination center information for a student from the mapping table.
+    Returns complete college object if available, otherwise just the name.
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam: UGBeforeCBCSExam instance
+    
+    Returns:
+        dict: Center information with uid, name, etc. or just name string
+    """
+    from ..models import UGBeforeCBCSExamCenterMapping
+    
+    if not student.college:
+        return {
+            'name': exam.centre_name,
+            'uid': None,
+            'college_code': None
+        } if exam.centre_name else None
+    
+    mapping = UGBeforeCBCSExamCenterMapping.objects.filter(
+        exam=exam,
+        student_college=student.college
+    ).select_related('center_college').first()
+    
+    if mapping:
+        # Priority: center_college > center_name > exam.centre_name
+        if mapping.center_college:
+            return {
+                'uid': str(mapping.center_college.uid),
+                'name': mapping.center_college.name,
+                'college_code': mapping.center_college.college_code,
+                'short_name': mapping.center_college.short_name,
+                'address': mapping.center_college.address,
+            }
+        elif mapping.center_name:
+            return {
+                'name': mapping.center_name,
+                'uid': None,
+                'college_code': None
+            }
+    
+    # Fallback to exam's centre_name
+    if exam.centre_name:
+        return {
+            'name': exam.centre_name,
+            'uid': None,
+            'college_code': None
+        }
+    
+    return None
+
+def get_ug_old_ba_hons_part1_progressive_contexts(student, exam_part='1', course_code=None, batch_code=None):
+    """
+    Generates year-by-year progressive BACK paper contexts.
+    Shows how BACK papers progressively override REGULAR papers over the years.
+    
+    Logic:
+    - Get all REGULAR papers (base marksheet)
+    - For each year with BACK papers, show cumulative state:
+      - Year 1 BACK: REGULAR + Year 1 BACK overrides
+      - Year 2 BACK: REGULAR + Year 1 BACK + Year 2 BACK overrides
+      - Year 3 BACK: REGULAR + Year 1 BACK + Year 2 BACK + Year 3 BACK overrides
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam_part: Part number as string ('1', '2', or '3')
+        course_code: Optional course code filter
+        batch_code: Optional batch code filter
+    
+    Returns:
+        List of dictionaries for each BACK session showing progressive state
+    """
+    part_code = f"PART{exam_part}"
+    
+    # Get ALL results for this part
+    all_results = UGBeforeCBCSStudentResult.objects.filter(
+        student=student,
+        exam__part=part_code
+    )
+    
+    if course_code:
+        all_results = all_results.filter(exam__course_code__iexact=course_code)
+    if batch_code:
+        all_results = all_results.filter(exam__batch_code=batch_code)
+    
+    all_results = all_results.select_related('exam').order_by('exam__session_code', 'exam_type')
+    
+    if not all_results.exists():
+        logger.warning(f"No results found for {student.registration_no} / {part_code}")
+        return []
+    
+    # Separate REGULAR and BACK papers
+    regular_papers = {}  # {(paper_code, status): result}
+    back_sessions = {}   # {session_code: [back_results]}
+    all_sessions = set()  # Track all unique session codes
+    
+    for result in all_results:
+        exam_type = (result.exam_type or '').upper()
+        key = (result.paper_code, result.status)
+        session = result.exam.session_code or 'UNKNOWN'
+        
+        # Track all sessions
+        if session:
+            all_sessions.add(session)
+        
+        if exam_type == 'BACK':
+            if session not in back_sessions:
+                back_sessions[session] = []
+            back_sessions[session].append(result)
+        else:
+            # REGULAR - only add if not already present
+            if key not in regular_papers:
+                regular_papers[key] = result
+    
+    # Helper function to format papers
+    def format_papers(papers_dict):
+        return [
+            {
+                'uid': str(result.uid),
+                'paper_code': result.paper_code,
+                'subject_name': result.subject_name,
+                'status': result.status,
+                'exam_type': result.exam_type,
+                'paper_type_code': result.paper_type_code,
+                'session_code': result.exam.session_code if result.exam else None,
+                'mark_secured': result.mark_secured,
+                'maximum_mark': result.maximum_mark,
+                'pass_mark': result.pass_mark,
+            }
+            for result in papers_dict.values()
+        ]
+    
+    # If no BACK papers, return only REGULAR papers
+    if not back_sessions:
+        logger.info(f"No BACK papers found for {student.registration_no} Part {exam_part}. Returning REGULAR papers only.")
+        
+        if not regular_papers:
+            return {'results': [], 'available_sessions': []}
+            
+        first_regular = next(iter(regular_papers.values()))
+        return {
+            'results': [{
+                'type': 'regular',
+                'session_code': first_regular.exam.session_code if first_regular.exam else None,
+                'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
+                'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
+                'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
+                'centre': get_center_info_for_student(student, first_regular.exam) if first_regular.exam else None,
+                'exam_name': first_regular.exam.name if first_regular.exam else f"Part {exam_part}",
+                'result': {
+                    'total_papers': len(regular_papers),
+                    'papers': format_papers(regular_papers)
+                }
+            }],
+            'available_sessions': sorted(list(all_sessions))
+        }
+    
+    # Sort BACK sessions chronologically
+    sorted_back_sessions = sorted(back_sessions.keys())
+    
+    # Build progressive results: REGULAR base + BACK by year
+    results_list = []
+    
+    # 1. Add REGULAR result (base)
+    if regular_papers:
+        first_regular = next(iter(regular_papers.values()))
+        results_list.append({
+            'type': 'regular',
+            'session_code': first_regular.exam.session_code if first_regular.exam else None,
+            'exam_code': first_regular.exam.exam_code if first_regular.exam else None,
+            'exam_year': first_regular.exam.exam_year if first_regular.exam else None,
+            'exam_month_year': first_regular.exam.exam_month_year if first_regular.exam else None,
+            'publication_date': first_regular.exam.publication_date if first_regular.exam else None,
+            'centre': get_center_info_for_student(student, first_regular.exam) if first_regular.exam else None,
+            'exam_name': first_regular.exam.name if first_regular.exam else f"Part {exam_part}",
+            'result': {
+                'total_papers': len(regular_papers),
+                'papers': format_papers(regular_papers)
+            }
+        })
+    
+    # 2. Add BACK results year by year (only BACK papers, no REGULAR)
+    cumulative_back_map = {}  # Cumulative BACK papers across years
+    
+    for idx, session in enumerate(sorted_back_sessions):
+        back_results = back_sessions[session]
+        
+        # Add BACK papers from this session to cumulative map
+        for result in back_results:
+            key = (result.paper_code, result.status)
+            cumulative_back_map[key] = result
+            logger.info(f"Session {session}: Added/Updated BACK {result.paper_code} {result.status}")
+        
+        first_exam = back_results[0].exam
+        
+        results_list.append({
+            'type': 'back',
+            'session_code': session,
+            'exam_code': first_exam.exam_code if first_exam else None,
+            'exam_year': first_exam.exam_year if first_exam else None,
+            'exam_month_year': first_exam.exam_month_year if first_exam else None,
+            'publication_date': first_exam.publication_date if first_exam else None,
+            'centre': get_center_info_for_student(student, first_exam) if first_exam else None,
+            'exam_name': first_exam.name if first_exam else f"Part {exam_part} - {session}",
+            'is_latest': (idx == len(sorted_back_sessions) - 1),
+            'result': {
+                'back_papers_in_this_session': len(back_results),
+                'cumulative_back_papers': len(cumulative_back_map),
+                'papers': format_papers(dict(enumerate(back_results)))
+            }
+        })
+        
+        logger.info(f"Progressive BACK for {student.registration_no} - Session {session}: "
+                   f"{len(back_results)} new BACK, {len(cumulative_back_map)} total cumulative BACK")
+    
+    # Return results with available sessions for filtering
+    return {
+        'results': results_list,
+        'available_sessions': sorted(list(all_sessions))
+    }
