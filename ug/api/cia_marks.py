@@ -69,6 +69,7 @@ class CIAStudentListView(APIView):
         session = request.GET.get('session')
         course_type_filter = request.GET.get('course_type', '').upper().strip()
         department_uid = request.GET.get('department_uid', '').strip()
+        search_term = request.GET.get('search', '').strip()
         label_filter = request.GET.get('label', '').strip()
         entry_status = request.GET.get('entry_status', 'all').lower().strip()
 
@@ -139,6 +140,12 @@ class CIAStudentListView(APIView):
                 qs = qs.filter(
                     student__major_course__uid=department_uid,
                 )
+
+        if search_term:
+            qs = qs.filter(
+                Q(student__roll_no__icontains=search_term) |
+                Q(student__registration_no__icontains=search_term)
+            )
         
         # ── Grouping by Student & Paper ──────────────
         # We fetch all to group faithfully, as pagination must be on the result rows.
@@ -209,15 +216,21 @@ class CIAStudentListView(APIView):
                 if has_pending:
                     final_rows.append(row)
 
+        final_rows.sort(
+            key=lambda row: (
+                str(row.get('roll_no') or '').strip().lower(),
+            )
+        )
+
         # ── Pagination ────────────────────────────────────────────────────────
         page = request.GET.get('page', 1)
-        page_size = request.GET.get('page_size', 50)
+        page_size = request.GET.get('page_size', 100)
         
         try:
             page_size = int(page_size)
-            if page_size > 50: page_size = 50
+            if page_size > 100: page_size = 100
         except ValueError:
-            page_size = 50
+            page_size = 100
             
         paginator = Paginator(final_rows, page_size)
         
@@ -232,6 +245,7 @@ class CIAStudentListView(APIView):
             'session': session,
             'course_type': course_type_filter,
             'exam_type': exam_type,
+            'search': search_term,
             'history_mode': is_history,
             'count': paginator.count,
             'total_pages': paginator.num_pages,
