@@ -252,7 +252,11 @@ def get_or_create_college(institute_code):
 def get_or_create_user(student_name, fathers_name, mothers_name, college_roll_no, college_reg_no):
     """Get or create user account"""
     # Use college_reg_no first, then college_roll_no as username
-    username = college_reg_no or college_roll_no or 'llb_unknown'
+    # Skip if both are None or 'None'
+    if (not college_reg_no or college_reg_no == 'None') and (not college_roll_no or college_roll_no == 'None'):
+        return None
+    
+    username = college_reg_no if college_reg_no and college_reg_no != 'None' else college_roll_no
     cache_key = username
     
     if cache_key in users_cache:
@@ -289,21 +293,43 @@ def get_or_create_user(student_name, fathers_name, mothers_name, college_roll_no
 
 def get_or_create_student_profile(staging_record, user, college, course, batch):
     """Get or create LLB student profile"""
-    cache_key = staging_record.college_reg_no
+    # Use registration_no first, fallback to roll_no
+    registration_no = staging_record.college_reg_no
+    roll_no = staging_record.college_roll_no
+    
+    # Skip if both are missing
+    if (not registration_no or registration_no == 'None') and (not roll_no or roll_no == 'None'):
+        print(f"  ⚠️  Skipping student profile: Missing both registration_no and roll_no for record {staging_record.source_id}")
+        return None
+    
+    # Use registration_no as primary identifier, fallback to roll_no
+    primary_id = registration_no if registration_no and registration_no != 'None' else roll_no
+    cache_key = primary_id
+    
     if cache_key in students_cache:
         return students_cache[cache_key]
     
+    # Try to find existing student by registration_no first, then roll_no
     try:
-        student = LLBStudentProfile.objects.get(registration_no=staging_record.college_reg_no)
+        if registration_no and registration_no != 'None':
+            student = LLBStudentProfile.objects.get(registration_no=registration_no)
+        else:
+            student = LLBStudentProfile.objects.get(roll_no=roll_no)
         students_cache[cache_key] = student
         return student
     except LLBStudentProfile.DoesNotExist:
         pass
     
+    # Skip if college, course, or batch is None
+    if not college or not course or not batch:
+        print(f"  ⚠️  Skipping student profile: Missing college/course/batch for {primary_id}")
+        return None
+    
+    # Create student with available identifiers
     student = LLBStudentProfile.objects.create(
         user=user,
-        roll_no=staging_record.college_roll_no or f'ROLL{staging_record.source_id}',
-        registration_no=staging_record.college_reg_no or f'REG{staging_record.source_id}',
+        roll_no=roll_no or f'ROLL{staging_record.source_id}',
+        registration_no=registration_no if registration_no and registration_no != 'None' else f'REG{staging_record.source_id}',
         father_name=staging_record.fathers_name,
         mother_name=staging_record.mothers_name,
         college=college,
@@ -373,9 +399,19 @@ def migrate_data():
                     record.college_reg_no
                 )
                 
+                # Skip if user creation failed (missing both reg_no and roll_no)
+                if user is None:
+                    skipped_count += 1
+                    continue
+                
                 student = get_or_create_student_profile(
                     record, user, college, course, batch
                 )
+                
+                # Skip if student profile creation failed
+                if student is None:
+                    skipped_count += 1
+                    continue
                 
                 # Create result record for this student+exam
                 try:

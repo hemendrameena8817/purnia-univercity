@@ -70,7 +70,7 @@ def calculate_llb_result(assessments):
     return {
         'total_full_marks': total_full_marks,
         'total_pass_marks': total_pass_marks,
-        'total_obtained_marks': round(total_obtained_marks, 2),
+        'total_obtained_marks': int(total_obtained_marks),
         'result_status': result_status,
         'result_display': result_display,
         'percentage': round(percentage, 2),

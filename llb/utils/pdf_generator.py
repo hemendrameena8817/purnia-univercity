@@ -33,7 +33,17 @@ def generate_marksheet_pdf(result, semester=None):
     """
     Generates a PDF marksheet for a given LLBResult object using WeasyPrint.
     If semester is provided, only assessments for that semester will be included.
+    Uses different templates for different semesters.
     """
+    # Determine which template to use based on semester
+    if semester == '1ST':
+        template_path = 'llb/detailed_marksheet_LLB_1.html'
+    elif semester == '2ND':
+        template_path = 'llb/detailed_marksheet_LLB_2.html'
+    else:
+        print(f"PDF generation skipped: Only 1ST and 2ND semesters supported (got: {semester})")
+        return None
+    
     # 1. Generate QR Code
     barcode_text = generate_llb_barcode_text(result)
     qr = qrcode.QRCode(
@@ -91,7 +101,6 @@ def generate_marksheet_pdf(result, semester=None):
     }
     
     # 4. Render Template
-    template_path = 'llb/detailed_marksheet_LLB_1.html'
     try:
         template = get_template(template_path)
         html = template.render(context)
