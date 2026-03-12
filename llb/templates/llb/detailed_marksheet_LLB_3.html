@@ -434,40 +434,40 @@
       </div>
 
       <!-- Student Details Table -->
-        <table class="student-details">
-          <tr>
-            <td class="label">ROLL NO.</td>
-            <td class="colon">:</td>
-            <td class="value">{{ student.roll_no }}</td>
-            <td class="label">Name of Candidate</td>
-            <td class="colon">:</td>
-            <td class="value">{{ student.user.get_full_name }}</td>
-          </tr>
-          <tr>
-            <td class="label">REG. NO.</td>
-            <td class="colon">:</td>
-            <td class="value">{{ student.registration_no }}</td>
-            <td class="label">Father's Name</td>
-            <td class="colon">:</td>
-            <td class="value">{{ student.father_name|default:"-" }}</td>
-          </tr>
-          <tr>
-            <td class="label">Course</td>
-            <td class="colon">:</td>
-            <td class="value">{{ course }}</td>
-            <td class="label">Mother's Name</td>
-            <td class="colon">:</td>
-            <td class="value">{{ student.mother_name|default:"-" }}</td>
-          </tr>
-          <tr>
-            <td class="label">College Name</td>
-            <td class="colon">:</td>
-            <td class="value">{{ student.college.name }}</td>
-            <td class="label">Centre Name</td>
-            <td class="colon">:</td>
-            <td class="value">{{ center_name|default:"-" }}</td>
-          </tr>
-        </table>
+      <table class="student-details">
+        <tr>
+          <td class="label">ROLL NO.</td>
+          <td class="colon">:</td>
+          <td class="value">{{ student.roll_no }}</td>
+          <td class="label">Name of Candidate</td>
+          <td class="colon">:</td>
+          <td class="value">{{ student.user.get_full_name }}</td>
+        </tr>
+        <tr>
+          <td class="label">REG. NO.</td>
+          <td class="colon">:</td>
+          <td class="value">{{ student.registration_no }}</td>
+          <td class="label">Father's Name</td>
+          <td class="colon">:</td>
+          <td class="value">{{ student.father_name|default:"-" }}</td>
+        </tr>
+        <tr>
+          <td class="label">Course</td>
+          <td class="colon">:</td>
+          <td class="value">{{ course }}</td>
+          <td class="label">Mother's Name</td>
+          <td class="colon">:</td>
+          <td class="value">{{ student.mother_name|default:"-" }}</td>
+        </tr>
+        <tr>
+          <td class="label">College Name</td>
+          <td class="colon">:</td>
+          <td class="value">{{ student.college.name }}</td>
+          <td class="label">Centre Name</td>
+          <td class="colon">:</td>
+          <td class="value">{{ center_name|default:"-" }}</td>
+        </tr>
+      </table>
 
       <!-- Marks Table -->
       <table class="marks-table">
@@ -482,27 +482,97 @@
           </tr>
         </thead>
         <tbody>
-          {% for assessment in assessments %}
+          {% comment %} Subject rows grouped by course_code; subjects with ESE+CIA stacked with rowspan {% endcomment %}
+          {% for group in grouped_assessments %}
+          {% with group_size=group|length %}
+          {% if group_size == 1 %}
           <tr>
             <td class="text-left-subject">{{ forloop.counter }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.name|default:"-" }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.course_code|default:"-" }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.full_marks|default:0|floatformat:0 }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.pass_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ group.0.course_structure.name|default:"-" }}</td>
+            <td class="text-left-subject">{{ group.0.course_structure.course_code|default:"-" }}</td>
+            <td class="text-left-subject">{{ group.0.course_structure.full_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ group.0.course_structure.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ assessment.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+              <strong>{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}</strong>
             </td>
           </tr>
+          {% else %}
+          {% comment %} First row: subject name, course_code, pass_marks span all rows; full_marks and obtained per
+          entry {% endcomment %}
+          <tr>
+            <td class="text-left-subject" rowspan="{{ group_size }}">{{ forloop.counter }}</td>
+            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.name|default:"-" }}
+            </td>
+            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.course_code|default:"-"
+              }}</td>
+            <td class="text-left-subject">80</td>
+            <td class="text-left-subject" rowspan="{{ group_size }}">45</td>
+            <td class="text-left-subject">
+              <strong>{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+            </td>
+          </tr>
+          {% for sub in group %}{% if not forloop.first %}
+          <tr>
+            <td class="text-left-subject">20</td>
+            <td class="text-left-subject">
+              <strong>{{ sub.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+            </td>
+          </tr>
+          {% endif %}{% endfor %}
+          {% endif %}
+          {% endwith %}
           {% endfor %}
+
+          {% comment %} Part III Total Row (Subject Group 1 - CIA+ESE combined) {% endcomment %}
+          <tr class="aggregate-row">
+            <td colspan="2" class="text-left" style="padding-left: 30px; text-align: right">
+              <strong>Total Marks in Part III</strong>
+            </td>
+            <td class="text-left-subject">&nbsp;</td>
+            <td style="margin-left: 10px"><strong>{{ part3_full_marks|default:0|floatformat:0 }}</strong></td>
+            <td class="text-left-subject"><strong>{{ part3_pass_marks|default:0|floatformat:0 }}</strong></td>
+            <td>
+              <strong>{{ part3_obtained_marks|default:0|floatformat:0 }}</strong>
+            </td>
+          </tr>
+
+          {% comment %} Part II Total Row (Subject Group 2 - CIA+ESE combined) {% endcomment %}
+          <tr class="aggregate-row">
+            <td colspan="2" class="text-left" style="padding-left: 30px; text-align: right">
+              <strong>Total Marks in Part II</strong>
+            </td>
+            <td class="text-left-subject">&nbsp;</td>
+            <td style="margin-left: 10px"><strong>{{ part2_full_marks|default:0|floatformat:0 }}</strong></td>
+            <td class="text-left-subject"><strong>{{ part2_pass_marks|default:0|floatformat:0 }}</strong></td>
+            <td>
+              <strong>{{ part2_obtained_marks|default:0|floatformat:0 }}</strong>
+            </td>
+          </tr>
+
+          {% comment %} Part I Total Row (Subject Group 3 - CIA+ESE combined) {% endcomment %}
+          <tr class="aggregate-row">
+            <td colspan="2" class="text-left" style="padding-left: 30px; text-align: right">
+              <strong>Total Marks in Part I</strong>
+            </td>
+            <td class="text-left-subject">&nbsp;</td>
+            <td style="margin-left: 10px"><strong>{{ part1_full_marks|default:0|floatformat:0 }}</strong></td>
+            <td class="text-left-subject"><strong>{{ part1_pass_marks|default:0|floatformat:0 }}</strong></td>
+            <td>
+              <strong>{{ part1_obtained_marks|default:0|floatformat:0 }}</strong>
+            </td>
+          </tr>
+
+          {% comment %} AGGREGATE Row (Grand Total) {% endcomment %}
           <tr class="aggregate-row">
             <td colspan="2" class="text-left" style="padding-left: 30px; text-align: right">
               <strong>AGGREGATE</strong>
             </td>
             <td class="text-left-subject">&nbsp;</td>
             <td style="margin-left: 10px"><strong>{{ total_full_marks|default:0|floatformat:0 }}</strong></td>
-            <td class="text-left-subject">&nbsp;</td>
+            <td class="text-left-subject"><strong>{{ total_pass_marks|default:0|floatformat:0 }}</strong></td>
             <td>
-              <strong>{{ total_obtained_marks|default:0|floatformat:0 }}{% if result.grace %}<sup>+{{ result.grace|default:0|floatformat:0 }}</sup>{% endif %}</strong>
+              <strong>{{ total_obtained_marks|default:0|floatformat:0 }}{% if result.grace %}<sup>+{{
+                  result.grace|default:0|floatformat:0 }}</sup>{% endif %}</strong>
             </td>
           </tr>
         </tbody>
@@ -510,13 +580,26 @@
 
       <!-- Result -->
       <div class="result-section">
-        <strong>Result</strong>&nbsp;&nbsp;:&nbsp;&nbsp;<strong>{{ result_display|default:"-"|upper }}</strong>
+        <div >
+          <strong>Result</strong>&nbsp;&nbsp;:&nbsp;&nbsp;<strong>{{ result_display|default:"FAIL"|upper }}</strong>
+        </div>
+
+        <!-- Marks in Words -->
+        <div>
+          <strong>Marks in words</strong>&nbsp;&nbsp;:&nbsp;&nbsp;<strong>{{ marks_in_words|default:"Zero Only" }}</strong>
+        </div>
       </div>
 
       <!-- Publication Date -->
       <div class="publication-date">
-        Date of
-        Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+        <div>
+          Date of
+          Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+        </div>
+        <div class="">
+          Date of
+          Issue&nbsp;&nbsp;<strong>{% now "d-m-Y" %}</strong>
+        </div>
       </div>
 
       <!-- Bottom Section: Remarks, QR Code, Signature Space -->
@@ -572,4 +655,5 @@
     </div>
   </div>
 </body>
+
 </html>
