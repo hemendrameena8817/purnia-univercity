@@ -287,6 +287,8 @@ def ensure_exam_registration(profile, source_file):
 
     update_fields = []
     if registration:
+        if registration.status == 'REGISTERED':
+            return registration, False, update_fields
         if registration.status != 'OPEN':
             registration.status = 'OPEN'
             update_fields.append('status')
