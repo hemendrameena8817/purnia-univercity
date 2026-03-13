@@ -17,6 +17,7 @@ class GrievanceCategoryAdmin(admin.ModelAdmin):
     search_fields = ['name', 'code', 'description']
     readonly_fields = ['uid', 'created_at', 'updated_at']
     inlines = [GrievanceSubCategoryInline]
+    raw_id_fields = []  # No foreign keys to optimize
     fieldsets = (
         ('Category Information', {
             'fields': ('uid', 'name', 'code', 'description', 'is_active', 'is_assigned_to_college', 'is_assigned_to_university')
@@ -91,6 +92,26 @@ class GrievanceAdmin(admin.ModelAdmin):
         'closed_at',
         'deleted_at',
     ]
+    raw_id_fields = [
+        'user',
+        'category',
+        'subcategory',
+        'assigned_to_college',
+        'assigned_to_university',
+        'modified_by',
+        'deleted_by',
+    ]
+    list_select_related = [
+        'user',
+        'category',
+        'subcategory',
+        'assigned_to_college',
+        'assigned_to_university',
+        'modified_by',
+        'deleted_by',
+    ]
+    list_prefetch_related = []  # No prefetch needed for basic list
+    show_full_result_count = False  # Faster loading for large datasets
     fieldsets = (
         ('Grievance Information', {
             'fields': ('uid', 'grievance_number', 'user', 'contact_person_name', 'contact_person_phone_number')
@@ -135,6 +156,9 @@ class GrievanceAttachmentAdmin(admin.ModelAdmin):
     list_filter = ['file_type', 'uploaded_at']
     search_fields = ['file_name', 'grievance__grievance_number', 'description']
     readonly_fields = ['uid', 'file_name', 'file_size', 'file_type', 'uploaded_at']
+    raw_id_fields = ['grievance', 'comment', 'uploaded_by']
+    list_select_related = ['grievance', 'comment', 'uploaded_by']
+    show_full_result_count = False
     fieldsets = (
         ('Attachment Information', {
             'fields': ('uid', 'file', 'file_name', 'file_size', 'file_type', 'description')
@@ -191,6 +215,10 @@ class GrievanceCommentAdmin(admin.ModelAdmin):
         'commented_by__username',
     ]
     readonly_fields = ['uid', 'created_at', 'updated_at', 'attachments']
+    raw_id_fields = ['grievance', 'commented_by']
+    list_select_related = ['grievance', 'commented_by']
+    list_prefetch_related = ['attachments']
+    show_full_result_count = False
     fieldsets = (
         ('Comment Information', {
             'fields': ('uid', 'grievance', 'commented_by', 'comment_type')
@@ -226,6 +254,16 @@ class GrievancePaymentAdmin(admin.ModelAdmin):
         )
     payment_status_badge.short_description = 'Payment Status'
     
+    def payment_date(self, obj):
+        """Display payment date without timezone conversion"""
+        if obj.created_at:
+            try:
+                return obj.created_at.strftime('%Y-%m-%d %H:%M')
+            except (ValueError, AttributeError):
+                return str(obj.created_at)
+        return '-'
+    payment_date.short_description = 'Created'
+    
     list_display = [
         'order_id',
         'grievance',
@@ -233,12 +271,11 @@ class GrievancePaymentAdmin(admin.ModelAdmin):
         'payment_status_badge',
         'payment_mode',
         'tracking_id',
-        'created_at',
+        'payment_date',
     ]
     list_filter = [
         'payment_status',
         'payment_mode',
-        'created_at',
     ]
     search_fields = [
         'order_id',
@@ -257,6 +294,9 @@ class GrievancePaymentAdmin(admin.ModelAdmin):
         'created_at',
         'updated_at',
     ]
+    raw_id_fields = ['grievance']
+    list_select_related = ['grievance']
+    show_full_result_count = False
     fieldsets = (
         ('Payment Information', {
             'fields': ('grievance', 'order_id', 'amount', 'payment_status')
@@ -272,7 +312,6 @@ class GrievancePaymentAdmin(admin.ModelAdmin):
             'fields': ('created_at', 'updated_at')
         }),
     )
-    date_hierarchy = 'created_at'
     ordering = ['-created_at']
 
 
@@ -283,6 +322,7 @@ class GrievanceSubCategoryAdmin(admin.ModelAdmin):
     search_fields = ['name', 'code', 'description']
     readonly_fields = ['uid', 'created_at', 'updated_at']
     list_select_related = ['category']
+    raw_id_fields = ['category']
     fieldsets = (
         ('SubCategory Information', {
             'fields': ('uid', 'category', 'name', 'code', 'description', 'price', 'is_active')
