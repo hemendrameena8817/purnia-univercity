@@ -1,9 +1,8 @@
 from rest_framework import serializers
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
+    LLBCourseStructure, LLBExam, LLBStudentCourseAssessment
 )
-from .utils.generate_llb_barcode_text import generate_llb_barcode_text
 
 class LLBCourseSerializer(serializers.ModelSerializer):
     class Meta:
@@ -52,16 +51,3 @@ class LLBStudentCourseAssessmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = LLBStudentCourseAssessment
         fields = '__all__'
-
-class LLBStudentExamResultSerializer(serializers.ModelSerializer):
-    assessments = LLBStudentCourseAssessmentSerializer(many=True, read_only=True)
-    student_details = LLBStudentProfileSerializer(source='student', read_only=True)
-    exam_details = LLBExamSerializer(source='exam', read_only=True)
-    barcode_text = serializers.SerializerMethodField()
-
-    class Meta:
-        model = LLBStudentExamResult
-        fields = '__all__'
-
-    def get_barcode_text(self, obj):
-        return generate_llb_barcode_text(obj)

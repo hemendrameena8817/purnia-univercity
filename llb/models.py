@@ -134,33 +134,6 @@ class LLBExam(models.Model):
     def __str__(self):
         return self.name
 
-class LLBStudentExamResult(models.Model):
-    """Exam result summary for LLB students"""
-    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    student = models.ForeignKey(
-        LLBStudentProfile,
-        on_delete=models.CASCADE,
-        related_name='exam_results'
-    )
-
-    exam = models.ForeignKey(
-        LLBExam,
-        on_delete=models.CASCADE,
-        related_name='exam_results'
-    )
-
-    total_marks = models.PositiveIntegerField(default=0)
-    grace = models.PositiveIntegerField(null=True, blank=True)
-    result_status = models.CharField(
-        max_length=500,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.student.roll_no} - {self.exam.name}"
-
 class LLBStudentCourseAssessment(models.Model):
     """
     Detailed marks per subject and assessment label for LLB (following MCA pattern).
@@ -189,13 +162,6 @@ class LLBStudentCourseAssessment(models.Model):
         LLBExam, 
         on_delete=models.CASCADE, 
         related_name='student_assessments_exam',
-        null=True, 
-        blank=True
-    )
-    exam_result = models.ForeignKey(
-        LLBStudentExamResult, 
-        on_delete=models.CASCADE, 
-        related_name='student_assessments_result',
         null=True, 
         blank=True
     )

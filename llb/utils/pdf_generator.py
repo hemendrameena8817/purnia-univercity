@@ -1,6 +1,7 @@
 import base64
 import io
 import os
+from types import SimpleNamespace
 from django.conf import settings
 from django.template.loader import get_template
 from weasyprint import HTML
@@ -49,7 +50,56 @@ def group_assessments_for_semester3(assessments):
     return list(groups.values())
 
 
-def generate_marksheet_pdf(result, semester=None):
+def build_semester2_display_rows(assessments):
+    theory_rows = []
+    practical_rows = []
+    combined_map = {}
+
+    for assessment in assessments:
+        course_structure = getattr(assessment, 'course_structure', None)
+        if not course_structure:
+            continue
+
+        course_code = (getattr(course_structure, 'course_code', '') or '').upper()
+        status = (getattr(course_structure, 'status', '') or '').upper()
+
+        if course_code in ('IX', 'X'):
+            if course_code not in combined_map:
+                combined_map[course_code] = {
+                    'name': course_structure.name or '-',
+                    'course_code': course_code,
+                    'full_marks': 0,
+                    'pass_marks': 0,
+                    'obtained_marks': 0,
+                }
+
+            combined_map[course_code]['name'] = course_structure.name or combined_map[course_code]['name']
+            combined_map[course_code]['full_marks'] += int(course_structure.full_marks or 0)
+            combined_map[course_code]['pass_marks'] += int(course_structure.pass_marks or 0)
+            combined_map[course_code]['obtained_marks'] += int(assessment.ind_marks_obtained or 0)
+            continue
+
+        row = {
+            'name': course_structure.name or '-',
+            'course_code': course_structure.course_code or '-',
+            'full_marks': int(course_structure.full_marks or 0),
+            'pass_marks': int(course_structure.pass_marks or 0),
+            'obtained_marks': int(assessment.ind_marks_obtained or 0),
+        }
+
+        if status == 'ESE':
+            theory_rows.append(row)
+        elif status == 'CIA':
+            practical_rows.append(row)
+
+    for course_code in ('IX', 'X'):
+        if course_code in combined_map:
+            practical_rows.append(combined_map[course_code])
+
+    return theory_rows, practical_rows
+
+
+def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, assessments=None, grace=None, total_marks=None):
     """
     Generates a PDF marksheet for a given LLBResult object using WeasyPrint.
     If semester is provided, only assessments for that semester will be included.
@@ -65,9 +115,19 @@ def generate_marksheet_pdf(result, semester=None):
     else:
         print(f"PDF generation skipped: Only 1ST, 2ND, and 3RD semesters supported (got: {semester})")
         return None
-    
+
+    student = student or getattr(result, 'student', None)
+    exam = exam or getattr(result, 'exam', None)
+    if assessments is None:
+        if result is not None and hasattr(result, '_filtered_assessments'):
+            assessments = result._filtered_assessments
+        else:
+            assessments = student.course_assessments.filter(exam=exam, semester=semester).select_related('course_structure').order_by('paper_code')
+    if result is None:
+        result = SimpleNamespace(student=student, exam=exam, grace=grace, total_marks=total_marks)
+
     # 1. Generate QR Code
-    barcode_text = generate_llb_barcode_text(result)
+    barcode_text = generate_llb_barcode_text(result=result, semester=semester, student=student, exam=exam, assessments=assessments, total_marks=total_marks)
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -83,19 +143,10 @@ def generate_marksheet_pdf(result, semester=None):
     buffered = io.BytesIO()
     img.save(buffered, format="PNG")
     qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
-    
-    # 3. Get assessments (filtered by semester if provided)
-    if hasattr(result, '_filtered_assessments'):
-        assessments = result._filtered_assessments
-    elif semester:
-        assessments = result.student_assessments_result.filter(semester=semester)
-    else:
-        assessments = result.student_assessments_result.all()
 
     # 4. Calculate result statistics
     if semester == '3RD':
-        # Query from student directly to get assessments across ALL semesters (not just this result)
-        cumulative_assessments = result.student.course_assessments.filter(
+        cumulative_assessments = student.course_assessments.filter(
             semester__in=['1ST', '2ND', '3RD']
         ).select_related('course_structure').order_by('semester', 'paper_code')
         result_stats = calculate_llb_result_semester_3(cumulative_assessments)
@@ -142,16 +193,16 @@ def generate_marksheet_pdf(result, semester=None):
     # 5. Context for the template
     context = {
         'result': result,
-        'student': result.student,
+        'student': student,
         'assessments': assessments,
         'qr_code': qr_code_base64,
         'pass_percentage': 33,
-        'exam_name': result.exam.name if result.exam else 'LLB Examination',
-        'exam_year': result.exam.session if result.exam else '',
-        'batch_year': result.student.batch.name if result.student.batch else '',
-        'exam_month_year': result.exam.exam_month_year if result.exam else '',
-        'course': result.student.course.name if result.student.course else '-',
-        'center_name': result.exam.center_mappings.first().center.name if result.exam and result.exam.center_mappings.exists() else '-',
+        'exam_name': exam.name if exam else 'LLB Examination',
+        'exam_year': exam.session if exam else '',
+        'batch_year': student.batch.name if student and student.batch else '',
+        'exam_month_year': exam.exam_month_year if exam else '',
+        'course': student.course.name if student and student.course else '-',
+        'center_name': exam.center_mappings.first().center.name if exam and exam.center_mappings.exists() else '-',
         
         # Result statistics
         'total_full_marks': result_stats['total_full_marks'],
@@ -168,11 +219,15 @@ def generate_marksheet_pdf(result, semester=None):
     }
 
     if semester == '2ND':
+        theory_rows, practical_rows = build_semester2_display_rows(assessments)
         context.update({
             'ese_full_marks': result_stats['ese_full_marks'],
             'ese_obtained_marks': result_stats['ese_obtained_marks'],
             'cia_full_marks': result_stats['cia_full_marks'],
             'cia_obtained_marks': result_stats['cia_obtained_marks'],
+            'theory_rows': theory_rows,
+            'practical_rows': practical_rows,
+            'cia_pass_marks': sum(row['pass_marks'] for row in practical_rows),
         })
 
     if semester == '3RD':

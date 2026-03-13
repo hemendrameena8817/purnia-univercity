@@ -1,13 +1,14 @@
 from rest_framework import generics
 from django.db.models import Prefetch
+from itertools import groupby
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
-    LLBCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
+    LLBCourseStructure, LLBExam, LLBStudentCourseAssessment
 )
 from .serializers import (
     LLBCourseSerializer, LLBSessionSerializer, LLBBatchSerializer,
     LLBStudentProfileSerializer, LLBCourseStructureSerializer, LLBExamSerializer,
-    LLBStudentExamResultSerializer, LLBStudentCourseAssessmentSerializer
+    LLBStudentCourseAssessmentSerializer
 )
 
 def normalize_semester(semester):
@@ -123,50 +124,12 @@ class LLBExamDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = LLBExam.objects.all()
     serializer_class = LLBExamSerializer
 
-# Exam Result Views
-class LLBStudentExamResultListView(generics.ListAPIView):
-    serializer_class = LLBStudentExamResultSerializer
-    
-    def get_queryset(self):
-        queryset = LLBStudentExamResult.objects.all()
-        
-        student = self.request.query_params.get('student')
-        if student:
-            queryset = queryset.filter(student_id=student)
-            
-        exam = self.request.query_params.get('exam')
-        if exam:
-            queryset = queryset.filter(exam_id=exam)
-            
-        status = self.request.query_params.get('result_status')
-        if status:
-            queryset = queryset.filter(result_status=status)
-            
-        semester = self.request.query_params.get('semester')
-        if semester:
-            semester_normalized = normalize_semester(semester)
-            queryset = queryset.filter(exam__semester=semester_normalized)
-            
-        return queryset
-
-class LLBStudentExamResultCreateView(generics.CreateAPIView):
-    queryset = LLBStudentExamResult.objects.all()
-    serializer_class = LLBStudentExamResultSerializer
-
-class LLBStudentExamResultDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = LLBStudentExamResult.objects.all()
-    serializer_class = LLBStudentExamResultSerializer
-
 # Assessment (Marks) Views
 class LLBStudentCourseAssessmentListView(generics.ListCreateAPIView):
     serializer_class = LLBStudentCourseAssessmentSerializer
     
     def get_queryset(self):
         queryset = LLBStudentCourseAssessment.objects.all()
-        
-        exam_result_id = self.request.query_params.get('exam_result')
-        if exam_result_id:
-            queryset = queryset.filter(exam_result_id=exam_result_id)
             
         semester = self.request.query_params.get('semester')
         if semester:
@@ -219,53 +182,48 @@ class LLBResultPDFView(View):
         semester = request.GET.get('semester', '1')
         semester_normalized = normalize_semester(semester)
         exam_type = request.GET.get('type', None)  # Get exam type from query params
-        
-        # Build filter for results
-        result_filters = {
-            'student__registration_no': registration_no,
-            'student_assessments_result__semester': semester_normalized
-        }
-        
+
         # Add exam_type filter if type parameter is provided
         exam_type_value = None
         if exam_type:
             exam_type_lower = exam_type.lower()
             if exam_type_lower == 'regular':
                 exam_type_value = 'Regular'
-                result_filters['student_assessments_result__exam_type__iexact'] = exam_type_value
             elif exam_type_lower == 'back':
                 exam_type_value = 'Back'
-                result_filters['student_assessments_result__exam_type__iexact'] = exam_type_value
-        
-        results = LLBStudentExamResult.objects.select_related(
-            'student', 'student__user', 'student__course', 'student__college', 'exam'
-        ).filter(**result_filters).distinct().order_by('-created_at')
-        
-        if not results.exists():
-            exam_type_msg = f" ({exam_type_value})" if exam_type_value else ""
-            raise Http404(f"No results found for registration number: {registration_no} in semester {semester_normalized}{exam_type_msg}")
-        
-        # Get the latest result for that semester
-        result = results.first()
-        
-        # Manually filter assessments by semester and exam_type
-        assessment_filters = {'semester': semester_normalized}
+
+        assessment_filters = {
+            'student__registration_no': registration_no,
+            'semester': semester_normalized,
+        }
         if exam_type_value:
             assessment_filters['exam_type__iexact'] = exam_type_value
-        
-        filtered_assessments = result.student_assessments_result.filter(**assessment_filters).select_related('course_structure').order_by('paper_code')
-        
-        # Temporarily override the assessments with filtered ones
-        result._filtered_assessments = filtered_assessments
-        
-        pdf_content = generate_marksheet_pdf(result, semester=semester_normalized)
+
+        filtered_assessments = LLBStudentCourseAssessment.objects.select_related(
+            'student', 'student__user', 'student__course', 'student__college', 'student__batch', 'exam', 'course_structure'
+        ).filter(**assessment_filters).exclude(exam__isnull=True).order_by('-exam__publication_date', 'paper_code')
+
+        if not filtered_assessments.exists():
+            exam_type_msg = f" ({exam_type_value})" if exam_type_value else ""
+            raise Http404(f"No results found for registration number: {registration_no} in semester {semester_normalized}{exam_type_msg}")
+
+        first_assessment = filtered_assessments.first()
+        student = first_assessment.student
+        exam = first_assessment.exam
+
+        pdf_content = generate_marksheet_pdf(
+            semester=semester_normalized,
+            student=student,
+            exam=exam,
+            assessments=filtered_assessments,
+        )
         
         if not pdf_content:
             return HttpResponse("Failed to generate PDF", status=500, content_type='text/plain')
              
         response = HttpResponse(pdf_content, content_type='application/pdf')
-        session_formatted = result.exam.session.replace('-', '_')
-        filename = f"MARKSHEET_{result.student.registration_no}_LLB_{session_formatted}.pdf"
+        session_formatted = exam.session.replace('-', '_')
+        filename = f"MARKSHEET_{student.registration_no}_LLB_{session_formatted}.pdf"
         response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
@@ -278,21 +236,19 @@ class LLBBulkMarksheetGenerateView(APIView):
         exam_uid = request.data.get('exam_uid') or request.query_params.get('exam_uid')
         
         try:
-            results = LLBStudentExamResult.objects.select_related(
-                'student', 'student__user', 'student__course', 'student__college', 'exam'
-            ).prefetch_related('student_assessments_result', 'student_assessments_result__course_structure')
-            
-            # 1. Filter results based on provided UID
+            assessments = LLBStudentCourseAssessment.objects.select_related(
+                'student', 'student__user', 'student__course', 'student__college', 'student__batch', 'exam', 'course_structure'
+            ).exclude(exam__isnull=True).order_by('exam_id', 'student_id', 'paper_code')
+
             if exam_uid:
-                results = results.filter(exam__uid=exam_uid)
-                if not results.exists():
+                assessments = assessments.filter(exam__uid=exam_uid)
+                if not assessments.exists():
                     return Response({"error": f"No results found for exam_uid: {exam_uid}"}, status=status.HTTP_404_NOT_FOUND)
-                
-                exam = results.first().exam
+
+                exam = assessments.first().exam
                 folder_name = f"Marksheets_{slugify(exam.name)}_{exam_uid}"
             else:
-                # 2. If no UID provided, check if any results exist at all (fallback to "all")
-                if not results.exists():
+                if not assessments.exists():
                     return Response({"error": "No results found in the system"}, status=status.HTTP_404_NOT_FOUND)
                 folder_name = "Marksheets_all"
 
@@ -300,12 +256,23 @@ class LLBBulkMarksheetGenerateView(APIView):
             os.makedirs(save_path, exist_ok=True)
             
             generated_count = 0
-            
-            for result in results:
-                pdf_content = generate_marksheet_pdf(result)
+
+            for (exam_id, student_id), grouped in groupby(assessments, key=lambda assessment: (assessment.exam_id, assessment.student_id)):
+                grouped_assessments = list(grouped)
+                first_assessment = grouped_assessments[0]
+                exam = first_assessment.exam
+                student = first_assessment.student
+                semester = normalize_semester(exam.semester) if exam and exam.semester else None
+
+                pdf_content = generate_marksheet_pdf(
+                    semester=semester,
+                    student=student,
+                    exam=exam,
+                    assessments=grouped_assessments,
+                )
                 if pdf_content:
-                    session_formatted = result.exam.session.replace('-', '_')
-                    filename = f"MARKSHEET_{result.student.registration_no}_LLB_{session_formatted}.pdf"
+                    session_formatted = exam.session.replace('-', '_')
+                    filename = f"MARKSHEET_{student.registration_no}_LLB_{session_formatted}.pdf"
                     file_path = os.path.join(save_path, filename)
                     with open(file_path, 'wb') as f:
                         f.write(pdf_content)
