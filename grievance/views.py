@@ -817,7 +817,7 @@ class GrievancePaymentResponseView(APIView):
                 uid = str(payment.grievance.uid)
                 
                 redirect_url = (
-                    f"{frontend_url}/grievances/payment-status"
+                    f"{frontend_url}/grievances/status"
                     f"?uid={uid}"
                     f"&payment_status={payment.payment_status.lower()}"
                     f"&order_id={order_id}"
@@ -837,3 +837,115 @@ class GrievancePaymentResponseView(APIView):
             frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
             error_redirect = f"{frontend_url}/grievances/payment-status?error={str(e)[:100]}"
             return redirect(error_redirect)
+
+
+class GrievanceStatusByUIDView(APIView):
+    """
+    GET: Retrieve grievance details by UID for payment status page
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="""Get grievance details by UID for payment status page.
+        
+        Returns complete grievance information including:
+        - Grievance number (if payment completed)
+        - Payment status and amount
+        - Category, subject, description
+        - Submission details
+        
+        **Use Case:** After payment redirect, frontend calls this endpoint with UID to display status.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'uid',
+                openapi.IN_QUERY,
+                description="Grievance UID (UUID)",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Grievance details retrieved successfully",
+                examples={
+                    'application/json': {
+                        'uid': 'abc-123-def-456',
+                        'grievance_number': 'GRV000001',
+                        'is_payment_completed': True,
+                        'payment_amount': '100.00',
+                        'payment_status': 'SUCCESS',
+                        'category': 'Fee & Payment Issues',
+                        'subject': 'My Issue',
+                        'description': 'Details...',
+                        'contact_person_name': 'John Doe',
+                        'contact_person_phone_number': '9876543210',
+                        'status': 'open',
+                        'submitted_at': '2026-03-13T09:45:00Z',
+                        'college_name': 'ABC College'
+                    }
+                }
+            ),
+            400: 'UID parameter required',
+            404: 'Grievance not found'
+        },
+        tags=['Grievances']
+    )
+    def get(self, request):
+        """Get grievance details by UID"""
+        uid = request.query_params.get('uid')
+        
+        if not uid:
+            return Response(
+                {'error': 'UID parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            grievance = Grievance.objects.select_related(
+                'category',
+                'assigned_to_college',
+                'user'
+            ).prefetch_related('payments').get(uid=uid, is_deleted=False)
+        except Grievance.DoesNotExist:
+            return Response(
+                {'error': 'Grievance not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get latest payment info
+        latest_payment = grievance.payments.order_by('-created_at').first()
+        
+        response_data = {
+            'uid': str(grievance.uid),
+            'grievance_number': grievance.grievance_number,
+            'is_payment_completed': grievance.is_payment_completed,
+            'payment_amount': str(grievance.payment_amount),
+            'category': grievance.category.name if grievance.category else None,
+            'category_code': grievance.category.code if grievance.category else None,
+            'subject': grievance.subject,
+            'description': grievance.description,
+            'contact_person_name': grievance.contact_person_name,
+            'contact_person_phone_number': grievance.contact_person_phone_number,
+            'status': grievance.status,
+            'status_display': grievance.get_status_display(),
+            'is_grievance_resolved': grievance.is_grievance_resolved,
+            'submitted_at': grievance.submitted_at,
+            'college_name': grievance.assigned_to_college.name if grievance.assigned_to_college else None,
+            'college_code': grievance.assigned_to_college.college_code if grievance.assigned_to_college else None,
+        }
+        
+        # Add payment details if exists
+        if latest_payment:
+            response_data['payment'] = {
+                'order_id': latest_payment.order_id,
+                'payment_status': latest_payment.payment_status,
+                'tracking_id': latest_payment.tracking_id,
+                'payment_mode': latest_payment.payment_mode,
+                'amount': str(latest_payment.amount),
+                'created_at': latest_payment.created_at,
+            }
+        else:
+            response_data['payment'] = None
+        
+        return Response(response_data, status=status.HTTP_200_OK)
