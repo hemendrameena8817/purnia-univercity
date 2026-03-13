@@ -177,14 +177,15 @@ def generate_marksheet_pdf(result, semester=None):
 
     if semester == '3RD':
         context.update({
+            'total_pass_marks': 1260,
             'part3_full_marks': result_stats.get('part3_full_marks', 0),
-            'part3_pass_marks': result_stats.get('part3_pass_marks', 0),
+            'part3_pass_marks': 450,
             'part3_obtained_marks': result_stats.get('part3_obtained_marks', 0),
             'part2_full_marks': result_stats.get('part2_full_marks', 0),
-            'part2_pass_marks': result_stats.get('part2_pass_marks', 0),
+            'part2_pass_marks': 450,
             'part2_obtained_marks': result_stats.get('part2_obtained_marks', 0),
             'part1_full_marks': result_stats.get('part1_full_marks', 0),
-            'part1_pass_marks': result_stats.get('part1_pass_marks', 0),
+            'part1_pass_marks': 360,
             'part1_obtained_marks': result_stats.get('part1_obtained_marks', 0),
             'marks_in_words': marks_in_words,
             'grouped_assessments': group_assessments_for_semester3(assessments),

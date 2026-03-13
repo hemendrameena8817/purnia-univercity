@@ -54,8 +54,6 @@ def get_assessment_label(status):
     # Map staging status to assessment labels
     if status == "END_TERM":
         return "ESE"  
-    elif status == "MID_TERM":
-        return "CIA"  
     elif status == "LAB":
         return "CIA"
     else:
@@ -161,7 +159,7 @@ def get_course_code(paper_code):
     except:
         return 'UNKNOWN'
 
-def get_or_create_subject(subject_name, maximum_mark, pass_mark, semester, paper_code=None, status=None):
+def get_or_create_subject(subject_name, maximum_mark, pass_mark, semester, paper_code=None, status=None, subject_code=None):
     """
     Get existing LLB course structure (does NOT create new ones).
     Course structures should be created first using migrate_course_structures.py
@@ -171,6 +169,7 @@ def get_or_create_subject(subject_name, maximum_mark, pass_mark, semester, paper
     """
     semester = semester or ''
     paper_code = paper_code or 'UNKNOWN'
+    subject_code = subject_code or ''
     
     # Determine assessment type from status
     assessment_label = get_assessment_label(status)
@@ -185,19 +184,21 @@ def get_or_create_subject(subject_name, maximum_mark, pass_mark, semester, paper
         subject = LLBCourseStructure.objects.get(
             paper_code=paper_code,  # Use paper_code field
             semester=semester,
-            status=assessment_label
+            status=assessment_label,
+            subject_code=subject_code
         )
         subjects_cache[cache_key] = subject
         return subject
     except LLBCourseStructure.DoesNotExist:
-        print(f"  ⚠️  Warning: Course structure not found: {paper_code} ({semester}) [{assessment_label}]")
+        print(f"  ⚠️  Warning: Course structure not found: {paper_code} ({semester}) [{assessment_label}] [{subject_code}]")
         return None
     except LLBCourseStructure.MultipleObjectsReturned:
         # If multiple found, get the first one
         subject = LLBCourseStructure.objects.filter(
             paper_code=paper_code,
             semester=semester,
-            status=assessment_label
+            status=assessment_label,
+            subject_code=subject_code
         ).first()
         subjects_cache[cache_key] = subject
         return subject
@@ -378,7 +379,8 @@ def migrate_data():
                 record.pass_mark,
                 record.semester_code,
                 record.paper_code,
-                record.status  # Pass status to differentiate CIA/ESE
+                record.status,
+                record.subject_code
             )
             
             # Skip if course structure not found
