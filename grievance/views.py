@@ -709,7 +709,15 @@ class GrievancePaymentInitiateView(APIView):
             "order_id": order_id,
             "enc_request": encrypted_data,
             "access_code": access_code,
-            "production_url": ccavenue_url
+            "production_url": ccavenue_url,
+            "payment_details": {
+                "amount": amount,
+                "currency": "INR",
+                "description": f"Grievance Payment - {grievance.subject}",
+                "grievance_uid": str(grievance.uid),
+                "grievance_subject": grievance.subject,
+                "contact_person": grievance.contact_person_name
+            }
         }, status=status.HTTP_200_OK)
 
 
