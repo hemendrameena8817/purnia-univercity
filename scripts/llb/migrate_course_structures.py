@@ -33,8 +33,6 @@ def get_assessment_label(status):
     # Map staging status to assessment labels
     if status == "END_TERM":
         return "ESE"  
-    elif status == "MID_TERM":
-        return "CIA"  
     elif status == "LAB":
         return "CIA"
     else:
@@ -71,6 +69,29 @@ def get_course_code(paper_code):
     except:
         return 'UNKNOWN'
 
+def get_semester_code(semester_code, paper_code):
+    """Normalize semester code, deriving it from paper_code if missing."""
+    if semester_code:
+        return str(semester_code).strip().upper()
+
+    if not paper_code or paper_code == 'UNKNOWN':
+        return ''
+
+    try:
+        if len(paper_code) >= 6 and paper_code.startswith('LLB'):
+            code_part = paper_code[-3:]
+            semester_num = int(code_part[0])
+            semester_map = {
+                1: '1ST',
+                2: '2ND',
+                3: '3RD',
+            }
+            return semester_map.get(semester_num, str(semester_num))
+    except:
+        return ''
+
+    return ''
+
 def clean_subject_name(name):
     """Clean and normalize subject name"""
     if not name:
@@ -100,6 +121,7 @@ def migrate_course_structures():
         'subject_name', 
         'semester_code', 
         'paper_code', 
+        'subject_code',
         'status',
         'maximum_mark',
         'pass_mark'
@@ -120,8 +142,9 @@ def migrate_course_structures():
     for idx, record in enumerate(staging_records, 1):
         # Clean subject name to remove newlines and extra spaces
         subject_name = clean_subject_name(record['subject_name'])
-        semester = record['semester_code'] or ''
         paper_code = record['paper_code'] or 'UNKNOWN'
+        semester = get_semester_code(record['semester_code'], paper_code)
+        subject_code = record['subject_code'] or ''
         status = record['status']
         
         try:
@@ -138,13 +161,14 @@ def migrate_course_structures():
         course_code = get_course_code(paper_code)
         
         # Use paper_code + semester + status as unique identifier
-        llb_key = f"{paper_code}_{semester}_{assessment_label}"
+        llb_key = f"{paper_code}_{semester}_{assessment_label}_{subject_code}"
         if llb_key not in llb_cache:
             # Create or get LLBCourseStructure with proper fields
             llb_subject, llb_created_flag = LLBCourseStructure.objects.get_or_create(
                 name=subject_name,  # Use actual subject name
                 paper_code=paper_code,  # Store paper_code
                 course_code=course_code,  # Store generated course_code
+                subject_code=subject_code,
                 semester=semester,
                 status=assessment_label,
                 defaults={
@@ -152,6 +176,14 @@ def migrate_course_structures():
                     'pass_marks': pass_marks
                 }
             )
+
+            if not llb_created_flag and subject_code and not llb_subject.subject_code:
+                llb_subject.subject_code = subject_code
+                llb_subject.save(update_fields=['subject_code'])
+
+            if not llb_created_flag and semester and not llb_subject.semester:
+                llb_subject.semester = semester
+                llb_subject.save(update_fields=['semester'])
             
             llb_cache.add(llb_key)
             
@@ -172,6 +204,7 @@ def migrate_course_structures():
                 name=subject_name,  # Keep actual subject name
                 paper_code=paper_code,  # Store paper_code
                 course_code=course_code,  # Store generated course_code
+                subject_code=subject_code,
                 semester=semester,
                 defaults={
                     'full_marks': full_marks,
@@ -180,6 +213,14 @@ def migrate_course_structures():
                     'ese_max_marks': ese_marks
                 }
             )
+
+            if not common_created_flag and subject_code and not common_subject.subject_code:
+                common_subject.subject_code = subject_code
+                common_subject.save(update_fields=['subject_code'])
+
+            if not common_created_flag and semester and not common_subject.semester:
+                common_subject.semester = semester
+                common_subject.save(update_fields=['semester'])
             
             common_cache.add(common_key)
             

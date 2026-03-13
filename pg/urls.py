@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    PGDispatchMemoView,
     PGCIAMarksEntryView, 
     PGCollegeStudentsView, 
     PGDepartmentDropdownView,
@@ -47,4 +48,5 @@ urlpatterns = [
     path('center/attached-colleges/', PGCenterAttachedCollegesView.as_view(), name='pg-center-attached-colleges'),
     path('student-attendance/list/', PGStudentAttendanceListView.as_view(), name='pg-student-attendance-list'),
     path('student-attendance/mark/', PGAttendanceMarkView.as_view(), name='pg-student-attendance-mark'),
+    path('center/dispatch-memo/', PGDispatchMemoView.as_view(), name='pg-center-dispatch-memo'),
 ]

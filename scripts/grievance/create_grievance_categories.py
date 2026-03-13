@@ -27,7 +27,7 @@ if __name__ == '__main__':
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'pup_umis_backend.settings.development')
     django.setup()
 
-from grievance.models import GrievanceCategory
+from grievance.models import GrievanceCategory, GrievanceSubCategory
 
 
 class Command(BaseCommand):
@@ -39,140 +39,96 @@ class Command(BaseCommand):
         # Define categories with student-friendly names and descriptions
         categories = [
             {
-                'name': 'Admission',
-                'code': 'admission',
-                'description': 'Issues related to new admissions, entry requirements, seat allotment, and admission process.',
+                'name': 'Academic Document Corrections',
+                'code': 'academic_document_corrections',
+                'description': 'Issues related to correction of academic documents like marksheets, certificates, and transcripts.',
                 'display_order': 1,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
+                'is_assigned_to_college': False,
+                'is_assigned_to_university': True,
+                'subcategories': [
+                    {'name': 'Marksheet Correction', 'code': 'marksheet_correction', 'description': 'Name spelling errors, incorrect subject marks, missing subjects, incorrect semester details', 'display_order': 1, 'price': 150.00},
+                    {'name': 'Provisional Certificate Correction', 'code': 'provisional_cert_correction', 'description': 'Name/father name correction, date of birth correction, course name correction', 'display_order': 2, 'price': 120.00},
+                    {'name': 'Degree Certificate Correction', 'code': 'degree_cert_correction', 'description': 'Name spelling correction, course/specialization error, passing year correction', 'display_order': 3, 'price': 200.00},
+                    {'name': 'Transcript Issues', 'code': 'transcript_issues', 'description': 'Incorrect grades in transcript, missing semester transcript', 'display_order': 4, 'price': 100.00},
+                    {'name': 'Name/Personal Detail Correction in Academic Documents', 'code': 'personal_detail_correction', 'description': 'Correction of personal details in all academic documents', 'display_order': 5, 'price': 80.00},
+                    {'name': 'Document Verification Request', 'code': 'document_verification', 'description': 'Request for verification of academic documents', 'display_order': 6, 'price': 50.00},
+                    {'name': 'Certificates: Pending and Correction', 'code': 'certificates_pending_correction', 'description': 'Pending certificate issuance, correction in issued certificates', 'display_order': 7, 'price': 100.00},
+                ]
             },
             {
-                'name': 'Registration & Migration',
-                'code': 'registration_migration',
-                'description': 'Problems with university registration, enrollment numbers, and migration certificate requests.',
+                'name': 'Registration',
+                'code': 'registration',
+                'description': 'Issues related to student registration, profile updates, and registration cards.',
                 'display_order': 2,
                 'is_assigned_to_college': False,
                 'is_assigned_to_university': True,
+                'subcategories': [
+                    {'name': 'Name Updates', 'code': 'name_updates', 'description': 'Update name in university records', 'display_order': 1, 'price': 100.00},
+                    {'name': 'Re-issue Registration Card', 'code': 'reissue_registration_card', 'description': 'Request for new registration card due to loss/damage', 'display_order': 2, 'price': 50.00},
+                    {'name': 'Profile Update', 'code': 'profile_update', 'description': 'Update personal profile information', 'display_order': 3, 'price': 30.00},
+                ]
             },
             {
-                'name': 'Payment & Fee Refunds',
-                'code': 'payment_fee_refunds',
-                'description': 'Issues with online payments, fee receipts, refund of excess fees, or payment failures.',
+                'name': 'Pre-examination',
+                'code': 'pre_examination',
+                'description': 'Issues related to examination preparation, admit cards, and exam form submission.',
                 'display_order': 3,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
+                'is_assigned_to_college': False,
+                'is_assigned_to_university': True,
+                'subcategories': [
+                    {'name': 'Admit Card Correction', 'code': 'admit_card_correction', 'description': 'Name mismatch, incorrect subject codes, missing photograph, incorrect exam center', 'display_order': 1, 'price': 100.00},
+                    {'name': 'Admit Card Not Generated', 'code': 'admit_card_not_generated', 'description': 'Admit card not generated despite form submission', 'display_order': 2, 'price': 150.00},
+                    {'name': 'Examination Form Filling Issues', 'code': 'exam_form_issues', 'description': 'Unable to submit exam form, incorrect course selection, payment not updated', 'display_order': 3, 'price': 80.00},
+                    {'name': 'Semester Registration Issues', 'code': 'semester_registration_issues', 'description': 'Registration not completed, incorrect semester registration', 'display_order': 4, 'price': 120.00},
+                    {'name': 'Examination Fee Payment Issues', 'code': 'exam_fee_payment_issues', 'description': 'Payment failures, double payment, refund requests', 'display_order': 5, 'price': 50.00},
+                    {'name': 'Examination Center Allocation Problems', 'code': 'exam_center_allocation', 'description': 'Issues with exam center assignment', 'display_order': 6, 'price': 100.00},
+                    {'name': 'Exam Schedule/Time Table Issues', 'code': 'exam_schedule_issues', 'description': 'Problems with exam dates, time conflicts', 'display_order': 7, 'price': 30.00},
+                    {'name': 'Exam Attendance Discrepancy', 'code': 'exam_attendance_discrepancy', 'description': 'Attendance not marked correctly', 'display_order': 8, 'price': 200.00},
+                    {'name': 'Practical Examination Issues', 'code': 'practical_exam_issues', 'description': 'Missing practical marks, practical exam not scheduled', 'display_order': 9, 'price': 150.00},
+                    {'name': 'Backlog/Supplementary Exam Issues', 'code': 'backlog_supplementary_exam', 'description': 'Issues with backlog and supplementary examinations', 'display_order': 10, 'price': 100.00},
+                ]
             },
             {
-                'name': 'Scholarship & Financial Aid',
-                'code': 'scholarship_financial_aid',
-                'description': 'Inquiries and issues regarding scholarships, stipends, and financial assistance programs.',
+                'name': 'Post Examination',
+                'code': 'post_examination',
+                'description': 'Issues related to results, marksheet issuance, and post-examination processes.',
                 'display_order': 4,
+                'is_assigned_to_college': False,
+                'is_assigned_to_university': True,
+                'subcategories': [
+                    {'name': 'Result', 'code': 'result_issues', 'description': 'Result not declared, result errors', 'display_order': 1, 'price': 100.00},
+                    {'name': 'Marksheets', 'code': 'marksheet_issues', 'description': 'Marksheet not received, errors in marksheet', 'display_order': 2, 'price': 150.00},
+                    {'name': 'Duplicate Marksheet Request', 'code': 'duplicate_marksheet', 'description': 'Lost marksheet, damaged marksheet replacement', 'display_order': 3, 'price': 200.00},
+                ]
+            },
+            {
+                'name': 'Payment & Fee Refund',
+                'code': 'payment_fee_refund',
+                'description': 'Issues related to online payments, fee refunds, and payment processing.',
+                'display_order': 5,
                 'is_assigned_to_college': True,
                 'is_assigned_to_university': False,
-            },
-            {
-                'name': 'Examination & Admit Cards',
-                'code': 'examination_admit_cards',
-                'description': 'Issues with exam schedules, admit card generation, exam center issues, or hall tickets.',
-                'display_order': 5,
-                'is_assigned_to_college': False,
-                'is_assigned_to_university': True,
-            },
-            {
-                'name': 'Results & Marksheet Correction',
-                'code': 'results_marksheet_correction',
-                'description': 'Correction of errors in marksheets, result delays, re-evaluation, and mark verification.',
-                'display_order': 6,
-                'is_assigned_to_college': False,
-                'is_assigned_to_university': True,
-            },
-            {
-                'name': 'Certificates: Pending and Correction',
-                'code': 'certificates_pending_correction',
-                'description': 'Queries regarding pending degree/provisional certificates and correction of personal details in certificates.',
-                'display_order': 7,
-                'is_assigned_to_college': False,
-                'is_assigned_to_university': True,
-            },
-            {
-                'name': 'Degree & Convocation',
-                'code': 'degree_convocation',
-                'description': 'Applications for degrees, convocation ceremony details, and degree distribution issues.',
-                'display_order': 8,
-                'is_assigned_to_college': False,
-                'is_assigned_to_university': True,
+                'subcategories': [
+                    {'name': 'Fee Payment Failure', 'code': 'fee_payment_failure', 'description': 'Online payment failures', 'display_order': 1, 'price': 50.00},
+                    {'name': 'Double Payment Issue', 'code': 'double_payment', 'description': 'Amount deducted twice', 'display_order': 2, 'price': 30.00},
+                    {'name': 'Fee Refund Request', 'code': 'fee_refund_request', 'description': 'Request for fee refund', 'display_order': 3, 'price': 80.00},
+                    {'name': 'Hostel Fee Refund', 'code': 'hostel_fee_refund', 'description': 'Hostel fee refund issues', 'display_order': 4, 'price': 100.00},
+                    {'name': 'Exam Fee Refund', 'code': 'exam_fee_refund', 'description': 'Examination fee refund issues', 'display_order': 5, 'price': 60.00},
+                ]
             },
             {
                 'name': 'Syllabus & Academic Classes',
                 'code': 'syllabus_academic_classes',
-                'description': 'Issues regarding class schedules, course syllabus, completion of syllabus, and academic calendar.',
-                'display_order': 9,
+                'description': 'Issues related to syllabus, class schedules, and academic activities.',
+                'display_order': 6,
                 'is_assigned_to_college': True,
                 'is_assigned_to_university': False,
-            },
-            {
-                'name': 'Faculty & Teaching Staff',
-                'code': 'faculty_teaching_staff',
-                'description': 'Grievances related to faculty behavior, teaching methodology, or unavailability of teachers.',
-                'display_order': 10,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
-            },
-            {
-                'name': 'Hostel & Mess Facilities',
-                'code': 'hostel_mess_facilities',
-                'description': 'Issues related to hostel room allotment, maintenance, food quality in mess, and hygiene.',
-                'display_order': 11,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
-            },
-            {
-                'name': 'Library & Digital Resources',
-                'code': 'library_digital_resources',
-                'description': 'Inaccessibility of books, digital journals, e-library issues, and library management.',
-                'display_order': 12,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
-            },
-            {
-                'name': 'College Infrastructure & Sanitation',
-                'code': 'infrastructure_sanitation',
-                'description': 'Grievances regarding classroom maintenance, washroom hygiene, drinking water, and campus cleanliness.',
-                'display_order': 13,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
-            },
-            {
-                'name': 'Technical Portal & Login Issues',
-                'code': 'technical_portal_login',
-                'description': 'Technical glitches in the UMIS portal, login errors, password reset, and website maintenance.',
-                'display_order': 14,
-                'is_assigned_to_college': False,
-                'is_assigned_to_university': True,
-            },
-            {
-                'name': 'Anti-Ragging & Discipline',
-                'code': 'anti_ragging_discipline',
-                'description': 'Reporting of ragging incidents, bullying, or disciplinary issues. (High Priority)',
-                'display_order': 15,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': True,
-            },
-            {
-                'name': 'Student Welfare & Sports',
-                'code': 'student_welfare_sports',
-                'description': 'Issues related to extra-curricular activities, sports facilities, and general student welfare.',
-                'display_order': 16,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
-            },
-            {
-                'name': 'General / Others',
-                'code': 'general_others',
-                'description': 'Any other grievances not falling under the above specified categories.',
-                'display_order': 99,
-                'is_assigned_to_college': True,
-                'is_assigned_to_university': False,
+                'subcategories': [
+                    {'name': 'Incorrect Syllabus Information', 'code': 'incorrect_syllabus', 'description': 'Wrong syllabus provided', 'display_order': 1, 'price': 50.00},
+                    {'name': 'Missing Subject in Syllabus', 'code': 'missing_subject', 'description': 'Subjects missing from syllabus', 'display_order': 2, 'price': 40.00},
+                    {'name': 'Class Schedule Issues', 'code': 'class_schedule_issues', 'description': 'Problems with class timings', 'display_order': 3, 'price': 60.00},
+                    {'name': 'Academic Calendar Confusion', 'code': 'academic_calendar', 'description': 'Issues with academic calendar dates', 'display_order': 4, 'price': 30.00},
+                ]
             },
         ]
 
@@ -184,6 +140,10 @@ class Command(BaseCommand):
         active_codes = []
         for category_data in categories:
             active_codes.append(category_data['code'])
+            
+            # Extract subcategories data if present
+            subcategories_data = category_data.pop('subcategories', [])
+            
             category, created = GrievanceCategory.objects.get_or_create(
                 code=category_data['code'],
                 defaults=category_data
@@ -205,9 +165,38 @@ class Command(BaseCommand):
                 updated_count += 1
                 self.stdout.write(
                     self.style.WARNING(
-                        f'� Updated: {category.name} ({category.code})'
+                        f'⚠️ Updated: {category.name} ({category.code})'
                     )
                 )
+            
+            # Create subcategories for this category
+            if subcategories_data:
+                self.stdout.write(f'   📋 Creating subcategories for {category.name}...')
+                for subcat_data in subcategories_data:
+                    subcat_data['category'] = category  # Set the foreign key
+                    subcategory, sub_created = GrievanceSubCategory.objects.get_or_create(
+                        category=category,
+                        code=subcat_data['code'],
+                        defaults=subcat_data
+                    )
+                    
+                    if sub_created:
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f'     ✅ Created Subcategory: {subcategory.name}'
+                            )
+                        )
+                    else:
+                        # Update existing subcategory
+                        for key, value in subcat_data.items():
+                            if key != 'category':  # Don't overwrite the foreign key
+                                setattr(subcategory, key, value)
+                        subcategory.save()
+                        self.stdout.write(
+                            self.style.WARNING(
+                                f'     ⚠️ Updated Subcategory: {subcategory.name}'
+                            )
+                        )
 
         # Handle extra categories (remove or deactivate)
         extra_categories = GrievanceCategory.objects.exclude(code__in=active_codes)
