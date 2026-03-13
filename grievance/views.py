@@ -154,8 +154,12 @@ class GrievanceListCreateView(APIView):
             )
         
         elif user.user_type == 'university_admin':
-            # University admin sees all grievances with completed payment (excluding deleted)
-            queryset = Grievance.objects.filter(is_deleted=False, is_payment_completed=True)
+            # University admin sees all grievances with completed payment (excluding deleted) assigned to university
+            queryset = Grievance.objects.filter(
+                is_deleted=False,
+                is_payment_completed=True,
+                is_assigned_to_university=True
+            )
             
             # Allow University to filter by scope
             scope = request.query_params.get('scope')
