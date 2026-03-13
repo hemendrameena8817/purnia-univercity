@@ -1,6 +1,13 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment, GrievancePayment
+from .models import GrievanceCategory, GrievanceSubCategory, Grievance, GrievanceComment, GrievanceAttachment, GrievancePayment
+
+
+class GrievanceSubCategoryInline(admin.TabularInline):
+    model = GrievanceSubCategory
+    extra = 0
+    readonly_fields = ['uid', 'created_at', 'updated_at']
+    fields = ['uid', 'name', 'code', 'description', 'price', 'is_active', 'display_order', 'created_at', 'updated_at']
 
 
 @admin.register(GrievanceCategory)
@@ -9,6 +16,7 @@ class GrievanceCategoryAdmin(admin.ModelAdmin):
     list_filter = ['is_active']
     search_fields = ['name', 'code', 'description']
     readonly_fields = ['uid', 'created_at', 'updated_at']
+    inlines = [GrievanceSubCategoryInline]
     fieldsets = (
         ('Category Information', {
             'fields': ('uid', 'name', 'code', 'description', 'is_active', 'is_assigned_to_college', 'is_assigned_to_university')
@@ -48,6 +56,7 @@ class GrievanceAdmin(admin.ModelAdmin):
         'grievance_number',
         'contact_person_name',
         'category',
+        'subcategory',
         'subject',
         'status',
         'is_payment_completed',
@@ -59,6 +68,7 @@ class GrievanceAdmin(admin.ModelAdmin):
     list_filter = [
         'status',
         'category',
+        'subcategory',
         'is_deleted',
         'assigned_to_college',
     ]
@@ -89,7 +99,7 @@ class GrievanceAdmin(admin.ModelAdmin):
             'fields': ('is_payment_completed', 'payment_amount')
         }),
         ('Details', {
-            'fields': ('category', 'subject', 'description')
+            'fields': ('category', 'subcategory', 'subject', 'description')
         }),
         ('Status & Assignment', {
             'fields': (
@@ -264,3 +274,24 @@ class GrievancePaymentAdmin(admin.ModelAdmin):
     )
     date_hierarchy = 'created_at'
     ordering = ['-created_at']
+
+
+@admin.register(GrievanceSubCategory)
+class GrievanceSubCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'code', 'price', 'is_active', 'display_order']
+    list_filter = ['is_active', 'category']
+    search_fields = ['name', 'code', 'description']
+    readonly_fields = ['uid', 'created_at', 'updated_at']
+    list_select_related = ['category']
+    fieldsets = (
+        ('SubCategory Information', {
+            'fields': ('uid', 'category', 'name', 'code', 'description', 'price', 'is_active')
+        }),
+        ('Display Settings', {
+            'fields': ('display_order',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+    ordering = ['category__display_order', 'display_order', 'name']
