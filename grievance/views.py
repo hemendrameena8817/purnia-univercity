@@ -837,7 +837,7 @@ class GrievancePaymentResponseView(APIView):
                 uid = str(payment.grievance.uid)
                 
                 redirect_url = (
-                    f"{frontend_url}/grievances/status"
+                    f"{frontend_url}/grievance/status"
                     f"?uid={uid}"
                     f"&payment_status={payment.payment_status.lower()}"
                     f"&order_id={order_id}"
