@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment
+from .models import GrievanceCategory, Grievance, GrievanceComment, GrievanceAttachment, GrievanceSubCategory
 from pup_umis_backend.utils.file_utils import get_absolute_url, format_file_size
 from .utils.profile_utils import verify_student_college_profile
 from .utils.format_error import format_django_validation_error
@@ -45,6 +45,25 @@ class GrievanceCategorySerializer(serializers.ModelSerializer):
             'name',
             'code',
             'description',
+            'is_active',
+            'display_order',
+        ]
+
+
+class GrievanceSubCategorySerializer(serializers.ModelSerializer):
+    """Serializer for grievance subcategories"""
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
+    class Meta:
+        model = GrievanceSubCategory
+        fields = [
+            'uid',
+            'category',
+            'category_name',
+            'name',
+            'code',
+            'description',
+            'price',
             'is_active',
             'display_order',
         ]
@@ -232,6 +251,7 @@ class GrievanceDetailSerializer(serializers.ModelSerializer):
 class GrievanceCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating a new grievance (student submission)"""
     category_uid = serializers.UUIDField(write_only=True, help_text="Category UID (not ID)")
+    subcategory_uid = serializers.UUIDField(write_only=True, required=False, help_text="Subcategory UID (optional)")
     attachment_uids = serializers.ListField(
         child=serializers.UUIDField(),
         write_only=True,
@@ -249,6 +269,7 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
             'contact_person_name',
             'contact_person_phone_number',
             'category_uid',
+            'subcategory_uid',
             'college_uid',
             'active_profile',
             'subject',
@@ -274,6 +295,15 @@ class GrievanceCreateSerializer(serializers.ModelSerializer):
             validated_data['category'] = category
         except GrievanceCategory.DoesNotExist:
             raise serializers.ValidationError({"error": "Invalid or inactive category"})
+        
+        # Get subcategory by UID (optional)
+        subcategory_uid = validated_data.pop('subcategory_uid', None)
+        if subcategory_uid:
+            try:
+                subcategory = GrievanceSubCategory.objects.get(uid=subcategory_uid, is_active=True, category=category)
+                validated_data['subcategory'] = subcategory
+            except GrievanceSubCategory.DoesNotExist:
+                raise serializers.ValidationError({"error": "Invalid or inactive subcategory"})
         
         college_uid = validated_data.pop('college_uid', None)
         validated_data.pop('active_profile', None) # No longer strictly needed

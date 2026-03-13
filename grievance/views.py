@@ -13,7 +13,7 @@ from drf_yasg import openapi
 from decouple import config
 import uuid
 
-from .models import Grievance, GrievanceComment, GrievancePayment
+from .models import Grievance, GrievanceComment, GrievancePayment, GrievanceSubCategory
 from .serializers import (
     GrievanceListSerializer,
     GrievanceDetailSerializer,
@@ -969,3 +969,92 @@ class GrievanceStatusByUIDView(APIView):
             response_data['payment'] = None
         
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+class GrievanceSubCategoriesByCategoryView(APIView):
+    """
+    GET: Retrieve subcategories for a specific category
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Get all active subcategories for a specific category.
+        
+        Returns list of subcategories with UID, name, code, and description.
+        
+        **Use Case:** Frontend calls this after user selects a category to show subcategory options.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'category_uid',
+                openapi.IN_QUERY,
+                description="Category UID (UUID)",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Subcategories retrieved successfully",
+                examples={
+                    'application/json': {
+                        'subcategories': [
+                            {
+                                'uid': 'abc-123-def-456',
+                                'name': 'Marksheet Correction',
+                                'code': 'marksheet_correction',
+                                'description': 'Name spelling errors, incorrect subject marks...',
+                                'display_order': 1
+                            }
+                        ]
+                    }
+                }
+            ),
+            400: 'Category UID parameter required',
+            404: 'Category not found'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        """Get subcategories by category UID"""
+        category_uid = request.query_params.get('category_uid')
+        
+        if not category_uid:
+            return Response(
+                {'error': 'Category UID parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            category = GrievanceCategory.objects.get(uid=category_uid, is_active=True)
+        except GrievanceCategory.DoesNotExist:
+            return Response(
+                {'error': 'Category not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        subcategories = GrievanceSubCategory.objects.filter(
+            category=category,
+            is_active=True
+        ).order_by('display_order', 'name')
+        
+        subcategory_data = []
+        for subcat in subcategories:
+            subcategory_data.append({
+                'uid': str(subcat.uid),
+                'name': subcat.name,
+                'code': subcat.code,
+                'description': subcat.description,
+                'price': float(subcat.price),
+                'display_order': subcat.display_order
+            })
+        
+        return Response({
+            'category': {
+                'uid': str(category.uid),
+                'name': category.name,
+                'code': category.code
+            },
+            'subcategories': subcategory_data
+        }, status=status.HTTP_200_OK)

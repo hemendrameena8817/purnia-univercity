@@ -36,6 +36,42 @@ class GrievanceCategory(models.Model):
         return self.name
 
 
+class GrievanceSubCategory(models.Model):
+    """
+    Subcategories for grievances, linked to main categories.
+    Allows for more specific grievance classification.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    category = models.ForeignKey(
+        GrievanceCategory,
+        on_delete=models.CASCADE,
+        related_name='subcategories'
+    )
+    name = models.CharField(max_length=150)
+    code = models.CharField(max_length=100, help_text="Unique code for the subcategory")
+    description = models.TextField(blank=True, null=True)
+    price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2, 
+        default=100.00,
+        help_text="Price for grievance submission in this subcategory"
+    )
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0, help_text="Order in which to display subcategories")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Grievance SubCategory'
+        verbose_name_plural = 'Grievance SubCategories'
+        ordering = ['category__display_order', 'display_order', 'name']
+        unique_together = ['category', 'code']
+    
+    def __str__(self):
+        return f"{self.category.name} - {self.name}"
+
+
 class Grievance(models.Model):
     """
     Grievance/Complaint system for users.
@@ -48,7 +84,7 @@ class Grievance(models.Model):
     
     # Payment tracking
     is_payment_completed = models.BooleanField(default=False)
-    payment_amount = models.DecimalField(max_digits=10, decimal_places=2, default=100.00, help_text="Fixed payment amount for grievance submission")
+    payment_amount = models.DecimalField(max_digits=10, decimal_places=2, default=100.00, help_text="Payment amount for grievance submission (from subcategory or default)")
     
     # User Information
     user = models.ForeignKey(
@@ -72,6 +108,14 @@ class Grievance(models.Model):
         on_delete=models.PROTECT,
         related_name='grievances',
         help_text="Category of the grievance"
+    )
+    subcategory = models.ForeignKey(
+        GrievanceSubCategory,
+        on_delete=models.PROTECT,
+        related_name='grievances',
+        null=True,
+        blank=True,
+        help_text="Subcategory of the grievance (optional)"
     )
     subject = models.CharField(max_length=255)
     description = models.TextField()
@@ -144,7 +188,19 @@ class Grievance(models.Model):
             models.Index(fields=['-submitted_at']),
         ]
     
+    def get_payment_amount(self):
+        """
+        Get payment amount based on subcategory or default to 100.00
+        """
+        if self.subcategory and hasattr(self.subcategory, 'price'):
+            return self.subcategory.price
+        return 100.00
+    
     def save(self, *args, **kwargs):
+        # Set payment amount based on subcategory
+        if not self.payment_amount or self.payment_amount == 100.00:
+            self.payment_amount = self.get_payment_amount()
+        
         # Auto-generate grievance number only after payment is completed
         if not self.grievance_number and self.is_payment_completed:
             self.grievance_number = self.generate_grievance_number()
