@@ -166,13 +166,13 @@
     }
 
     .marks-table .subject-col {
-      width: 36%;
+      width: 42%;
       text-align: left;
       padding-left: 8px;
     }
 
     .marks-table .papers-col {
-      width: 18%;
+      width: 12%;
     }
 
     .marks-table .full-marks-col {
@@ -308,6 +308,8 @@
       margin-bottom: 8px;
       font-size: 11pt;
       padding-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
     }
 
     .result-section strong {
@@ -497,23 +499,20 @@
             </td>
           </tr>
           {% else %}
-          {% comment %} First row: subject name, course_code, pass_marks span all rows; full_marks and obtained per
-          entry {% endcomment %}
+          {% comment %} First row: subject name, course_code, pass_marks span all rows; full_marks and obtained per entry {% endcomment %}
           <tr>
             <td class="text-left-subject" rowspan="{{ group_size }}">{{ forloop.counter }}</td>
-            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.name|default:"-" }}
-            </td>
-            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.course_code|default:"-"
-              }}</td>
-            <td class="text-left-subject">80</td>
-            <td class="text-left-subject" rowspan="{{ group_size }}">45</td>
+            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.name|default:"-" }}</td>
+            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.course_code|default:"-" }}</td>
+            <td class="text-left-subject">{{ group.0.course_structure.full_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
               <strong>{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}</strong>
             </td>
           </tr>
           {% for sub in group %}{% if not forloop.first %}
           <tr>
-            <td class="text-left-subject">20</td>
+            <td class="text-left-subject">{{ sub.course_structure.full_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
               <strong>{{ sub.ind_marks_obtained|default:0|floatformat:0 }}</strong>
             </td>
@@ -585,7 +584,7 @@
         </div>
 
         <!-- Marks in Words -->
-        <div>
+        <div style="max-width: 500px; text-align: right;">
           <strong>Marks in words</strong>&nbsp;&nbsp;:&nbsp;&nbsp;<strong>{{ marks_in_words|default:"Zero Only" }}</strong>
         </div>
       </div>
