@@ -7,6 +7,7 @@ from .views import (
     GrievanceStatsView,
     GrievancePaymentInitiateView,
     GrievancePaymentResponseView,
+    GrievanceStatusByUIDView,
     GrievanceCategoryListView,
     GrievanceAttachmentUploadView,
 )
@@ -23,6 +24,9 @@ urlpatterns = [
     
     # Get grievance statistics
     path('stats/', GrievanceStatsView.as_view(), name='grievance-stats'),
+    
+    # Get grievance status by UID (for payment status page)
+    path('status-by-uid/', GrievanceStatusByUIDView.as_view(), name='grievance-status-by-uid'),
     
     # Payment endpoints
     path('payment-response/', GrievancePaymentResponseView.as_view(), name='grievance-payment-response'),
