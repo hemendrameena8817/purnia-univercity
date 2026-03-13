@@ -118,6 +118,12 @@ class GrievanceListCreateView(APIView):
                 description="Filter by end date (YYYY-MM-DD)",
                 type=openapi.TYPE_STRING
             ),
+            openapi.Parameter(
+                'is_payment_completed',
+                openapi.IN_QUERY,
+                description="Filter by payment completion status (true/false)",
+                type=openapi.TYPE_BOOLEAN
+            ),
         ],
         responses={200: GrievanceListSerializer(many=True)},
         tags=['Grievances'],
@@ -129,11 +135,11 @@ class GrievanceListCreateView(APIView):
         
         # Filter based on user type
         if user.user_type == 'student':
-            # Students see only their own grievances
-            queryset = Grievance.objects.filter(user=user, is_deleted=False)
+            # Students see only their own grievances with completed payment
+            queryset = Grievance.objects.filter(user=user, is_deleted=False, is_payment_completed=True)
         
         elif user.user_type == 'college_user':
-            # College staff see grievances assigned to their college AND currently at college level
+            # College staff see grievances assigned to their college AND currently at college level with completed payment
             college = user.get_college()
             if not college:
                 return Response(
@@ -143,12 +149,13 @@ class GrievanceListCreateView(APIView):
             queryset = Grievance.objects.filter(
                 assigned_to_college=college, 
                 is_assigned_to_college=True,
-                is_deleted=False
+                is_deleted=False,
+                is_payment_completed=True
             )
         
         elif user.user_type == 'university_admin':
-            # University admin sees all (excluding deleted)
-            queryset = Grievance.objects.filter(is_deleted=False)
+            # University admin sees all grievances with completed payment (excluding deleted)
+            queryset = Grievance.objects.filter(is_deleted=False, is_payment_completed=True)
             
             # Allow University to filter by scope
             scope = request.query_params.get('scope')
@@ -188,6 +195,11 @@ class GrievanceListCreateView(APIView):
         if is_assigned_to_college_filter is not None:
             val = is_assigned_to_college_filter.lower() in ['true', '1', 'yes']
             queryset = queryset.filter(is_assigned_to_college=val)
+
+        is_payment_completed_filter = request.query_params.get('is_payment_completed')
+        if is_payment_completed_filter is not None:
+            val = is_payment_completed_filter.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(is_payment_completed=val)
 
         # University Admin can filter by specific college
         college_filter = request.query_params.get('college')
