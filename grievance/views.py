@@ -13,7 +13,7 @@ from drf_yasg import openapi
 from decouple import config
 import uuid
 
-from .models import Grievance, GrievanceComment, GrievancePayment, GrievanceSubCategory
+from .models import Grievance, GrievanceCategory, GrievanceComment, GrievancePayment, GrievanceSubCategory
 from .serializers import (
     GrievanceListSerializer,
     GrievanceDetailSerializer,
