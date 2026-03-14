@@ -235,7 +235,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Organized fieldsets for detail view
     fieldsets = (
         ('Basic Information', {
-            'fields': ('student', 'semester', 'paper_code', 'course_code', 'course_type', 'label')
+            'fields': ('student', 'semester', 'paper_code', 'course_code', 'course_type','course_name', 'label')
         }),
         ('Individual Assessment (CIA/ESE)', {
             'fields': (
