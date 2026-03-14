@@ -105,6 +105,37 @@ def get_assessment_dedupe_key(paper_code, label, exam_type, semester, session):
     )
 
 
+def get_student_assessment_dedupe_key(student_id, paper_code, label, exam_type, semester, session):
+    return (student_id,) + get_assessment_dedupe_key(
+        paper_code=paper_code,
+        label=label,
+        exam_type=exam_type,
+        semester=semester,
+        session=session,
+    )
+
+
+def dedupe_pending_assessments(assessments):
+    unique_assessments = []
+    seen_keys = set()
+
+    for assessment in assessments:
+        key = get_student_assessment_dedupe_key(
+            student_id=assessment.student_id,
+            paper_code=assessment.paper_code,
+            label=assessment.label,
+            exam_type=assessment.exam_type,
+            semester=assessment.semester,
+            session=assessment.session,
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        unique_assessments.append(assessment)
+
+    return unique_assessments
+
+
 def normalize_semester(value):
     text = clean_text(value).upper().replace(' ', '')
     if text in {'1', '1ST', 'I'}:
@@ -305,7 +336,8 @@ def remove_duplicate_assessments(reg_nos, dry_run=False):
     seen_keys = set()
 
     for assessment_id, student_id, paper_code, label in queryset.iterator(chunk_size=2000):
-        key = (student_id,) + get_assessment_dedupe_key(
+        key = get_student_assessment_dedupe_key(
+            student_id=student_id,
             paper_code=paper_code,
             label=label,
             exam_type=TARGET_EXAM_TYPE,
@@ -431,13 +463,8 @@ def process_file(file_path, dry_run=False):
         return
 
     reg_nos = list(grouped_students.keys())
-    assessment_reg_nos = [
-        reg_no
-        for reg_no, payload in grouped_students.items()
-        if not payload['sheet_roll_assigned']
-    ]
     if not dry_run:
-        delete_today_imported_assessments(assessment_reg_nos)
+        delete_today_imported_assessments(reg_nos)
         removed_duplicates = remove_duplicate_assessments(reg_nos)
     else:
         removed_duplicates = 0
@@ -486,23 +513,6 @@ def process_file(file_path, dry_run=False):
             continue
 
         stats['profiles_found'] += 1
-        if student_payload['sheet_roll_assigned']:
-            exam_registration, registration_created, registration_update_fields = ensure_exam_registration(profile, file_path)
-            if registration_created:
-                exam_registrations_to_create.append(exam_registration)
-                stats['exam_registrations_created'] += 1
-                print(
-                    f'EXAM REGISTRATION CREATE: {reg_no} | '
-                    f'SEM={TARGET_SEM_INT} | SESSION={TARGET_SESSION} | TYPE={TARGET_EXAM_TYPE} | FEES={TARGET_EXAM_REGISTRATION_FEES}'
-                )
-            elif registration_update_fields:
-                exam_registrations_to_update.append((exam_registration, registration_update_fields))
-                stats['exam_registrations_updated'] += 1
-                print(
-                    f'EXAM REGISTRATION UPDATE: {reg_no} | '
-                    f'{", ".join(registration_update_fields)}'
-                )
-            continue
 
         papers = student_payload['papers']
         mapped_departments = {'MJC': set(), 'MIC': set(), 'MDC': set()}
@@ -576,7 +586,7 @@ def process_file(file_path, dry_run=False):
         if mdc_department and profile.mdc_course_id != mdc_department.id:
             profile.mdc_course = mdc_department
             update_fields.append('mdc_course')
-        if not clean_text(profile.roll_no):
+        if not student_payload['sheet_roll_assigned'] and not clean_text(profile.roll_no):
             assigned_roll_no, next_roll_number = assign_next_roll_no(existing_roll_nos, next_roll_number, numeric_width)
             profile.roll_no = assigned_roll_no
             update_fields.append('roll_no')
@@ -603,7 +613,8 @@ def process_file(file_path, dry_run=False):
             )
 
         existing_keys = set(
-            get_assessment_dedupe_key(
+            get_student_assessment_dedupe_key(
+                student_id=profile.id,
                 paper_code=paper_code,
                 label=label,
                 exam_type=exam_type,
@@ -633,7 +644,8 @@ def process_file(file_path, dry_run=False):
                 labels=payload['labels'],
                 source_file=file_path,
             ):
-                key = get_assessment_dedupe_key(
+                key = get_student_assessment_dedupe_key(
+                    student_id=profile.id,
                     paper_code=assessment.paper_code,
                     label=assessment.label,
                     exam_type=assessment.exam_type,
@@ -657,6 +669,7 @@ def process_file(file_path, dry_run=False):
             if exam_registrations_to_create:
                 ExamRegistration.objects.bulk_create(exam_registrations_to_create, batch_size=500)
             if assessments_to_create:
+                assessments_to_create = dedupe_pending_assessments(assessments_to_create)
                 StudentCourseAssessment.objects.bulk_create(assessments_to_create, batch_size=500)
 
     stats['profiles_updated'] = len(profile_updates)
