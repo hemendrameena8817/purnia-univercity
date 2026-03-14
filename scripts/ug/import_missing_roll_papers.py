@@ -70,11 +70,33 @@ DISPLAY_NAME_ALIASES = {
     'study of urdu fiction': 'Study of Urdu Fiction',
     'deductive logic': 'Deductive Logic',
 }
+HEADER_ALIASES = {
+    'reg no': 'Registration No',
+    'reg. no': 'Registration No',
+    'registration no': 'Registration No',
+    'registration number': 'Registration No',
+    'regsitration no': 'Registration No',
+    'regsitration number': 'Registration No',
+    'course code': 'Course Code',
+    'subject code': 'Course Code',
+    'paper name': 'Paper Name',
+    'paper code': 'Paper Code',
+    'roll no': 'Roll No',
+    'exam type': 'Exam Type',
+    'semester': 'Semester',
+    'theory': 'Theory',
+    'practical': 'Practical',
+}
 
 
 def clean_text(value):
     text = str(value or '').replace('_x000D_', ' ').replace('\n', ' ').replace('\r', ' ')
     return ' '.join(text.split()).strip()
+
+
+def normalize_header(value):
+    text = clean_text(value)
+    return HEADER_ALIASES.get(text.lower(), text)
 
 
 def normalize_paper_name(value):
@@ -175,13 +197,23 @@ def load_students_from_file(file_path):
     if not rows:
         return {}
 
-    headers = [clean_text(header) for header in rows[0]]
+    header_row_index = None
+    headers = []
+    for index, row in enumerate(rows):
+        candidate_headers = [normalize_header(header) for header in row]
+        if 'Registration No' in candidate_headers:
+            header_row_index = index
+            headers = candidate_headers
+            break
+    if header_row_index is None:
+        return {}
+
     grouped = defaultdict(lambda: {
         'papers': {},
         'sheet_roll_assigned': False,
     })
 
-    for row in rows[1:]:
+    for row in rows[header_row_index + 1:]:
         data = dict(zip(headers, row))
         reg_no = clean_text(data.get('Registration No')).upper()
         if not reg_no:
