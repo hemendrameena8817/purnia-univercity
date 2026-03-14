@@ -114,7 +114,7 @@ def build_name_map(raw_map):
     return {normalize_paper_name(name): code for name, code in raw_map.items()}
 
 
-def load_missing_roll_students(file_path):
+def load_students_from_file(file_path):
     workbook = load_workbook(file_path, data_only=True)
     sheet = workbook.active
     rows = list(sheet.iter_rows(values_only=True))
@@ -127,8 +127,7 @@ def load_missing_roll_students(file_path):
     for row in rows[1:]:
         data = dict(zip(headers, row))
         reg_no = clean_text(data.get('Registration No')).upper()
-        roll_no = clean_text(data.get('Roll No'))
-        if not reg_no or roll_no:
+        if not reg_no:
             continue
 
         semester = normalize_semester(data.get('Semester'))
@@ -333,8 +332,8 @@ def ensure_exam_registration(profile, source_file):
 
 
 def process_file(file_path, dry_run=False):
-    grouped_students = load_missing_roll_students(file_path)
-    print(f'Found {len(grouped_students)} students with registration number and blank roll number in {file_path}')
+    grouped_students = load_students_from_file(file_path)
+    print(f'Found {len(grouped_students)} students with registration number in {file_path}')
     if not grouped_students:
         return
 
