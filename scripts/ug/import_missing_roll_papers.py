@@ -28,6 +28,14 @@ TARGET_EXAM_TYPE = 'BACK'
 TARGET_EXAM_REGISTRATION_FEES = 600
 TARGET_EXAM_REGISTRATION_START = make_aware(datetime.strptime('09-03-2026 00:00:00', '%d-%m-%Y %H:%M:%S'))
 TARGET_EXAM_REGISTRATION_END = make_aware(datetime.strptime('15-03-2026 00:00:00', '%d-%m-%Y %H:%M:%S'))
+FALLBACK_PAPER_CODES = {
+    'MJC': '1001',
+    'MIC': '1002',
+    'SEC': '1003',
+    'VAC': '1004',
+    'MDC': '1005',
+    'AEC': '1006',
+}
 LABEL_MARKS = {
     'CIA-Theory': (30, Decimal('13.5')),
     'ESE-Theory': (70, Decimal('31.5')),
@@ -538,6 +546,8 @@ def process_file(file_path, dry_run=False):
                 mapped_department,
             )
             paper_code = clean_text(course_structure.paper_code) if course_structure and course_structure.paper_code else default_paper_code.get(paper['course_code'])
+            if not paper_code:
+                paper_code = FALLBACK_PAPER_CODES.get(prefix)
             if not paper_code:
                 print(f'PAPER CODE NOT FOUND: {reg_no} | {paper["course_code"]} | {paper["paper_name_display"]}')
                 stats['missing_paper_code'] += 1
