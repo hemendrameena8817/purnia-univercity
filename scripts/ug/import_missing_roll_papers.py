@@ -90,6 +90,21 @@ def normalize_course_code(value):
     return text
 
 
+def get_paper_code_suffix(value):
+    text = re.sub(r'[^A-Z0-9]', '', clean_text(value).upper())
+    return text[-4:] if len(text) >= 4 else text
+
+
+def get_assessment_dedupe_key(paper_code, label, exam_type, semester, session):
+    return (
+        get_paper_code_suffix(paper_code),
+        clean_text(label),
+        clean_text(exam_type),
+        clean_text(semester),
+        clean_text(session),
+    )
+
+
 def normalize_semester(value):
     text = clean_text(value).upper().replace(' ', '')
     if text in {'1', '1ST', 'I'}:
@@ -122,13 +137,19 @@ def load_students_from_file(file_path):
         return {}
 
     headers = [clean_text(header) for header in rows[0]]
-    grouped = defaultdict(dict)
+    grouped = defaultdict(lambda: {
+        'papers': {},
+        'sheet_roll_assigned': False,
+    })
 
     for row in rows[1:]:
         data = dict(zip(headers, row))
         reg_no = clean_text(data.get('Registration No')).upper()
         if not reg_no:
             continue
+        roll_no = clean_text(data.get('Roll No'))
+        if roll_no:
+            grouped[reg_no]['sheet_roll_assigned'] = True
 
         semester = normalize_semester(data.get('Semester'))
         exam_type = normalize_exam_type(data.get('Exam Type'))
@@ -140,7 +161,7 @@ def load_students_from_file(file_path):
             continue
 
         key = (semester, exam_type, course_code, paper_name_key)
-        entry = grouped[reg_no].get(key)
+        entry = grouped[reg_no]['papers'].get(key)
         if not entry:
             entry = {
                 'semester': semester,
@@ -151,14 +172,20 @@ def load_students_from_file(file_path):
                 'has_theory': False,
                 'has_practical': False,
             }
-            grouped[reg_no][key] = entry
+            grouped[reg_no]['papers'][key] = entry
 
         entry['has_theory'] = entry['has_theory'] or is_yes(data.get('Theory'))
         entry['has_practical'] = entry['has_practical'] or is_yes(data.get('Practical'))
         if len(paper_name_display) > len(entry['paper_name_display']):
             entry['paper_name_display'] = paper_name_display
 
-    return {reg_no: list(entries.values()) for reg_no, entries in grouped.items()}
+    return {
+        reg_no: {
+            'papers': list(payload['papers'].values()),
+            'sheet_roll_assigned': payload['sheet_roll_assigned'],
+        }
+        for reg_no, payload in grouped.items()
+    }
 
 
 def build_course_structure_maps():
@@ -234,6 +261,12 @@ def create_assessment(student, semester, session, exam_type, course_code, course
 
 
 def delete_today_imported_assessments(reg_nos):
+    if not reg_nos:
+        print(
+            f"Deleted today's imported assessments: 0 | "
+            f"session={TARGET_SESSION} semester={TARGET_SEMESTER} exam_type={TARGET_EXAM_TYPE}"
+        )
+        return
     today = localdate()
     queryset = StudentCourseAssessment.objects.filter(
         student__registration_no__in=reg_nos,
@@ -246,6 +279,66 @@ def delete_today_imported_assessments(reg_nos):
         f"Deleted today's imported assessments: {deleted_count} | "
         f"session={TARGET_SESSION} semester={TARGET_SEMESTER} exam_type={TARGET_EXAM_TYPE}"
     )
+
+
+def remove_duplicate_assessments(reg_nos, dry_run=False):
+    if not reg_nos:
+        print(
+            f"Removed duplicate assessments: 0 | "
+            f"session={TARGET_SESSION} semester={TARGET_SEMESTER} exam_type={TARGET_EXAM_TYPE}"
+        )
+        return 0
+
+    queryset = StudentCourseAssessment.objects.filter(
+        student__registration_no__in=reg_nos,
+        semester=TARGET_SEMESTER,
+        session=TARGET_SESSION,
+        exam_type=TARGET_EXAM_TYPE,
+    ).values_list(
+        'id',
+        'student_id',
+        'paper_code',
+        'label',
+    ).order_by('student_id', 'label', 'paper_code', 'id')
+
+    ids_to_delete = []
+    seen_keys = set()
+
+    for assessment_id, student_id, paper_code, label in queryset.iterator(chunk_size=2000):
+        key = (student_id,) + get_assessment_dedupe_key(
+            paper_code=paper_code,
+            label=label,
+            exam_type=TARGET_EXAM_TYPE,
+            semester=TARGET_SEMESTER,
+            session=TARGET_SESSION,
+        )
+        if key in seen_keys:
+            ids_to_delete.append(assessment_id)
+            continue
+        seen_keys.add(key)
+
+    if ids_to_delete and not dry_run:
+        StudentCourseAssessment.objects.filter(id__in=ids_to_delete).delete()
+
+    print(
+        f"Removed duplicate assessments: {len(ids_to_delete)} | "
+        f"session={TARGET_SESSION} semester={TARGET_SEMESTER} exam_type={TARGET_EXAM_TYPE}"
+    )
+    return len(ids_to_delete)
+
+
+def cleanup_only(file_path=None, registration_no=None, dry_run=False):
+    if registration_no:
+        reg_nos = [clean_text(registration_no).upper()]
+    elif file_path:
+        reg_nos = list(load_students_from_file(file_path).keys())
+    else:
+        reg_nos = []
+
+    removed_duplicates = remove_duplicate_assessments(reg_nos, dry_run=dry_run)
+    if dry_run:
+        print('DRY RUN: no changes saved')
+    return removed_duplicates
 
 
 def get_roll_number_state():
@@ -338,8 +431,16 @@ def process_file(file_path, dry_run=False):
         return
 
     reg_nos = list(grouped_students.keys())
+    assessment_reg_nos = [
+        reg_no
+        for reg_no, payload in grouped_students.items()
+        if not payload['sheet_roll_assigned']
+    ]
     if not dry_run:
-        delete_today_imported_assessments(reg_nos)
+        delete_today_imported_assessments(assessment_reg_nos)
+        removed_duplicates = remove_duplicate_assessments(reg_nos)
+    else:
+        removed_duplicates = 0
 
     profiles = {
         profile.registration_no: profile
@@ -369,6 +470,7 @@ def process_file(file_path, dry_run=False):
         'roll_numbers_assigned': 0,
         'assessments_created': 0,
         'assessment_skipped_existing': 0,
+        'duplicate_assessments_removed': removed_duplicates,
         'exam_registrations_created': 0,
         'exam_registrations_updated': 0,
         'missing_profiles': 0,
@@ -376,7 +478,7 @@ def process_file(file_path, dry_run=False):
         'conflicts': 0,
     }
 
-    for reg_no, papers in grouped_students.items():
+    for reg_no, student_payload in grouped_students.items():
         profile = profiles.get(reg_no)
         if not profile:
             print(f'PROFILE NOT FOUND: {reg_no}')
@@ -384,6 +486,25 @@ def process_file(file_path, dry_run=False):
             continue
 
         stats['profiles_found'] += 1
+        if student_payload['sheet_roll_assigned']:
+            exam_registration, registration_created, registration_update_fields = ensure_exam_registration(profile, file_path)
+            if registration_created:
+                exam_registrations_to_create.append(exam_registration)
+                stats['exam_registrations_created'] += 1
+                print(
+                    f'EXAM REGISTRATION CREATE: {reg_no} | '
+                    f'SEM={TARGET_SEM_INT} | SESSION={TARGET_SESSION} | TYPE={TARGET_EXAM_TYPE} | FEES={TARGET_EXAM_REGISTRATION_FEES}'
+                )
+            elif registration_update_fields:
+                exam_registrations_to_update.append((exam_registration, registration_update_fields))
+                stats['exam_registrations_updated'] += 1
+                print(
+                    f'EXAM REGISTRATION UPDATE: {reg_no} | '
+                    f'{", ".join(registration_update_fields)}'
+                )
+            continue
+
+        papers = student_payload['papers']
         mapped_departments = {'MJC': set(), 'MIC': set(), 'MDC': set()}
         paper_payloads = []
 
@@ -482,7 +603,14 @@ def process_file(file_path, dry_run=False):
             )
 
         existing_keys = set(
-            StudentCourseAssessment.objects.filter(
+            get_assessment_dedupe_key(
+                paper_code=paper_code,
+                label=label,
+                exam_type=exam_type,
+                semester=semester,
+                session=session,
+            )
+            for paper_code, label, exam_type, semester, session in StudentCourseAssessment.objects.filter(
                 student=profile,
                 semester=TARGET_SEMESTER,
                 session=TARGET_SESSION,
@@ -505,12 +633,12 @@ def process_file(file_path, dry_run=False):
                 labels=payload['labels'],
                 source_file=file_path,
             ):
-                key = (
-                    assessment.paper_code,
-                    assessment.label,
-                    assessment.exam_type,
-                    assessment.semester,
-                    assessment.session,
+                key = get_assessment_dedupe_key(
+                    paper_code=assessment.paper_code,
+                    label=assessment.label,
+                    exam_type=assessment.exam_type,
+                    semester=assessment.semester,
+                    session=assessment.session,
                 )
                 if key in existing_keys:
                     stats['assessment_skipped_existing'] += 1
@@ -540,6 +668,7 @@ def process_file(file_path, dry_run=False):
     print(f"Roll numbers assigned: {stats['roll_numbers_assigned']}")
     print(f"Assessments created: {stats['assessments_created']}")
     print(f"Assessments skipped existing: {stats['assessment_skipped_existing']}")
+    print(f"Duplicate assessments removed: {stats['duplicate_assessments_removed']}")
     print(f"Exam registrations created: {stats['exam_registrations_created']}")
     print(f"Exam registrations updated: {stats['exam_registrations_updated']}")
     print(f"Profiles missing: {stats['missing_profiles']}")
@@ -552,8 +681,17 @@ def process_file(file_path, dry_run=False):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--file-path', default=str(DEFAULT_XLSX_PATH))
+    parser.add_argument('--registration-no')
+    parser.add_argument('--cleanup-only', action='store_true')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
+    if args.cleanup_only:
+        cleanup_only(
+            file_path=Path(args.file_path) if args.file_path else None,
+            registration_no=args.registration_no,
+            dry_run=args.dry_run,
+        )
+        return
     process_file(Path(args.file_path), dry_run=args.dry_run)
 
 
