@@ -176,7 +176,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Display all marks and calculation fields directly from database
     # Display all marks and calculation fields directly from database
     list_display = (
-        'id', 'student', 'semester', 'paper_code', 'label','course_code','course_type'
+        'id', 'student', 'semester', 'paper_code', 'label','course_code','course_type',
         # Individual
         'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
         'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass',
