@@ -19,6 +19,7 @@ from .views import (
     PGCenterAttachedCollegesView,
     PGStudentAttendanceListView,
     PGAttendanceMarkView,
+    PGAttendanceCountView,
 
 )
 
@@ -49,4 +50,6 @@ urlpatterns = [
     path('student-attendance/list/', PGStudentAttendanceListView.as_view(), name='pg-student-attendance-list'),
     path('student-attendance/mark/', PGAttendanceMarkView.as_view(), name='pg-student-attendance-mark'),
     path('center/dispatch-memo/', PGDispatchMemoView.as_view(), name='pg-center-dispatch-memo'),
+    # Subject-wise attendance count for a particular exam
+    path('attendance/count/', PGAttendanceCountView.as_view(), name='pg-attendance-count'),
 ]
