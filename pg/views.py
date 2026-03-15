@@ -1711,3 +1711,142 @@ class PGAttendanceMarkView(APIView):
         }, status=status.HTTP_200_OK)
 
 
+class PGAttendanceCountView(APIView):
+    """
+    GET /api/pg/attendance/count/?exam_uid=<uid>[&college_uid=<uid>][&department_uid=<uid>]
+
+    Returns subject-wise count of present and absent students for a particular exam.
+    Data is sourced from PGStudentCourseAssessment.ind_is_absent (ESE assessments).
+
+    Query Params:
+        exam_uid       (required) – UID of the PGExam
+        college_uid    (optional) – filter to a specific college
+        department_uid (optional) – filter to a specific department
+
+    Sample Response:
+    {
+        "exam": "PG 3rd Semester Examination (2022-24)",
+        "exam_uid": "...",
+        "session": "2022-24",
+        "semester": 3,
+        "total_registered": 150,
+        "subjects": [
+            {
+                "course_code": "CC-1",
+                "course_name": "Core Course I",
+                "total": 50,
+                "present": 42,
+                "absent": 8
+            }
+        ]
+    }
+    """
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated, IsExamCenterUser]
+
+    def get(self, request):
+        from .models import PGExam, PGExamRegistration, PGStudentCourseAssessment
+        from colleges.models import College
+        from django.db.models import Q
+
+        # ── 1. Validate required params ───────────────────────────────────────
+        exam_uid = request.query_params.get('exam_uid')
+        if not exam_uid:
+            return Response(
+                {"error": "exam_uid is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # ── 2. Fetch exam ─────────────────────────────────────────────────────
+        exam = get_object_or_404(PGExam, uid=exam_uid)
+
+        # ── 3. Build registration filter: match by exam FK or session+semester ─
+        reg_filter = Q(exam=exam)
+        if exam.session and exam.year:
+            reg_filter |= Q(session=exam.session, sem=exam.year)
+        elif exam.session:
+            reg_filter |= Q(session=exam.session)
+
+        registration_qs = PGExamRegistration.objects.filter(
+            reg_filter,
+            status='REGISTERED'
+        )
+
+        # ── 4. Optional college / department / semester / course_code filters ─────
+        college_uid = request.query_params.get('college_uid')
+        department_uid = request.query_params.get('department_uid')
+        semester_filter = request.query_params.get('semester')       # e.g. 3
+        course_code_filter = request.query_params.get('course_code') # e.g. AEC1
+
+        if college_uid:
+            college = get_object_or_404(College, uid=college_uid)
+            registration_qs = registration_qs.filter(student__college=college)
+
+        if department_uid:
+            department = get_object_or_404(PGDepartment, uid=department_uid)
+            registration_qs = registration_qs.filter(student__department=department)
+
+        if semester_filter:
+            try:
+                registration_qs = registration_qs.filter(sem=int(semester_filter))
+            except ValueError:
+                return Response(
+                    {"error": "semester must be a number (e.g. semester=3)."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        registered_student_ids = registration_qs.values_list(
+            'student_id', flat=True
+        ).distinct()
+
+        total_registered = registered_student_ids.count()
+
+        # ── 5. Get ESE assessments for those registered students ──────────────
+        assessment_qs = PGStudentCourseAssessment.objects.filter(
+            student_id__in=registered_student_ids,
+            label__iregex=r'^ESE'
+        )
+
+        # Optional: filter to a specific subject
+        if course_code_filter:
+            assessment_qs = assessment_qs.filter(
+                course_code__iexact=course_code_filter.strip()
+            )
+
+        assessments_values = assessment_qs.values('course_code', 'course_name', 'ind_is_absent')
+
+        # ── 6. Aggregate subject-wise counts in Python ────────────────────────
+        subject_map = {}
+
+        for a in assessments_values:
+            code = (a['course_code'] or 'UNKNOWN').upper().strip()
+            name = a['course_name'] or ''
+
+            if code not in subject_map:
+                subject_map[code] = {
+                    'course_code': a['course_code'] or 'UNKNOWN',
+                    'course_name': name,
+                    'present': 0,
+                    'absent': 0,
+                }
+
+            if a['ind_is_absent']:
+                subject_map[code]['absent'] += 1
+            else:
+                subject_map[code]['present'] += 1
+
+        # ── 7. Build sorted subjects list with totals ─────────────────────────
+        subjects = []
+        for code_key in sorted(subject_map.keys()):
+            entry = subject_map[code_key]
+            entry['total'] = entry['present'] + entry['absent']
+            subjects.append(entry)
+
+        return Response({
+            "exam": str(exam),
+            "exam_uid": str(exam.uid),
+            "session": exam.session or "",
+            "semester": exam.year,
+            "total_registered": total_registered,
+            "subjects": subjects,
+        }, status=status.HTTP_200_OK)
