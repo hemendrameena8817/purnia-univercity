@@ -1741,8 +1741,9 @@ class PGAttendanceCountView(APIView):
         ]
     }
     """
-    # authentication_classes = [JWTAuthentication]
-    # permission_classes = [IsAuthenticated, IsExamCenterUser]
+    # No authentication required — public endpoint
+    authentication_classes = []
+    permission_classes = []
 
     def get(self, request):
         from .models import PGExam, PGExamRegistration, PGStudentCourseAssessment
