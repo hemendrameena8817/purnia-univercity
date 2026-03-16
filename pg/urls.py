@@ -20,6 +20,7 @@ from .views import (
     PGStudentAttendanceListView,
     PGAttendanceMarkView,
     PGAttendanceCountView,
+    PGExamDropDownloadView
 
 )
 
@@ -52,4 +53,5 @@ urlpatterns = [
     path('center/dispatch-memo/', PGDispatchMemoView.as_view(), name='pg-center-dispatch-memo'),
     # Subject-wise attendance count for a particular exam
     path('attendance/count/', PGAttendanceCountView.as_view(), name='pg-attendance-count'),
+    path('exam-drop/', PGExamDropDownloadView.as_view(), name='pg-exam-drop'),
 ]
