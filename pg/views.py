@@ -1808,7 +1808,7 @@ class PGAttendanceCountView(APIView):
         # Convert semester to string format (e.g., 3 -> "3RD")
         semester_str = ""
         if semester_filter:
-            from .utils.memo_utils import get_ordinal
+            from pg.utils.memo_utils import get_ordinal
             try:
                 semester_str = get_ordinal(int(semester_filter)).upper()
             except (ValueError, TypeError):
