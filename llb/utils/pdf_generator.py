@@ -210,7 +210,7 @@ def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, 
         'batch_year': student.batch.name if student and student.batch else '',
         'exam_month_year': exam.exam_month_year if exam else '',
         'course': student.course.name if student and student.course else '-',
-        'center_name': exam.center_mappings.first().center.name if exam and exam.center_mappings.exists() else '-',
+        'center_name': None,
         
         # Result statistics
         'total_full_marks': result_stats['total_full_marks'],
@@ -225,6 +225,15 @@ def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, 
         # 'watermark_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
         'controller_signature': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/controller-of-examination-signature.png")),
     }
+    
+    # 6. Get center information
+    if exam and student:
+        from .progressive_context import get_center_info_for_student
+        center_info = get_center_info_for_student(student, exam)
+        if center_info:
+            context['center_name'] = center_info.get('name', '-')
+        else:
+            context['center_name'] = '-'
 
     if semester == '2ND':
         theory_rows, practical_rows = build_semester2_display_rows(assessments)
