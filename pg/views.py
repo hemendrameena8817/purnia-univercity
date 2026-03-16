@@ -736,7 +736,6 @@ class PGAdmitCardPDFView(APIView):
         registration = PGExamRegistration.objects.filter(
             student=student,
             status='REGISTERED',
-            sem=1
         ).order_by('-created_at').first()
 
         if not registration:
@@ -1864,3 +1863,17 @@ class PGAttendanceCountView(APIView):
             "total_registered": total_registered,
             "subjects": subjects,
         }, status=status.HTTP_200_OK)
+
+
+class PGExamDropDownloadView(APIView):
+    authentication_classes = []
+    permission_classes = []
+    def get(self,request):
+        from pg.models import PGExam
+        from pg.serializers import PGExamDropSerializer
+        try:
+            exam = PGExam.objects.all()
+            serializer = PGExamDropSerializer(exam,many=True)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(serializer.data, status=status.HTTP_200_OK)
