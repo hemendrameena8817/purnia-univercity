@@ -1752,6 +1752,8 @@ class PGAttendanceCountView(APIView):
 
         # ── 1. Validate required params ───────────────────────────────────────
         exam_uid = request.query_params.get('exam_uid')
+        semester_filter = request.query_params.get('semester')       # e.g. 3
+
         if not exam_uid:
             return Response(
                 {"error": "exam_uid is required."},
@@ -1770,13 +1772,13 @@ class PGAttendanceCountView(APIView):
 
         registration_qs = PGExamRegistration.objects.filter(
             exam=exam,
-            status='REGISTERED'
+            status='REGISTERED',
+            sem=semester_filter
         )
 
         # ── 4. Optional college / department / semester / course_code filters ─────
         college_uid = request.query_params.get('college_uid')
         department_uid = request.query_params.get('department_uid')
-        semester_filter = request.query_params.get('semester')       # e.g. 3
         course_code_filter = request.query_params.get('course_code') # e.g. AEC1
 
         if college_uid:
