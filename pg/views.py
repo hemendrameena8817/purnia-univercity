@@ -1817,7 +1817,7 @@ class PGAttendanceCountView(APIView):
         assessment_qs = PGStudentCourseAssessment.objects.filter(
             student_id__in=registered_student_ids,
             label__iregex=r'^ESE',
-            session=registration_qs.session,
+            session=exam.session,
             semester=semester_str
         )
 
