@@ -1828,7 +1828,20 @@ class PGAttendanceCountView(APIView):
 
         assessments_values = assessment_qs.values('course_code', 'course_name', 'ind_is_absent')
 
-        # ── 6. Aggregate subject-wise counts in Python ────────────────────────
+        # ── 6. Get Exam Dates for Subjects ────────────────────────────────────
+        from .models import PGExamSchedule
+        schedules = PGExamSchedule.objects.filter(
+            exam=exam,
+            semester=int(semester_filter) if semester_filter and semester_filter.isdigit() else exam.year
+        ).select_related('common_course_structure')
+        
+        exam_date_map = {}
+        for s in schedules:
+            if s.common_course_structure and s.common_course_structure.course_code:
+                code_key = s.common_course_structure.course_code.upper().strip()
+                exam_date_map[code_key] = s.exam_date
+
+        # ── 7. Aggregate subject-wise counts in Python ────────────────────────
         subject_map = {}
 
         for a in assessments_values:
@@ -1841,6 +1854,7 @@ class PGAttendanceCountView(APIView):
                     'course_name': name,
                     'present': 0,
                     'absent': 0,
+                    'exam_date': exam_date_map.get(code)
                 }
 
             if a['ind_is_absent']:
@@ -1848,7 +1862,7 @@ class PGAttendanceCountView(APIView):
             else:
                 subject_map[code]['present'] += 1
 
-        # ── 7. Build sorted subjects list with totals ─────────────────────────
+        # ── 8. Build sorted subjects list with totals ─────────────────────────
         subjects = []
         for code_key in sorted(subject_map.keys()):
             entry = subject_map[code_key]
