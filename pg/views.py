@@ -1843,10 +1843,17 @@ class PGAttendanceCountView(APIView):
 
         # ── 7. Aggregate subject-wise counts in Python ────────────────────────
         subject_map = {}
+        from django.utils import timezone
+        today = timezone.localdate()
 
         for a in assessments_values:
             code = (a['course_code'] or 'UNKNOWN').upper().strip()
             name = a['course_name'] or ''
+            exam_date = exam_date_map.get(code)
+
+            # Skip subjects that haven't had their exam yet
+            if not exam_date or exam_date > today:
+                continue
 
             if code not in subject_map:
                 subject_map[code] = {
@@ -1854,7 +1861,7 @@ class PGAttendanceCountView(APIView):
                     'course_name': name,
                     'present': 0,
                     'absent': 0,
-                    'exam_date': exam_date_map.get(code)
+                    'exam_date': exam_date
                 }
 
             if a['ind_is_absent']:
