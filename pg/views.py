@@ -1762,14 +1762,14 @@ class PGAttendanceCountView(APIView):
         exam = get_object_or_404(PGExam, uid=exam_uid)
 
         # ── 3. Build registration filter: match by exam FK or session+semester ─
-        reg_filter = Q(exam=exam)
-        if exam.session and exam.year:
-            reg_filter |= Q(session=exam.session, sem=exam.year)
-        elif exam.session:
-            reg_filter |= Q(session=exam.session)
+        # reg_filter = Q(exam=exam)
+        # if exam.session and exam.year:
+        #     reg_filter |= Q(session=exam.session, sem=exam.year)
+        # elif exam.session:
+        #     reg_filter |= Q(session=exam.session)
 
         registration_qs = PGExamRegistration.objects.filter(
-            reg_filter,
+            exam=exam,
             status='REGISTERED'
         )
 
