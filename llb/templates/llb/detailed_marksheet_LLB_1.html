@@ -515,8 +515,14 @@
 
       <!-- Publication Date -->
       <div class="publication-date">
-        Date of
-        Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+        <div>
+          Date of
+          Publication&nbsp;:&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+        </div>
+        <div class="">
+          Date of
+          Issue&nbsp;:
+        </div>
       </div>
 
       <!-- Bottom Section: Remarks, QR Code, Signature Space -->

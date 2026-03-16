@@ -126,8 +126,25 @@ def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, 
     if result is None:
         result = SimpleNamespace(student=student, exam=exam, grace=grace, total_marks=total_marks)
 
-    # 1. Generate QR Code
-    barcode_text = generate_llb_barcode_text(result=result, semester=semester, student=student, exam=exam, assessments=assessments, total_marks=total_marks)
+    # 1. Calculate result statistics
+    if semester == '3RD':
+        cumulative_assessments = student.course_assessments.filter(
+            semester__in=['1ST', '2ND', '3RD']
+        ).select_related('course_structure').order_by('semester', 'paper_code')
+        result_stats = calculate_llb_result_semester_3(cumulative_assessments)
+    else:
+        result_stats = calculate_llb_result(assessments)
+
+    # 2. Generate QR Code
+    barcode_text = generate_llb_barcode_text(
+        result=result,
+        semester=semester,
+        student=student,
+        exam=exam,
+        assessments=assessments,
+        total_full_marks=result_stats['total_full_marks'],
+        total_obtained_marks=result_stats['total_obtained_marks'],
+    )
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -144,15 +161,6 @@ def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, 
     img.save(buffered, format="PNG")
     qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-    # 4. Calculate result statistics
-    if semester == '3RD':
-        cumulative_assessments = student.course_assessments.filter(
-            semester__in=['1ST', '2ND', '3RD']
-        ).select_related('course_structure').order_by('semester', 'paper_code')
-        result_stats = calculate_llb_result_semester_3(cumulative_assessments)
-    else:
-        result_stats = calculate_llb_result(assessments)
-    
     # 4.6. Convert marks to words for 3rd semester
     def number_to_words(n):
         """Convert number to words (Indian English)"""
@@ -214,7 +222,7 @@ def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, 
 
         # Images
         'university_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
-        'watermark_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
+        # 'watermark_logo': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/purnea-logo.png")),
         'controller_signature': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/controller-of-examination-signature.png")),
     }
 

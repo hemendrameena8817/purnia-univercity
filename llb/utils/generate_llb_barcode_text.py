@@ -1,6 +1,6 @@
 from llb.utils.calculate_res import calculate_llb_result
 
-def generate_llb_barcode_text(result=None, semester=None, student=None, exam=None, assessments=None, total_marks=None):
+def generate_llb_barcode_text(result=None, semester=None, student=None, exam=None, assessments=None, total_full_marks=None, total_obtained_marks=None):
     student = student or getattr(result, 'student', None)
     exam = exam or getattr(result, 'exam', None)
     if assessments is None:
@@ -14,8 +14,8 @@ def generate_llb_barcode_text(result=None, semester=None, student=None, exam=Non
         else:
             assessments = []
     result_data = calculate_llb_result(assessments)
-    marks_obtained = result_data['total_obtained_marks']
-    total_marks = total_marks if total_marks is not None else getattr(result, 'total_marks', result_data['total_full_marks'])
+    marks_obtained = total_obtained_marks if total_obtained_marks is not None else result_data['total_obtained_marks']
+    total_full_marks = total_full_marks if total_full_marks is not None else result_data['total_full_marks']
 
     return (
         f"MSNO.: {getattr(exam, 'session', '')}-{student.roll_no} | "
@@ -23,6 +23,6 @@ def generate_llb_barcode_text(result=None, semester=None, student=None, exam=Non
         f"Name : {student.user.get_full_name()} | "
         f"Roll No: {student.roll_no} | "
         f"Registration No. : {student.registration_no} | "
-        f"Total Mark : {total_marks} | "
+        f"Total Mark : {total_full_marks} | "
         f"Marks Obtained : {marks_obtained}"
     )
