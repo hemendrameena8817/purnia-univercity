@@ -36,7 +36,16 @@ def calculate_llb_result(assessments):
         # Get marks from course structure
         full_marks = assessment.course_structure.full_marks if assessment.course_structure else 0
         pass_marks = assessment.course_structure.pass_marks if assessment.course_structure else 0
-        obtained_marks = float(assessment.ind_marks_obtained or 0)
+        
+        # Handle non-numeric marks (like 'AB' for absent) by treating them as 0
+        marks_obtained = assessment.ind_marks_obtained
+        try:
+            obtained_marks = float(marks_obtained) if marks_obtained is not None else 0
+        except (ValueError, TypeError):
+            # If marks_obtained is a string like 'AB' or cannot be converted, treat as 0
+            obtained_marks = 0
+            
+        course_code = (assessment.course_structure.course_code if assessment.course_structure else '') or ''
         
         total_full_marks += full_marks
         total_pass_marks += pass_marks
@@ -44,10 +53,10 @@ def calculate_llb_result(assessments):
         
         # Calculate ESE and CIA totals based on status
         if assessment.course_structure:
-            if assessment.course_structure.status == 'ESE':
+            if assessment.course_structure.status == 'ESE' and course_code not in ('IX', 'X'):
                 ese_full_marks += full_marks
                 ese_obtained_marks += int(obtained_marks)
-            elif assessment.course_structure.status == 'CIA':
+            elif assessment.course_structure.status == 'CIA' or course_code in ('IX', 'X'):
                 cia_full_marks += full_marks
                 cia_obtained_marks += int(obtained_marks)
         
@@ -132,7 +141,16 @@ def calculate_llb_result_semester_3(assessments):
 
         part_groups[part_key]['full_marks'] += course_structure.full_marks or 0
         part_groups[part_key]['pass_marks'] += course_structure.pass_marks or 0
-        part_groups[part_key]['obtained_marks'] += int(assessment.ind_marks_obtained or 0)
+        
+        # Handle non-numeric marks (like 'AB' for absent) by treating them as 0
+        marks_obtained = assessment.ind_marks_obtained
+        try:
+            obtained_marks = int(marks_obtained) if marks_obtained is not None else 0
+        except (ValueError, TypeError):
+            # If marks_obtained is a string like 'AB' or cannot be converted, treat as 0
+            obtained_marks = 0
+            
+        part_groups[part_key]['obtained_marks'] += obtained_marks
 
     return {
         **result_stats,

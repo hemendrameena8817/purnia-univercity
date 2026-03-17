@@ -428,7 +428,7 @@
       <div class="header">
         <div class="marksheet-title">MARKSHEET</div>
         <div class="exam-details">
-          <strong>{{ exam_name }} {{exam_year}}, Session &nbsp;({{ batch_year}}),</strong><br />
+          <strong>{{ exam_name }} {{exam_year}}, Session({{ batch_year}}),</strong><br />
           <strong>held in the month of {{ exam_month_year|upper }}</strong>
         </div>
       </div>
@@ -515,8 +515,14 @@
 
       <!-- Publication Date -->
       <div class="publication-date">
-        Date of
-        Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+        <div>
+          Date of
+          Publication&nbsp;:&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+        </div>
+        <div class="">
+          Date of
+          Issue&nbsp;:
+        </div>
       </div>
 
       <!-- Bottom Section: Remarks, QR Code, Signature Space -->
