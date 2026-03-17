@@ -100,7 +100,8 @@ def clean_text(value):
 
 def normalize_header(value):
     text = clean_text(value)
-    return HEADER_ALIASES.get(text.lower(), text)
+    alias_key = text.lower().replace('_', ' ')
+    return HEADER_ALIASES.get(alias_key, text)
 
 
 def normalize_paper_name(value):
