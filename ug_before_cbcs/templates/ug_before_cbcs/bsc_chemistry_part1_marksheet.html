@@ -368,72 +368,35 @@
             </tr>
           </thead>
           <tbody>
-            <!-- Honours Subject -->
-            {% if is_honours_with_practical %}
-              <!-- Case: Honours with Practical -->
-              {% if subjects.honours.papers|length == 2 and 'MUSIC' in hons_subject.upper %}
-                <!-- Special case for Music: Paper-I + Practical (2 rows, no Paper-II) -->
-                <tr>
-                  <td rowspan="2">1</td>
-                  <td rowspan="2" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
-                  <td>{% if exam_part == '2' %}Paper-II{% else %}Paper-I{% endif %}</td>
-                  <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
-                  <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"80" }}</td>
-                  <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
-                  <td rowspan="2" style="vertical-align: middle">
-                    <strong>{{ subjects.honours.total_obtained|default:"0" }}</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <td>Practical</td>
-                  <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
-                  <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
-                </tr>
-              {% else %}
-                <!-- Regular case: Paper-I, Paper-II, Practical separate (3 rows) -->
-                <tr>
-                  <td rowspan="3">1</td>
-                  <td rowspan="3" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
-                  <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
-                  <td>{{ subjects.honours.papers.0.max_marks|default:"75" }}</td>
-                  <td rowspan="2" colspan="2" style="vertical-align: middle">67</td>
-                  <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
-                  <td rowspan="2" style="vertical-align: middle">
-                    <strong>{{ subjects.honours.theory_total|default:subjects.honours.total_obtained }}</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
-                  <td>{{ subjects.honours.papers.1.max_marks|default:"75" }}</td>
-                  <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
-                </tr>
-                <tr>
-                  <td>Practical</td>
-                  <td>{{ subjects.honours.papers.2.max_marks|default:"50" }}</td>
-                  <td colspan="2">23</td>
-                  <td>{{ subjects.honours.papers.2.obtained|default:"0" }}</td>
-                  <td><strong>{{ subjects.honours.papers.2.obtained|default:"0" }}</strong></td>
-                </tr>
-              {% endif %}
-            {% else %}
-              <!-- Case: Honours without Practical (e.g. Political Science) -->
-              <tr>
-                <td rowspan="2">1</td>
-                <td rowspan="2" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
-                <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
-                <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
-                <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"90" }}</td>
-                <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
-                <td rowspan="2" style="vertical-align: middle">
-                  <strong>{{ subjects.honours.total_obtained|default:"0" }}</strong>
-                </td>
-              </tr>
-              <tr>
-                <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
-                <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
-                <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
-              </tr>
-            {% endif %}
+            <!-- Honours Subject - BSC Chemistry Part-I Specific -->
+<tr>
+  <td rowspan="4">1</td>
+  <td rowspan="4" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
+  <td>I A</td>
+  <td>{{ subjects.honours.papers.0.max_marks|default:"50" }}</td>
+  <td rowspan="3" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"67" }}</td>
+  <td>{{ subjects.honours.papers.0.obtained|default:"0" }}</td>
+  <td rowspan="3" style="vertical-align: middle">
+    <strong>{{ subjects.honours.theory_total|default:subjects.honours.total_obtained }}</strong>
+  </td>
+</tr>
+<tr>
+  <td>I B</td>
+  <td>{{ subjects.honours.papers.1.max_marks|default:"50" }}</td>
+  <td>{{ subjects.honours.papers.1.obtained|default:"0" }}</td>
+</tr>
+<tr>
+  <td>I C</td>
+  <td>{{ subjects.honours.papers.2.max_marks|default:"50" }}</td>
+  <td>{{ subjects.honours.papers.2.obtained|default:"0" }}</td>
+</tr>
+<tr>
+  <td>Practical</td>
+  <td>{{ subjects.honours.papers.3.max_marks|default:"50" }}</td>
+  <td colspan="2">23</td>
+  <td>{{ subjects.honours.papers.3.obtained|default:"0" }}</td>
+  <td><strong>{{ subjects.honours.papers.3.obtained|default:"0" }}</strong></td>
+</tr>
 
             <tr class="total-row">
               <td colspan="3" style="text-align: center;"><strong>Total of Honours</strong></td>
