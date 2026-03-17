@@ -176,7 +176,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Display all marks and calculation fields directly from database
     # Display all marks and calculation fields directly from database
     list_display = (
-        'id', 'student', 'semester', 'paper_code', 'label',
+        'id', 'student', 'semester', 'paper_code', 'label','course_code','course_type',
         # Individual
         'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
         'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass',
@@ -192,7 +192,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     )
     
     # Filters for easy navigation
-    list_filter = ('session','semester', 'label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass', ExamResultFilter)
+    list_filter = ('session','semester', 'college_code','label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass','is_cia_filled', ExamResultFilter)
     
     # Search by student registration number AND name
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
@@ -235,7 +235,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Organized fieldsets for detail view
     fieldsets = (
         ('Basic Information', {
-            'fields': ('student', 'semester', 'paper_code', 'course_code', 'course_type', 'label')
+            'fields': ('student', 'semester', 'paper_code', 'course_code', 'course_type','course_name', 'label')
         }),
         ('Individual Assessment (CIA/ESE)', {
             'fields': (

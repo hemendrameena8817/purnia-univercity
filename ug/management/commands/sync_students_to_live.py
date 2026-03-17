@@ -295,22 +295,22 @@ class Command(BaseCommand):
                             session='2025-26'
                         ).exists()
 
-                        if sem_reg_exists:
-                            self.stdout.write(f"  ⏭  SemesterRegistration already exists for {reg_no} sem=3 — skipping")
-                        else:
-                            SemesterRegistration.objects.using('live').create(
-                                student=live_ug_profile,
-                                batch=live_batch,
-                                sem=3,
-                                session='2025-26',
-                                status='OPEN',
-                                is_open=True,
-                                start_date=SEM_REG_START,
-                                end_date=SEM_REG_END,
-                            )
-                            self.stdout.write(self.style.SUCCESS(
-                                f"  ✓ Created SemesterRegistration: {reg_no} sem=3 session=2025-26"
-                            ))
+                        # if sem_reg_exists:
+                        #     self.stdout.write(f"  ⏭  SemesterRegistration already exists for {reg_no} sem=3 — skipping")
+                        # else:
+                        #     SemesterRegistration.objects.using('live').create(
+                        #         student=live_ug_profile,
+                        #         batch=live_batch,
+                        #         sem=3,
+                        #         session='2025-26',
+                        #         status='OPEN',
+                        #         is_open=True,
+                        #         start_date=SEM_REG_START,
+                        #         end_date=SEM_REG_END,
+                        #     )
+                        #     self.stdout.write(self.style.SUCCESS(
+                        #         f"  ✓ Created SemesterRegistration: {reg_no} sem=3 session=2025-26"
+                        #     ))
 
             except Exception as e:
                 self.stderr.write(self.style.ERROR(f"  ✗ Failed for {reg_no}: {e}"))

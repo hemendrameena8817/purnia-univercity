@@ -73,7 +73,7 @@ class CIAStudentListView(APIView):
         label_filter = request.GET.get('label', '').strip()
         entry_status = request.GET.get('entry_status', 'all').lower().strip()
 
-        exam_type = request.GET.get('exam_type', 'REGULAR').upper().strip()
+        exam_type = request.GET.get('exam_type', '').upper().strip()
 
         errors = {}
         if not sem or not sem.isdigit():
@@ -82,8 +82,8 @@ class CIAStudentListView(APIView):
             errors['session'] = 'Required (e.g. 2025-26).'
         if not course_type_filter or course_type_filter not in COURSE_TYPE_PREFIXES:
             errors['course_type'] = f'Required. Must be one of: {", ".join(COURSE_TYPE_PREFIXES)}'
-        if exam_type not in ('REGULAR', 'BACK'):
-            errors['exam_type'] = 'Must be REGULAR or BACK.'
+        # if exam_type not in ('REGULAR', 'BACK'):
+        #     errors['exam_type'] = 'Must be REGULAR or BACK.'
         if errors:
             return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 

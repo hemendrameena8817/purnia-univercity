@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
+from django.core.paginator import Paginator
+from django.utils.functional import cached_property
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from accounts.models import UserAccount
@@ -26,6 +28,16 @@ class SafeForeignKeyWidget(ForeignKeyWidget):
         if val:
             return self.model.objects.filter(**{self.field: val}).first()
         return None
+
+
+class LargeTablePaginator(Paginator):
+    """
+    Overrides the count method to return a dummy large value to avoid expensive
+    COUNT(*) queries on huge tables.
+    """
+    @cached_property
+    def count(self):
+        return 9999999
 
 
 @admin.register(PGFaculty)
@@ -364,6 +376,26 @@ class PGStudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Use search / filters to narrow first, then sort
     ordering = []
 
+    paginator = LargeTablePaginator
+
+    def get_search_results(self, request, queryset, search_term):
+        use_distinct = False
+        if search_term:
+            search_term = search_term.strip()
+            exact_match_reg = queryset.filter(student__registration_no__iexact=search_term)
+            if exact_match_reg.exists():
+                return exact_match_reg, use_distinct
+            
+            exact_match_roll = queryset.filter(student__roll_no__iexact=search_term)
+            if exact_match_roll.exists():
+                return exact_match_roll, use_distinct
+                
+            exact_match_paper = queryset.filter(paper_code__iexact=search_term)
+            if exact_match_paper.exists():
+                return exact_match_paper, use_distinct
+
+        return super().get_search_results(request, queryset, search_term)
+
     actions = ['export_assessments_to_excel']
 
     def export_assessments_to_excel(self, request, queryset):
@@ -541,6 +573,22 @@ class PGSemesterRegistrationAdmin(ImportExportModelAdmin):
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
+    paginator = LargeTablePaginator
+
+    def get_search_results(self, request, queryset, search_term):
+        use_distinct = False
+        if search_term:
+            search_term = search_term.strip()
+            exact_match_reg = queryset.filter(student__registration_no__iexact=search_term)
+            if exact_match_reg.exists():
+                return exact_match_reg, use_distinct
+            
+            exact_match_roll = queryset.filter(student__roll_no__iexact=search_term)
+            if exact_match_roll.exists():
+                return exact_match_roll, use_distinct
+
+        return super().get_search_results(request, queryset, search_term)
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('uid', 'student', 'sem', 'session')
@@ -623,6 +671,22 @@ class PGExamRegistrationAdmin(ImportExportModelAdmin):
     ordering = ('-created_at',)
     readonly_fields = ('uid', 'created_at', 'updated_at')
     
+    paginator = LargeTablePaginator
+
+    def get_search_results(self, request, queryset, search_term):
+        use_distinct = False
+        if search_term:
+            search_term = search_term.strip()
+            exact_match_reg = queryset.filter(student__registration_no__iexact=search_term)
+            if exact_match_reg.exists():
+                return exact_match_reg, use_distinct
+            
+            exact_match_roll = queryset.filter(student__roll_no__iexact=search_term)
+            if exact_match_roll.exists():
+                return exact_match_roll, use_distinct
+
+        return super().get_search_results(request, queryset, search_term)
+
     fieldsets = (
         ('Basic Information', {
             'fields': ('uid', 'student', 'exam', 'sem', 'session', 'exam_type')
@@ -776,6 +840,22 @@ class PGExamResultAdmin(ImportExportModelAdmin):
     raw_id_fields = ('student',)
     list_per_page = 50
     
+    paginator = LargeTablePaginator
+
+    def get_search_results(self, request, queryset, search_term):
+        use_distinct = False
+        if search_term:
+            search_term = search_term.strip()
+            exact_match_reg = queryset.filter(student__registration_no__iexact=search_term)
+            if exact_match_reg.exists():
+                return exact_match_reg, use_distinct
+            
+            exact_match_roll = queryset.filter(student__roll_no__iexact=search_term)
+            if exact_match_roll.exists():
+                return exact_match_roll, use_distinct
+
+        return super().get_search_results(request, queryset, search_term)
+
     # Add custom actions
     actions = ['export_pass_promoted_to_excel']
     

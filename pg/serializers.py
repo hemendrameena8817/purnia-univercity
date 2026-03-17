@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment, PGCourseStructure, PGExamRegistration
+from .models import PGStudentProfile, PGDepartment, PGDegree, PGProgram, PGStudentCourseAssessment, PGCourseStructure, PGExamRegistration,PGExam
 from colleges.models import College
 
 
@@ -269,3 +269,8 @@ class PGAttendanceMarkSerializer(serializers.Serializer):
         return value
 
 
+class PGExamDropSerializer(serializers.ModelSerializer):
+     class Meta:
+        model = PGExam
+        fields = ['uid', 'name', 'year', 'session', 'batch', 'exam_month_year']
+        read_only_fields = ['uid']
