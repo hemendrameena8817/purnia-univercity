@@ -491,7 +491,7 @@
             <td class="text-left-subject">{{ row.full_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">{{ row.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ row.obtained_marks|default:0|floatformat:0 }}</strong>
+              <strong>{{ row.display_marks|default:0|floatformat:0 }}</strong>
             </td>
           </tr>
           {% endfor %}
@@ -519,7 +519,7 @@
             <td class="text-left-subject">{{ row.full_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">{{ row.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ row.obtained_marks|default:0|floatformat:0 }}</strong>
+              <strong>{{ row.display_marks|default:0|floatformat:0 }}</strong>
             </td>
           </tr>
           {% endfor %}

@@ -520,7 +520,8 @@
               <td>100</td>
               {% if comp.papers|length == 1 %}
               <td colspan="2">{{ comp.total_pass|default:33 }}</td>
-              <td colspan="2"><strong>{{ comp.total_obtained }}</strong></td>
+              <td>{{ comp.papers.0.obtained }}</td>
+              <td><strong>{{ comp.total_obtained }}</strong></td>
               {% else %}
               <td colspan="2">&nbsp;</td>
               <td colspan="2">&nbsp;</td>
@@ -544,7 +545,7 @@
             </tr>
             <!-- Paper 3: MB: -->
             <tr>
-              <td>{% if comp.papers|length > 1 %}MB: {{ comp.papers.1.display_name }}{% else %}MB:{% endif %}</td>
+              <td>{% if comp.papers|length > 1 %}{{ comp.papers.1.display_name }}{% else %}MB:{% endif %}</td>
               <td>50</td>
               {% if comp.papers|length > 1 %}
               <td>15</td>

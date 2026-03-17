@@ -345,8 +345,7 @@ class LLBStudentCourseAssessmentCreateView(APIView):
         # ind_max_marks <- course_structure.full_marks
         # ind_pass_marks <- course_structure.pass_marks
         label = request.data.get("label") or course_structure.status or "ESE"
-        if not paper_code:
-            paper_code = course_structure.paper_code
+        paper_code = request.data.get("paper_code") or course_structure.paper_code
         exam_type = request.data.get("exam_type", "REGULAR")
         semester = request.data.get("semester") or course_structure.semester or exam.semester
         if semester:

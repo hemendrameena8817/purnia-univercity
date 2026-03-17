@@ -52,16 +52,14 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None, custom_results=None):
+def get_ug_old_ba_hons_part1_context(student, exam_part='1', course_code=None, custom_results=None):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons Part 1 marksheet.
     
     Args:
         student: UGBeforeCBCSStudentProfile instance
         exam_part: Part number as string ('1', '2', or '3')
-        exam_type: Optional exam type filter (REGULAR, BACK)
         course_code: Optional course code filter
-        batch_code: Optional batch code filter
         custom_results: Optional list of pre-filtered results to use instead of querying
     
     Returns:
@@ -79,21 +77,15 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         first_result = results[0]
         exam = first_result.exam
     else:
-        # 1. Get student results for this part, filtering by exam_type if provided
+        # Get all student results for this part
         results_query = UGBeforeCBCSStudentResult.objects.filter(
             student=student,
             exam__part=part_code
         )
-        
-        if exam_type:
-            results_query = results_query.filter(exam_type__iexact=exam_type)
             
         if course_code:
             results_query = results_query.filter(exam__course_code__iexact=course_code)
-            
-        if batch_code:
-            results_query = results_query.filter(exam__batch_code=batch_code)
-            
+                
         first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
         if not first_result:
@@ -478,39 +470,6 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
 
     return context
 
-def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
-    """
-    Generate marksheet PDF for UG Before CBCS student Part 1.
-    Only generates PDF if validation passes.
-    
-    Returns:
-        tuple: (pdf_content: bytes or None, error_message: str or None)
-    """
-    context = get_ug_old_ba_hons_part1_context(student, exam_part, exam_type, course_code, batch_code)
-    
-    if not context:
-        return None, "No results found for this student and exam part"
-    
-    # Validate before generating PDF
-    is_valid, error_messages = validate_marksheet_context(student, exam_part, context, exam_type, course_code, batch_code)
-    if not is_valid:
-        error_detail = "; ".join(error_messages)
-        logger.error(f"Marksheet validation failed for {student.registration_no} (Part {exam_part}): {error_detail}")
-        return None, error_detail
-
-    template_name = f"ug_before_cbcs/ba_hons_marksheet_part1.html"
-    
-    html_string = get_template(template_name).render(context)
-    
-    try:
-        pdf_file = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
-        return pdf_file, None
-    except Exception as e:
-        error_msg = f"PDF generation error: {str(e)}"
-        print("PDF ERROR:", error_msg) 
-        logger.error(f"Error generating PDF: {e}")
-        return None, error_msg
-
 def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=None, session_code=None):
     """
     Get the latest consolidated marksheet context.
@@ -521,6 +480,9 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
         exam_part: Part number as string ('1', '2', or '3')
         course_code: Optional course code filter
         session_code: Optional specific session code filter
+            - If provided, tries to use data from that session
+            - If papers are missing in that session, falls back to data from EARLIER sessions only
+            - Never uses papers from sessions newer than the requested session_code
     
     Returns:
         Context dictionary for marksheet generation
@@ -536,9 +498,6 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
     if course_code:
         all_results = all_results.filter(exam__course_code__iexact=course_code)
     
-    if session_code:
-        all_results = all_results.filter(exam__session_code=session_code)
-    
     all_results = all_results.select_related('exam').order_by('exam__session_code')
     
     if not all_results.exists():
@@ -551,27 +510,39 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
     
     for result in all_results:
         key = (result.paper_code, result.status)
+        result_session = result.exam.session_code if result.exam else ''
         
-        # If key exists, compare session_codes and keep the latest
-        if key in latest_papers:
-            existing_session = latest_papers[key].exam.session_code if latest_papers[key].exam else ''
-            current_session = result.exam.session_code if result.exam else ''
-            
-            # Keep the one with the later session_code
-            if current_session > existing_session:
+        # If session_code is specified, prioritize papers from that session and earlier
+        if session_code:
+            # If we want papers from a specific session, only use those from that session or earlier
+            if result_session == session_code:
                 latest_papers[key] = result
-                logger.info(f"Override: {result.paper_code} {result.status} - {existing_session} → {current_session}")
+                logger.debug(f"Using {result.paper_code} from requested session {session_code}")
+            elif key not in latest_papers and result_session <= session_code:
+                # Only use earlier sessions if the paper is not available in the requested session
+                latest_papers[key] = result
+                logger.debug(f"Using {result.paper_code} from earlier session {result_session} (not available in {session_code})")
+            elif key not in latest_papers and result_session > session_code:
+                # Don't use papers from newer sessions than requested
+                logger.debug(f"Skipping {result.paper_code} from newer session {result_session} (requested: {session_code})")
         else:
-            latest_papers[key] = result
+            # No session specified - use latest logic
+            if key in latest_papers:
+                existing_session = latest_papers[key].exam.session_code if latest_papers[key].exam else ''
+                
+                # Keep the one with the later session_code
+                if result_session > existing_session:
+                    latest_papers[key] = result
+                    logger.info(f"Override: {result.paper_code} {result.status} - {existing_session} → {result_session}")
+            else:
+                latest_papers[key] = result
     
     # Now use the existing context function with these filtered results
     # We'll pass the results as a custom queryset
     return get_ug_old_ba_hons_part1_context(
         student, 
         exam_part=exam_part, 
-        exam_type=None,  # Don't filter by exam_type
-        course_code=course_code, 
-        batch_code=None,
+        course_code=course_code,
         custom_results=list(latest_papers.values())
     )
 

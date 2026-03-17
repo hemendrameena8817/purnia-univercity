@@ -30,6 +30,27 @@ def image_to_base64(path):
             return ""
     return ""
 
+def safe_marks_to_int(marks):
+    """Safely convert marks to integer, handling non-numeric values like 'AB' for absent students."""
+    if marks is None:
+        return 0
+    try:
+        return int(float(marks))
+    except (ValueError, TypeError):
+        # If marks is a string like 'AB' or cannot be converted, treat as 0
+        return 0
+
+def get_display_marks(marks):
+    """Get marks for display - returns 'AB' as 'AB', numeric values as-is."""
+    if marks is None:
+        return 0
+    try:
+        # Try to convert to float and back to int to clean up numeric values
+        return int(float(marks))
+    except (ValueError, TypeError):
+        # If conversion fails, return the original value (like 'AB')
+        return marks
+
 def group_assessments_for_semester3(assessments):
     """
     Groups assessments by course_code for 3rd semester stacked display.
@@ -71,12 +92,20 @@ def build_semester2_display_rows(assessments):
                     'full_marks': 0,
                     'pass_marks': 0,
                     'obtained_marks': 0,
+                    'display_marks': 0,
                 }
 
             combined_map[course_code]['name'] = course_structure.name or combined_map[course_code]['name']
             combined_map[course_code]['full_marks'] += int(course_structure.full_marks or 0)
             combined_map[course_code]['pass_marks'] += int(course_structure.pass_marks or 0)
-            combined_map[course_code]['obtained_marks'] += int(assessment.ind_marks_obtained or 0)
+            combined_map[course_code]['obtained_marks'] += safe_marks_to_int(assessment.ind_marks_obtained)
+            # For combined courses, if any assessment has 'AB', show as 'AB' in display
+            current_display = combined_map[course_code]['display_marks']
+            assessment_display = get_display_marks(assessment.ind_marks_obtained)
+            if isinstance(assessment_display, str) and assessment_display == 'AB':
+                combined_map[course_code]['display_marks'] = 'AB'
+            elif current_display != 'AB':
+                combined_map[course_code]['display_marks'] = safe_marks_to_int(assessment.ind_marks_obtained)
             continue
 
         row = {
@@ -84,7 +113,8 @@ def build_semester2_display_rows(assessments):
             'course_code': course_structure.course_code or '-',
             'full_marks': int(course_structure.full_marks or 0),
             'pass_marks': int(course_structure.pass_marks or 0),
-            'obtained_marks': int(assessment.ind_marks_obtained or 0),
+            'obtained_marks': safe_marks_to_int(assessment.ind_marks_obtained),  # For calculations
+            'display_marks': get_display_marks(assessment.ind_marks_obtained),  # For display
         }
 
         if status == 'ESE':

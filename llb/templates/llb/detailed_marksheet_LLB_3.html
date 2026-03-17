@@ -495,7 +495,7 @@
             <td class="text-left-subject">{{ group.0.course_structure.full_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">{{ group.0.course_structure.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+              <strong>{% if group.0.ind_marks_obtained == 'AB' %}AB{% else %}{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}{% endif %}</strong>
             </td>
           </tr>
           {% else %}
@@ -507,14 +507,14 @@
             <td class="text-left-subject">{{ group.0.course_structure.full_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject" rowspan="{{ group_size }}">{{ group.0.course_structure.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+              <strong>{% if group.0.ind_marks_obtained == 'AB' %}AB{% else %}{{ group.0.ind_marks_obtained|default:0|floatformat:0 }}{% endif %}</strong>
             </td>
           </tr>
           {% for sub in group %}{% if not forloop.first %}
           <tr>
             <td class="text-left-subject">{{ sub.course_structure.full_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ sub.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+              <strong>{% if sub.ind_marks_obtained == 'AB' %}AB{% else %}{{ sub.ind_marks_obtained|default:0|floatformat:0 }}{% endif %}</strong>
             </td>
           </tr>
           {% endif %}{% endfor %}
