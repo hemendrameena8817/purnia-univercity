@@ -23,7 +23,7 @@ class LLBBatchSerializer(serializers.ModelSerializer):
 class LLBCourseStructureSerializer(serializers.ModelSerializer):
     class Meta:
         model = LLBCourseStructure
-        fields = '__all__'
+        exclude = ['id']
 
 class LLBExamSerializer(serializers.ModelSerializer):
     class Meta:
@@ -38,7 +38,7 @@ class LLBStudentProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LLBStudentProfile
-        fields = '__all__'
+        exclude = ['id']
 
 class LLBStudentCourseAssessmentSerializer(serializers.ModelSerializer):
     subject_name = serializers.ReadOnlyField(source='course_structure.name')

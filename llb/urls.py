@@ -5,7 +5,10 @@ urlpatterns = [
     # Student Profile endpoints
     path('students/', views.LLBStudentProfileListView.as_view(), name='llb-student-list'),
     path('students/<uuid:uid>/', views.LLBStudentProfileDetailView.as_view(), name='llb-student-detail'),
-    
+
+    # Course Structure endpoint
+    path('course-structure/', views.LLBCourseStructureByPartView.as_view(), name='llb-course-structure-by-part'),
+
     # Exam endpoints
     path('exams/', views.LLBExamListView.as_view(), name='llb-exam-list'),
     path('exams/<uuid:uid>/', views.LLBExamDetailView.as_view(), name='llb-exam-detail'),
@@ -24,7 +27,4 @@ urlpatterns = [
     # PDF generation endpoints (existing - kept untouched)
     path('results/generate-bulk-pdf/', views.LLBBulkMarksheetGenerateView.as_view(), name='llb-result-bulk-pdf'),
     path('results/<str:registration_no>/pdf/', views.LLBResultPDFView.as_view(), name='llb-result-pdf'),
-    
-    # Debug endpoint for center mapping
-    # path('debug/center-mapping/', views.debug_center_mapping, name='llb-debug-center-mapping'),
 ]

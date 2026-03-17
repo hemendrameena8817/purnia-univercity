@@ -45,6 +45,48 @@ class LLBCourseListView(generics.ListCreateAPIView):
     queryset = LLBCourse.objects.all()
     serializer_class = LLBCourseSerializer
 
+
+class LLBCourseStructureByPartView(APIView):
+    """
+    Returns the LLBCourseStructure entries filtered by semester (part).
+    Optionally also filter by course_code.
+
+    Query Params:
+        - semester (required): e.g. 1ST, 2ND, 3RD, 4TH, 5TH, 6TH
+        - course_code (optional): e.g. LLB-3
+
+    Example:
+        GET /api/llb/course-structure/?semester=1ST
+        GET /api/llb/course-structure/?semester=2ND&course_code=LLB-3
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        semester = request.query_params.get('semester')
+        course_code = request.query_params.get('course_code')
+
+        if not semester:
+            return Response(
+                {"error": "Part is required (e.g. 1ST, 2ND, 3RD)"},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+
+        semester_normalized = normalize_semester(semester)
+
+        queryset = LLBCourseStructure.objects.filter(
+            semester__iexact=semester_normalized
+        ).order_by('paper_code')
+
+        if course_code:
+            queryset = queryset.filter(course_code__iexact=course_code)
+
+        serializer = LLBCourseStructureSerializer(queryset, many=True)
+        return Response({
+            'semester': semester_normalized,
+            'count': queryset.count(),
+            'course_structure': serializer.data
+        }, status=http_status.HTTP_200_OK)
+
 class LLBCourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = LLBCourse.objects.all()
     serializer_class = LLBCourseSerializer
@@ -290,18 +332,35 @@ class LLBStudentCourseAssessmentCreateView(APIView):
         # Get exam
         exam = get_object_or_404(LLBExam, uid=exam_uid)
         
-        # Optional fields
-        label = request.data.get("label", "ESE")
+        # course_structure_uid is required — resolve it first so we can derive other fields from it
+        course_structure_uid = request.data.get("course_structure_uid")
+        if not course_structure_uid:
+            return Response(
+                {"error": "course_structure_uid is required"},
+                status=http_status.HTTP_400_BAD_REQUEST
+            )
+        course_structure = LLBCourseStructure.objects.filter(uid=course_structure_uid).first()
+        if not course_structure:
+            return Response(
+                {"error": f"No LLBCourseStructure found with uid={course_structure_uid}"},
+                status=http_status.HTTP_404_NOT_FOUND
+            )
+
+        # Derive optional fields from course_structure if not explicitly sent
+        # label  <- course_structure.status  (e.g. "ESE", "CIA")
+        # paper_code <- course_structure.paper_code (if not provided)
+        # ind_max_marks <- course_structure.full_marks
+        # ind_pass_marks <- course_structure.pass_marks
+        label = request.data.get("label") or course_structure.status or "ESE"
+        if not paper_code:
+            paper_code = course_structure.paper_code
         exam_type = request.data.get("exam_type", "REGULAR")
-        semester = request.data.get("semester", exam.semester)
+        semester = request.data.get("semester") or course_structure.semester or exam.semester
         if semester:
             semester = normalize_semester(semester)
         
-        # Resolve course_structure if provided
-        course_structure = None
-        course_structure_uid = request.data.get("course_structure_uid")
-        if course_structure_uid:
-            course_structure = LLBCourseStructure.objects.filter(uid=course_structure_uid).first()
+        ind_max_marks = request.data.get("ind_max_marks") or course_structure.full_marks
+        ind_pass_marks = request.data.get("ind_pass_marks") or course_structure.pass_marks
         
         # Check for duplicate entry
         existing = LLBStudentCourseAssessment.objects.filter(
@@ -333,8 +392,8 @@ class LLBStudentCourseAssessmentCreateView(APIView):
             semester=semester,
             session=request.data.get("session", exam.session),
             college_code=request.data.get("college_code"),
-            ind_max_marks=request.data.get("ind_max_marks"),
-            ind_pass_marks=request.data.get("ind_pass_marks"),
+            ind_max_marks=ind_max_marks,
+            ind_pass_marks=ind_pass_marks,
             ind_marks_obtained=request.data.get("ind_marks_obtained"),
             ind_grace_obtained=request.data.get("ind_grace_obtained"),
             ind_is_absent=request.data.get("ind_is_absent", False),
@@ -362,6 +421,8 @@ class LLBStudentCourseAssessmentCreateView(APIView):
                     "exam_type": assessment.exam_type,
                     "ind_marks_obtained": assessment.ind_marks_obtained,
                     "ind_max_marks": assessment.ind_max_marks,
+                    "course_structure_mapped": str(assessment.course_structure.uid) if assessment.course_structure else None,
+                    "course_structure_name": assessment.course_structure.name if assessment.course_structure else None,
                 }
             },
             status=http_status.HTTP_201_CREATED
