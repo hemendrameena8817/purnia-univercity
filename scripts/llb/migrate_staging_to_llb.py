@@ -27,7 +27,7 @@ django.setup()
 from staging.models import StagingLLBResultCurrent
 from llb.models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile,
-    LLBCourseStructure, CommonCourseStructure, LLBExam, LLBStudentExamResult, LLBStudentCourseAssessment
+    LLBCourseStructure, CommonCourseStructure, LLBExam, LLBStudentCourseAssessment
 )
 from colleges.models import College
 
@@ -421,13 +421,8 @@ def migrate_data():
                 except:
                     total_marks = 0
                 
-                current_result = LLBStudentExamResult.objects.create(
-                    student=student,
-                    exam=exam,
-                    total_marks=total_marks,
-                    result_status=record.final_result or 'PENDING',
-                    grace=int(record.grace_chk) if record.grace_chk and record.grace_chk.isdigit() else None
-                )
+                # Skip creating LLBStudentExamResult as it doesn't exist
+                # We'll create assessments directly
                 
                 current_student_key = student_key
 
@@ -444,7 +439,7 @@ def migrate_data():
                 assessment_label = get_assessment_label(record.status)
                 
                 LLBStudentCourseAssessment.objects.create(
-                    exam_result=current_result,
+                    # exam_result=current_result,  # Removed as LLBStudentExamResult doesn't exist
                     student=student,
                     course=course,
                     course_structure=subject,
