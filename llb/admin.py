@@ -1,73 +1,192 @@
 from django.contrib import admin
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
-    LLBCourseStructure, CommonCourseStructure, LLBExam, LLBStudentExamResult, 
+    LLBCourseStructure, CommonCourseStructure, LLBExam, 
     LLBStudentCourseAssessment, LLBExamCenterMapping, 
     LLBExamSchedule, LLBYearRegistration, LLBExamRegistration
 )
 
 @admin.register(LLBCourse)
 class LLBCourseAdmin(admin.ModelAdmin):
-    list_display = ('name', 'duration_years')
+    list_display = ('uid', 'name', 'duration_years')
     search_fields = ('name',)
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('uid', 'name', 'duration_years')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBSession)
 class LLBSessionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'start_year', 'end_year', 'is_active')
+    list_display = ('uid', 'name', 'start_year', 'end_year', 'is_active')
     list_filter = ('is_active',)
+    fieldsets = (
+        ('Session Information', {
+            'fields': ('uid', 'name', 'start_year', 'end_year', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBBatch)
 class LLBBatchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_active')
+    list_display = ('uid', 'name', 'is_active')
     list_filter = ('is_active',)
     search_fields = ('name',)
+    fieldsets = (
+        ('Batch Information', {
+            'fields': ('uid', 'name', 'is_active')
+        }),
+    )
+    readonly_fields = ('uid',)
 
 @admin.register(LLBStudentProfile)
 class LLBStudentProfileAdmin(admin.ModelAdmin):
-    list_display = ('roll_no', 'registration_no', 'user', 'college', 'course', 'batch')
+    list_display = ('uid', 'roll_no', 'registration_no', 'user', 'college', 'course', 'batch')
     search_fields = ('roll_no', 'registration_no', 'user__first_name', 'user__last_name')
     list_filter = ('college', 'course', 'batch')
     raw_id_fields = ('user', 'college', 'course', 'batch')
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('uid', 'roll_no', 'registration_no', 'user')
+        }),
+        ('Academic Information', {
+            'fields': ('college', 'course', 'batch')
+        }),
+        ('Personal Details', {
+            'fields': ('father_name', 'mother_name', 'hindi_name', 'date_of_birth', 'gender', 'aadhar_no', 'category', 'status')
+        }),
+        ('Documents', {
+            'fields': ('profile_image', 'signature')
+        }),
+        ('Status', {
+            'fields': ('is_active',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBCourseStructure)
 class LLBCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'semester', 'status', 'full_marks', 'pass_marks')
+    list_display = ('uid', 'name', 'semester', 'status', 'full_marks', 'pass_marks')
     list_filter = ('semester', 'status')
     search_fields = ('name',)
+    fieldsets = (
+        ('Course Information', {
+            'fields': ('uid', 'name', 'semester', 'status', 'full_marks', 'pass_marks')
+        }),
+        ('Course Codes', {
+            'fields': ('course_code', 'paper_code', 'subject_code')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(CommonCourseStructure)
 class CommonCourseStructureAdmin(admin.ModelAdmin):
-    list_display = ('name', 'semester', 'course_code', 'full_marks', 'cia_max_marks', 'ese_max_marks')
+    list_display = ('uid', 'name', 'semester', 'course_code', 'full_marks', 'cia_max_marks', 'ese_max_marks')
     search_fields = ('name', 'course_code')
     list_filter = ('semester', 'course_code')
+    fieldsets = (
+        ('Course Information', {
+            'fields': ('uid', 'name', 'semester', 'course_code', 'full_marks', 'pass_marks')
+        }),
+        ('Course Codes', {
+            'fields': ('paper_code', 'subject_code')
+        }),
+        ('Marks Breakdown', {
+            'fields': ('cia_max_marks', 'ese_max_marks')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBExam)
 class LLBExamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'semester', 'session', 'batch', 'exam_month_year', 'publication_date')
+    list_display = ('uid', 'name', 'semester', 'session', 'batch', 'exam_month_year', 'publication_date')
     list_filter = ('semester', 'batch', 'session')
     search_fields = ('name', 'session')
     raw_id_fields = ('batch',)
-
-@admin.register(LLBStudentExamResult)
-class LLBStudentExamResultAdmin(admin.ModelAdmin):
-    list_display = ('student', 'exam', 'total_marks', 'result_status')
-    list_filter = ('exam', 'result_status')
-    search_fields = ('student__roll_no', 'student__user__first_name', 'student__user__last_name')
-    raw_id_fields = ('student', 'exam')
+    fieldsets = (
+        ('Exam Information', {
+            'fields': ('uid', 'name', 'semester', 'session', 'batch', 'exam_month_year', 'publication_date')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBStudentCourseAssessment)
 class LLBStudentCourseAssessmentAdmin(admin.ModelAdmin):
-    list_display = ('student', 'course', 'course_structure', 'label', 'semester', 'ind_marks_obtained', 'ind_is_pass')
+    list_display = ('uid', 'student', 'course', 'course_structure', 'label', 'semester', 'ind_marks_obtained', 'ind_is_pass')
     list_filter = ('label', 'semester', 'session', 'batch', 'exam_type')
     search_fields = ('student__roll_no', 'student__registration_no', 'course_structure__name', 'paper_code')
-    raw_id_fields = ('student', 'exam_result', 'exam', 'course', 'course_structure', 'batch')
-    list_select_related = ('student', 'exam_result', 'course', 'course_structure', 'batch')
+    raw_id_fields = ('student', 'exam', 'course', 'course_structure', 'batch')
+    list_select_related = ('student', 'course', 'course_structure', 'batch')
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('uid', 'student', 'course', 'course_structure', 'exam')
+        }),
+        ('Assessment Details', {
+            'fields': ('label', 'semester', 'session', 'batch', 'exam_type', 'paper_code', 'college_code')
+        }),
+        ('Individual Marks', {
+            'fields': ('ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass')
+        }),
+        ('Combined Marks', {
+            'fields': ('comb_max_marks', 'comb_pass_marks', 'comb_marks_obtained', 'comb_grace_obtained', 'comb_final_marks_obtained', 'comb_is_pass')
+        }),
+        ('Course Summary', {
+            'fields': ('course_max_marks', 'course_marks_obtained', 'course_final_marks_obtained')
+        }),
+        ('Result Status', {
+            'fields': ('subject_result', 'grade')
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBExamCenterMapping)
 class LLBExamCenterMappingAdmin(admin.ModelAdmin):
-    list_display = ('center', 'get_exams_count')
+    list_display = ('uid', 'center', 'get_exams_count')
     filter_horizontal = ('exams', 'attached_colleges')
     raw_id_fields = ('center',)
+    fieldsets = (
+        ('Mapping Information', {
+            'fields': ('uid', 'center', 'exams', 'attached_colleges')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
     
     def get_exams_count(self, obj):
         return obj.exams.count()
@@ -75,21 +194,59 @@ class LLBExamCenterMappingAdmin(admin.ModelAdmin):
 
 @admin.register(LLBExamSchedule)
 class LLBExamScheduleAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'subject', 'exam_date', 'exam_time', 'sitting')
+    list_display = ('uid', 'exam', 'subject', 'exam_date', 'exam_time', 'sitting')
     list_filter = ('exam', 'exam_date')
     search_fields = ('subject__name',)
     raw_id_fields = ('exam', 'subject')
+    fieldsets = (
+        ('Schedule Information', {
+            'fields': ('uid', 'exam', 'subject', 'exam_date', 'exam_time', 'sitting')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBYearRegistration)
 class LLBYearRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'year', 'session', 'is_open', 'exam_eligible', 'status')
+    list_display = ('uid', 'student', 'year', 'session', 'is_open', 'exam_eligible', 'status')
     list_filter = ('year', 'is_open', 'exam_eligible', 'status')
     search_fields = ('student__roll_no', 'student__registration_no')
     raw_id_fields = ('student',)
+    fieldsets = (
+        ('Registration Information', {
+            'fields': ('uid', 'student', 'year', 'session', 'is_open', 'exam_eligible', 'status')
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')
 
 @admin.register(LLBExamRegistration)
 class LLBExamRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('student', 'exam', 'exam_type', 'year', 'fees', 'status')
+    list_display = ('uid', 'student', 'exam', 'exam_type', 'year', 'fees', 'status')
     list_filter = ('exam_type', 'year', 'status')
     search_fields = ('student__roll_no', 'student__registration_no')
     raw_id_fields = ('student', 'exam')
+    fieldsets = (
+        ('Registration Information', {
+            'fields': ('uid', 'student', 'exam', 'exam_type', 'year', 'fees', 'status')
+        }),
+        ('Additional Data', {
+            'fields': ('json_data',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    readonly_fields = ('uid', 'created_at', 'updated_at')

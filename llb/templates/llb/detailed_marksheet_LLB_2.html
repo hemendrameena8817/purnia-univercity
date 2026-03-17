@@ -483,19 +483,17 @@
         </thead>
         <tbody>
           {% comment %} ESE (Theory) Section {% endcomment %}
-          {% for assessment in assessments %}
-          {% if assessment.course_structure.status == 'ESE' %}
+          {% for row in theory_rows %}
           <tr>
             <td class="text-left-subject">{{ forloop.counter }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.name|default:"-" }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.course_code|default:"-" }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.full_marks|default:0|floatformat:0 }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.pass_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ row.name|default:"-" }}</td>
+            <td class="text-left-subject">{{ row.course_code|default:"-" }}</td>
+            <td class="text-left-subject">{{ row.full_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ row.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ assessment.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+              <strong>{{ row.display_marks|default:0|floatformat:0 }}</strong>
             </td>
           </tr>
-          {% endif %}
           {% endfor %}
 
           {% comment %} Theory Total Row {% endcomment %}
@@ -512,20 +510,20 @@
           </tr>
 
           {% comment %} CIA (Practical) Section {% endcomment %}
-          {% for assessment in assessments %}
-          {% if assessment.course_structure.status == 'CIA' %}
+          {% with theory_count=theory_rows|length %}
+          {% for row in practical_rows %}
           <tr>
-            <td class="text-left-subject">{{ forloop.counter }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.name|default:"-" }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.course_code|default:"-" }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.full_marks|default:0|floatformat:0 }}</td>
-            <td class="text-left-subject">{{ assessment.course_structure.pass_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ forloop.counter|add:theory_count }}</td>
+            <td class="text-left-subject">{{ row.name|default:"-" }}</td>
+            <td class="text-left-subject">{{ row.course_code|default:"-" }}</td>
+            <td class="text-left-subject">{{ row.full_marks|default:0|floatformat:0 }}</td>
+            <td class="text-left-subject">{{ row.pass_marks|default:0|floatformat:0 }}</td>
             <td class="text-left-subject">
-              <strong>{{ assessment.ind_marks_obtained|default:0|floatformat:0 }}</strong>
+              <strong>{{ row.display_marks|default:0|floatformat:0 }}</strong>
             </td>
           </tr>
-          {% endif %}
           {% endfor %}
+          {% endwith %}
 
           {% comment %} Practical Total Row {% endcomment %}
           <tr class="aggregate-row">
@@ -534,7 +532,7 @@
             </td>
             <td class="text-left-subject">&nbsp;</td>
             <td style="margin-left: 10px"><strong>{{ cia_full_marks|default:0|floatformat:0 }}</strong></td>
-            <td class="text-left-subject">&nbsp;</td>
+            <td class="text-left-subject"><strong>{{ cia_pass_marks|default:0|floatformat:0 }}</strong></td>
             <td>
               <strong>{{ cia_obtained_marks|default:0|floatformat:0 }}</strong>
             </td>
@@ -565,11 +563,11 @@
       <div class="publication-date">
         <div>
           Date of
-          Publication&nbsp;&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
+          Publication&nbsp;:&nbsp;<strong>{{ result.exam.publication_date|date:"d-m-Y" }}</strong>
         </div>
         <div class="">
           Date of
-          Issue&nbsp;&nbsp;<strong>{% now "d-m-Y" %}</strong>
+          Issue&nbsp;:
         </div>
       </div>
 

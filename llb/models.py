@@ -134,33 +134,6 @@ class LLBExam(models.Model):
     def __str__(self):
         return self.name
 
-class LLBStudentExamResult(models.Model):
-    """Exam result summary for LLB students"""
-    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    student = models.ForeignKey(
-        LLBStudentProfile,
-        on_delete=models.CASCADE,
-        related_name='exam_results'
-    )
-
-    exam = models.ForeignKey(
-        LLBExam,
-        on_delete=models.CASCADE,
-        related_name='exam_results'
-    )
-
-    total_marks = models.PositiveIntegerField(default=0)
-    grace = models.PositiveIntegerField(null=True, blank=True)
-    result_status = models.CharField(
-        max_length=500,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.student.roll_no} - {self.exam.name}"
-
 class LLBStudentCourseAssessment(models.Model):
     """
     Detailed marks per subject and assessment label for LLB (following MCA pattern).
@@ -192,13 +165,6 @@ class LLBStudentCourseAssessment(models.Model):
         null=True, 
         blank=True
     )
-    exam_result = models.ForeignKey(
-        LLBStudentExamResult, 
-        on_delete=models.CASCADE, 
-        related_name='student_assessments_result',
-        null=True, 
-        blank=True
-    )
     label = models.CharField(max_length=200, db_index=True, help_text="Assessment label (e.g., CIA, ESE, CIA-Theory)")
     semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester of the assessment, e.g., '1', '2'")
     session = models.CharField(max_length=10, null=True, blank=True, db_index=True, help_text="Session")
@@ -217,7 +183,7 @@ class LLBStudentCourseAssessment(models.Model):
     ind_max_marks = models.IntegerField(null=True, blank=True, help_text="Individual MAX MARKS")
     ind_pass_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual PASS MARKS")
     ind_is_absent = models.BooleanField(default=False, db_index=True, help_text="Is Absent")
-    ind_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual MARKS OBTAINED")
+    ind_marks_obtained = models.CharField(max_length=10, null=True, blank=True, help_text="Individual MARKS OBTAINED (numeric or 'AB' for absent)")
     ind_grace_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual GRACE MARKS OBTAINED")
     ind_final_marks_obtained = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Individual FINAL MARKS OBTAINED")
     ind_is_pass = models.BooleanField(null=True, blank=True, help_text="Is Pass")
@@ -254,15 +220,32 @@ class LLBStudentCourseAssessment(models.Model):
         ]
         
     def save(self, *args, **kwargs):
+        # Skip marks validation if marks_obtained is not numeric (e.g., 'AB' for absent)
         if self.ind_marks_obtained is not None and self.ind_max_marks is not None:
-            if self.ind_marks_obtained > self.ind_max_marks:
-                raise ValueError(f"Marks ({self.ind_marks_obtained}) > Max ({self.ind_max_marks})")
+            try:
+                marks_numeric = float(self.ind_marks_obtained)
+                max_marks_numeric = float(self.ind_max_marks)
+                if marks_numeric > max_marks_numeric:
+                    raise ValueError(f"Marks ({self.ind_marks_obtained}) > Max ({self.ind_max_marks})")
+            except (ValueError, TypeError):
+                # If marks_obtained is not numeric (like 'AB'), skip the comparison
+                pass
         
         # Calculate pass status including grace marks
         if self.ind_marks_obtained is not None and self.ind_pass_marks is not None:
-            grace = self.ind_grace_obtained or 0
-            total_for_pass = self.ind_marks_obtained + grace
-            self.ind_is_pass = total_for_pass >= self.ind_pass_marks if not self.ind_is_absent else False
+            try:
+                grace = self.ind_grace_obtained or 0
+                # Handle non-numeric marks by treating them as 0 for pass calculation
+                try:
+                    marks_for_pass = float(self.ind_marks_obtained)
+                except (ValueError, TypeError):
+                    marks_for_pass = 0
+                
+                total_for_pass = marks_for_pass + grace
+                self.ind_is_pass = total_for_pass >= self.ind_pass_marks if not self.ind_is_absent else False
+            except (ValueError, TypeError):
+                # If any calculation fails, set pass status based on absence
+                self.ind_is_pass = False if self.ind_is_absent else None
             
         super().save(*args, **kwargs)
         
