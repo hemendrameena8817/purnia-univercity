@@ -130,14 +130,13 @@ def get_llb_latest_assessments(student, semester, session=None):
     Combines ALL papers (REGULAR + BACK), with the latest session taking
     precedence for duplicate (paper_code, label) pairs.
     
-    Similar to get_ug_old_ba_hons_part1_latest_context in ug_before_cbcs.
-    
     Args:
         student: LLBStudentProfile instance
         semester: Semester code (e.g., '1ST', '2ND', '3RD')
         session: Optional specific session filter (e.g., '2022-23').
-                 If provided, only returns assessments from that session.
-                 If None, returns latest consolidated across all sessions.
+                 If provided, tries to use data from that session
+                 If papers are missing in that session, falls back to data from EARLIER sessions only
+                 Never uses papers from sessions newer than the requested session
     
     Returns:
         tuple: (assessments_list, exam) or (None, None) if no data found
@@ -149,42 +148,49 @@ def get_llb_latest_assessments(student, semester, session=None):
         exam__isnull=True
     ).order_by('exam__session', 'paper_code')
     
-    if session:
-        # Filter to specific session only
-        all_assessments = all_assessments.filter(exam__session=session)
-    
     if not all_assessments.exists():
         logger.warning(f"No assessments found for {student.registration_no} / {semester}" +
                        (f" / session={session}" if session else ""))
         return None, None
     
-    if session:
-        # Specific session - return as-is
-        assessments_list = list(all_assessments)
-        exam = assessments_list[0].exam if assessments_list else None
-        return assessments_list, exam
-    
-    # Latest consolidation: for duplicate (paper_code, label), keep latest session
-    latest_papers = {}  # key: (paper_code, label) -> assessment
+    # Build a map with latest session_code taking precedence
+    # Key: (paper_code, label), Value: assessment object
+    latest_papers = {}
     latest_exam = None
     
     for assessment in all_assessments:
         key = (assessment.paper_code, assessment.label)
+        result_session = assessment.exam.session if assessment.exam else ''
         
-        if key in latest_papers:
-            existing = latest_papers[key]
-            existing_session = existing.exam.session if existing.exam else ''
-            current_session = assessment.exam.session if assessment.exam else ''
-            
-            # Keep the one with the later session
-            if current_session > existing_session:
+        # If session is specified, prioritize papers from that session and earlier
+        if session:
+            # If we want papers from a specific session, only use those from that session or earlier
+            if result_session == session:
                 latest_papers[key] = assessment
-                logger.info(
-                    f"Override: {assessment.paper_code} {assessment.label} "
-                    f"- {existing_session} → {current_session}"
-                )
+                logger.debug(f"Using {assessment.paper_code} from requested session {session}")
+            elif key not in latest_papers and result_session <= session:
+                # Only use earlier sessions if the paper is not available in the requested session
+                latest_papers[key] = assessment
+                logger.debug(f"Using {assessment.paper_code} from earlier session {result_session} (not available in {session})")
+            elif key not in latest_papers and result_session > session:
+                # Don't use papers from newer sessions than requested
+                logger.debug(f"Skipping {assessment.paper_code} from newer session {result_session} (requested: {session})")
         else:
-            latest_papers[key] = assessment
+            # No session specified - use latest logic
+            if key in latest_papers:
+                existing = latest_papers[key]
+                existing_session = existing.exam.session if existing.exam else ''
+                current_session = result_session
+                
+                # Keep the one with the later session
+                if current_session > existing_session:
+                    latest_papers[key] = assessment
+                    logger.info(
+                        f"Override: {assessment.paper_code} {assessment.label} "
+                        f"- {existing_session} → {current_session}"
+                    )
+            else:
+                latest_papers[key] = assessment
         
         # Track the latest exam (for exam metadata on the PDF)
         if assessment.exam:

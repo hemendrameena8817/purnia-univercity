@@ -895,7 +895,8 @@ class LLBMarksheetUpdateView(APIView):
                     assessment_obj = assessments.filter(paper_code=paper_code).first()
             
             if assessment_obj:
-                obtained = mark_item.get("obtained_marks")
+                # Support both "obtained" (ug_before_cbcs pattern) and "obtained_marks" (LLB pattern)
+                obtained = mark_item.get("obtained") or mark_item.get("obtained_marks")
                 if obtained is not None:
                     # Validation: obtained <= max marks
                     max_marks = assessment_obj.ind_max_marks or (
@@ -903,24 +904,43 @@ class LLBMarksheetUpdateView(APIView):
                     )
                     if max_marks:
                         try:
-                            obt_val = float(str(obtained))
-                            max_val = float(str(max_marks))
-                            if obt_val > max_val:
-                                return Response(
-                                    {"error": f"Mark {obt_val} for {assessment_obj.paper_code} exceeds maximum {max_val}"},
-                                    status=http_status.HTTP_400_BAD_REQUEST
-                                )
+                            # Convert to float for comparison, handle digits or decimal strings
+                            max_mark_str = str(max_marks)
+                            obt_str = str(obtained)
+                            
+                            # Only validate numerically if both can be converted
+                            if obt_str.replace('.', '', 1).isdigit() and max_mark_str.replace('.', '', 1).isdigit():
+                                obt_val = float(obt_str)
+                                max_val = float(max_mark_str)
+                                
+                                if obt_val > max_val:
+                                    return Response(
+                                        {"error": f"Mark {obt_val} for {assessment_obj.paper_code} exceeds maximum mark {max_val}"},
+                                        status=http_status.HTTP_400_BAD_REQUEST
+                                    )
                         except (ValueError, TypeError):
+                            # If conversion fails (e.g. 'AB'), skip numerical validation
                             pass
                     
                     assessment_obj.ind_marks_obtained = obtained
+                
+                # Support both "status" (ug_before_cbcs pattern) and "ind_is_absent" (LLB pattern)
+                if "status" in mark_item:
+                    # Convert status to ind_is_absent if it's "AB" or similar
+                    status_val = mark_item["status"]
+                    if status_val == "AB" or status_val == "ABSENT":
+                        assessment_obj.ind_is_absent = True
+                        assessment_obj.ind_marks_obtained = "AB"
+                    else:
+                        assessment_obj.ind_is_absent = False
+                
+                if "ind_is_absent" in mark_item:
+                    assessment_obj.ind_is_absent = mark_item["ind_is_absent"]
                 
                 if "subject_result" in mark_item:
                     assessment_obj.subject_result = mark_item["subject_result"]
                 if "grade" in mark_item:
                     assessment_obj.grade = mark_item["grade"]
-                if "ind_is_absent" in mark_item:
-                    assessment_obj.ind_is_absent = mark_item["ind_is_absent"]
                 if "ind_grace_obtained" in mark_item:
                     assessment_obj.ind_grace_obtained = mark_item["ind_grace_obtained"]
                 
