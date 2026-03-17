@@ -1561,7 +1561,8 @@ class PGStudentAttendanceListView(APIView):
         student_assessments = PGStudentCourseAssessment.objects.filter(
             student_id__in=registered_student_ids,
             course_code__in=relevant_paper_codes,
-            label__iregex=r'^ESE'
+            label__iregex=r'^ESE',
+            session=active_exam.session,
         ).select_related('student').order_by(
             'student__roll_no', 'student__registration_no'
         )
