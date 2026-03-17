@@ -52,16 +52,14 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, course_code=None, batch_code=None, custom_results=None):
+def get_ug_old_ba_hons_part1_context(student, exam_part='1', course_code=None, custom_results=None):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons Part 1 marksheet.
     
     Args:
         student: UGBeforeCBCSStudentProfile instance
         exam_part: Part number as string ('1', '2', or '3')
-        exam_type: Optional exam type filter (REGULAR, BACK)
         course_code: Optional course code filter
-        batch_code: Optional batch code filter
         custom_results: Optional list of pre-filtered results to use instead of querying
     
     Returns:
@@ -79,21 +77,15 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         first_result = results[0]
         exam = first_result.exam
     else:
-        # 1. Get student results for this part, filtering by exam_type if provided
+        # Get all student results for this part
         results_query = UGBeforeCBCSStudentResult.objects.filter(
             student=student,
             exam__part=part_code
         )
-        
-        if exam_type:
-            results_query = results_query.filter(exam_type__iexact=exam_type)
             
         if course_code:
             results_query = results_query.filter(exam__course_code__iexact=course_code)
-            
-        if batch_code:
-            results_query = results_query.filter(exam__batch_code=batch_code)
-            
+                
         first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
 
         if not first_result:
@@ -248,6 +240,19 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
         final_composition_papers.append(p)
     composition_papers = final_composition_papers
 
+    # Get honours subject name to check for Music special case
+    honours_subject_name = None
+    for sub in subjects_map.values():
+        if sub['type'] == 'honours':
+            honours_subject_name = sub['name']
+            break
+            
+    if not honours_subject_name:
+        if student.discipline_code:
+            honours_subject_name = student.discipline_code
+        else:
+            honours_subject_name = "Honours"
+
     # Organize and rename Honours papers
     is_honours_with_practical = False
     organized_honours = []
@@ -259,47 +264,148 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     has_hons_practical = any(p['status'] == 'LAB' for p in honours_papers)
     is_honours_with_practical = has_hons_practical
 
-    # Determine paper codes based on Course and Part (e.g. BSC101, BA201)
-    specific_hons_code = f"{course_code.upper()}{exam_part}01" if course_code else None
-    generic_hons_suffix = f"{exam_part}01"
-
-    # Determine paper names based on part
-    p1_name = 'Paper-I' if str(exam_part) == '1' else 'Paper-III'
-    p2_name = 'Paper-II' if str(exam_part) == '1' else 'Paper-IV'
-
-    for p in honours_papers:
-        # Check for specific Course code or fallback to numeric suffix
-        is_hons_paper = (specific_hons_code and specific_hons_code in p['paper_code']) or \
-                        (not specific_hons_code and generic_hons_suffix in p['paper_code']) or \
-                        p['paper_code'].endswith(generic_hons_suffix)
-
-        if is_hons_paper:
-            if p['status'] == 'END_TERM':
-                paper1 = p
-                paper1['name'] = p1_name
-                if has_hons_practical:
-                    paper1['max_marks'] = 75
-                    paper1['pass_marks'] = 33 
-            elif p['status'] == 'END2_TERM':
-                paper2 = p
-                paper2['name'] = p2_name
-                if has_hons_practical:
-                    paper2['max_marks'] = 75
-            elif p['status'] == 'LAB':
-                practical = p
-                practical['name'] = 'Practical'
-                if has_hons_practical:
-                    practical['max_marks'] = 50
-                    practical['pass_marks'] = 23
-        else:
-            organized_honours.append(p)
-
-    # Add in specific order
-    if paper1: organized_honours.append(paper1)
-    if paper2: organized_honours.append(paper2)
-    if practical: organized_honours.append(practical)
+    # Check if this is Music subject (case-insensitive)
+    is_music_subject = honours_subject_name and 'MUSIC' in honours_subject_name.upper()
     
-    honours_papers = organized_honours
+    # Check if this is BSC Chemistry Part-I (special case)
+    is_bsc_chemistry_part1 = (
+        course_code and 'BSC' in course_code.upper() and 
+        honours_subject_name and 'CHEMISTRY' in honours_subject_name.upper() and
+        str(exam_part) == '1'
+    )
+    
+    print(f"DEBUG: is_bsc_chemistry_part1={is_bsc_chemistry_part1}")
+    print(f"DEBUG: has_hons_practical={has_hons_practical}")
+    print(f"DEBUG: honours_papers count={len(honours_papers)}")
+    print(f"DEBUG: honours_papers statuses: {[p['status'] for p in honours_papers]}")
+
+    # Special handling for Music subject: 
+    # Music has only 1 END_TERM (100 marks) + 1 LAB (100 marks)
+    # Should show as separate rows: Paper-I + Practical (no Paper-II)
+    if is_music_subject and has_hons_practical:
+        print("DEBUG: Entering Music logic...")
+        # For Music: keep END_TERM and LAB separate but adjust max marks and names
+        end_term_paper = next((p for p in honours_papers if p['status'] == 'END_TERM'), None)
+        lab_paper = next((p for p in honours_papers if p['status'] == 'LAB'), None)
+        
+        if end_term_paper and lab_paper:
+            # Update END_TERM paper to be Paper-I with 100 marks
+            end_term_paper['name'] = 'Paper-I' if str(exam_part) == '1' else 'Paper-II'
+            end_term_paper['max_marks'] = 100
+            end_term_paper['pass_marks'] = 40  # 40% of 100
+            
+            # Update LAB paper to be Practical with 100 marks
+            lab_paper['name'] = 'Practical'
+            lab_paper['max_marks'] = 100
+            lab_paper['pass_marks'] = 40  # 40% of 100
+            
+            # Calculate totals (100 + 100 = 200)
+            hons_total_obt = 0
+            hons_total_max = 200
+            
+            if isinstance(end_term_paper['obtained'], (int, float)):
+                hons_total_obt += end_term_paper['obtained']
+            if isinstance(lab_paper['obtained'], (int, float)):
+                hons_total_obt += lab_paper['obtained']
+            
+            # Keep papers separate (don't combine)
+            organized_honours = [end_term_paper, lab_paper]
+            honours_papers = organized_honours
+        else:
+            # Fallback to regular processing if papers missing
+            pass
+
+    # Special handling for BSC Chemistry Part-I:
+    # BSC Chemistry has 3 END_TERM papers (END_TERM, END2_TERM, END3_TERM) + 1 LAB paper
+    # All papers have 50 marks each
+    elif is_bsc_chemistry_part1 and has_hons_practical:
+        print("DEBUG: Entering BSC Chemistry logic...")
+        # Get all END_TERM, END2_TERM, END3_TERM papers for Chemistry
+        end_term_papers = [p for p in honours_papers if p['status'] in ['END_TERM', 'END2_TERM', 'END3_TERM']]
+        lab_paper = next((p for p in honours_papers if p['status'] == 'LAB'), None)
+        
+        print(f"DEBUG: Found {len(end_term_papers)} theory papers and 1 lab paper: {lab_paper is not None}")
+        
+        if len(end_term_papers) == 3 and lab_paper:
+            # Sort END_TERM papers by status to ensure consistent ordering
+            status_order = {'END_TERM': 0, 'END2_TERM': 1, 'END3_TERM': 2}
+            end_term_papers.sort(key=lambda x: status_order.get(x['status'], 999))
+            
+            # Name them as I A, I B, I C
+            paper_names = ['I A', 'I B', 'I C']
+            for i, paper in enumerate(end_term_papers):
+                paper['name'] = paper_names[i]
+                paper['max_marks'] = 50
+                paper['pass_marks'] = 20  # 40% of 50
+            
+            # Update LAB paper
+            lab_paper['name'] = 'Practical'
+            lab_paper['max_marks'] = 50
+            lab_paper['pass_marks'] = 20  # 40% of 50
+            
+            # Calculate totals (50*3 + 50 = 200)
+            hons_total_obt = 0
+            hons_total_max = 200
+            
+            for paper in end_term_papers:
+                if isinstance(paper['obtained'], (int, float)):
+                    hons_total_obt += paper['obtained']
+            
+            if isinstance(lab_paper['obtained'], (int, float)):
+                hons_total_obt += lab_paper['obtained']
+            
+            # Keep all 4 papers separate
+            organized_honours = end_term_papers + [lab_paper]
+            honours_papers = organized_honours
+            print("DEBUG: BSC Chemistry processing completed!")
+        else:
+            print(f"DEBUG: BSC Chemistry fallback - end_term_papers: {len(end_term_papers)}, lab_paper: {lab_paper is not None}")
+    else:
+        print(f"DEBUG: Not entering special logic - is_bsc_chemistry_part1={is_bsc_chemistry_part1}, has_hons_practical={has_hons_practical}")
+
+    # Regular processing for non-special subjects or fallback
+    if not is_music_subject and not is_bsc_chemistry_part1:
+        # Determine paper codes based on Course and Part (e.g. BSC101, BA201)
+        specific_hons_code = f"{course_code.upper()}{exam_part}01" if course_code else None
+        generic_hons_suffix = f"{exam_part}01"
+
+        # Determine paper names based on part
+        p1_name = 'Paper-I' if str(exam_part) == '1' else 'Paper-III'
+        p2_name = 'Paper-II' if str(exam_part) == '1' else 'Paper-IV'
+
+        for p in honours_papers:
+            # Check for specific Course code or fallback to numeric suffix
+            is_hons_paper = (specific_hons_code and specific_hons_code in p['paper_code']) or \
+                            (not specific_hons_code and generic_hons_suffix in p['paper_code']) or \
+                            p['paper_code'].endswith(generic_hons_suffix)
+
+            if is_hons_paper:
+                if p['status'] == 'END_TERM':
+                    paper1 = p
+                    paper1['name'] = p1_name
+                    if has_hons_practical:
+                        paper1['max_marks'] = 75
+                        paper1['pass_marks'] = 33 
+                elif p['status'] == 'END2_TERM':
+                    paper2 = p
+                    paper2['name'] = p2_name
+                    if has_hons_practical:
+                        paper2['max_marks'] = 75
+                elif p['status'] == 'LAB':
+                    practical = p
+                    practical['name'] = 'Practical'
+                    if has_hons_practical:
+                        practical['max_marks'] = 50
+                        practical['pass_marks'] = 23
+            else:
+                organized_honours.append(p)
+
+        # Add in specific order
+        if paper1: organized_honours.append(paper1)
+        if paper2: organized_honours.append(paper2)
+        if practical: organized_honours.append(practical)
+        
+        honours_papers = organized_honours
 
     # Explicitly assign Subsidiaries by type or fallback order
     sub1 = next((s for s in subjects_map.values() if s['type'] == 'subsidiary_1'), None)
@@ -361,19 +467,6 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
     
     gs_total_obt = sum_marks(general_studies_papers)
     gs_total_max = sum_max(general_studies_papers)
-
-    # Get full honours subject name from the map
-    honours_subject_name = None
-    for sub in subjects_map.values():
-        if sub['type'] == 'honours':
-            honours_subject_name = sub['name']
-            break
-            
-    if not honours_subject_name:
-        if student.discipline_code:
-            honours_subject_name = student.discipline_code
-        else:
-            honours_subject_name = "Honours"
 
     # Calculate Grand Total Marks
     calculated_grand_total = hons_total_obt + comp_total_obt + gs_total_obt
@@ -478,38 +571,39 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', exam_type=None, cou
 
     return context
 
-def generate_ug_old_ba_hons_part1_pdf(student, exam_part='1', exam_type=None, course_code=None, batch_code=None):
+def get_bsc_chemistry_part1_context(student, exam_part=None, course_code=None, session_code=None):
     """
-    Generate marksheet PDF for UG Before CBCS student Part 1.
-    Only generates PDF if validation passes.
-    
-    Returns:
-        tuple: (pdf_content: bytes or None, error_message: str or None)
+    Special context generator for BSC Chemistry Part-I with 4 papers (I A, I B, I C, Practical)
     """
-    context = get_ug_old_ba_hons_part1_context(student, exam_part, exam_type, course_code, batch_code)
+    logger.info(f"Generating BSC Chemistry Part-I context for {student.registration_no}")
     
-    if not context:
-        return None, "No results found for this student and exam part"
+    # Get the consolidated context first (without session_code since the base function doesn't support it)
+    context = get_ug_old_ba_hons_part1_context(
+        student, exam_part=exam_part, course_code=course_code
+    )
     
-    # Validate before generating PDF
-    is_valid, error_messages = validate_marksheet_context(student, exam_part, context, exam_type, course_code, batch_code)
-    if not is_valid:
-        error_detail = "; ".join(error_messages)
-        logger.error(f"Marksheet validation failed for {student.registration_no} (Part {exam_part}): {error_detail}")
-        return None, error_detail
-
-    template_name = f"ug_before_cbcs/ba_hons_marksheet_part1.html"
+    # Override the template name for BSC Chemistry Part-I
+    context['template_name'] = 'ug_before_cbcs/bsc_chemistry_part1_marksheet.html'
     
-    html_string = get_template(template_name).render(context)
+    # Ensure the honours papers are correctly ordered for Chemistry
+    if 'subjects' in context and 'honours' in context['subjects']:
+        honours_papers = context['subjects']['honours']['papers']
+        
+        # Sort papers by status: END_TERM, END2_TERM, END3_TERM, LAB
+        status_order = {'END_TERM': 0, 'END2_TERM': 1, 'END3_TERM': 2, 'LAB': 3}
+        honours_papers.sort(key=lambda x: status_order.get(x.get('status', ''), 999))
+        
+        # Update paper names to match the expected format
+        paper_names = ['I A', 'I B', 'I C', 'Practical']
+        for i, paper in enumerate(honours_papers):
+            if i < len(paper_names):
+                paper['name'] = paper_names[i]
+                paper['max_marks'] = 50
+                paper['pass_marks'] = 20  # 40% of 50
+        
+        logger.info(f"Processed {len(honours_papers)} BSC Chemistry papers")
     
-    try:
-        pdf_file = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
-        return pdf_file, None
-    except Exception as e:
-        error_msg = f"PDF generation error: {str(e)}"
-        print("PDF ERROR:", error_msg) 
-        logger.error(f"Error generating PDF: {e}")
-        return None, error_msg
+    return context
 
 def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=None, session_code=None):
     """
@@ -521,6 +615,9 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
         exam_part: Part number as string ('1', '2', or '3')
         course_code: Optional course code filter
         session_code: Optional specific session code filter
+            - If provided, tries to use data from that session
+            - If papers are missing in that session, falls back to data from EARLIER sessions only
+            - Never uses papers from sessions newer than the requested session_code
     
     Returns:
         Context dictionary for marksheet generation
@@ -536,9 +633,6 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
     if course_code:
         all_results = all_results.filter(exam__course_code__iexact=course_code)
     
-    if session_code:
-        all_results = all_results.filter(exam__session_code=session_code)
-    
     all_results = all_results.select_related('exam').order_by('exam__session_code')
     
     if not all_results.exists():
@@ -551,27 +645,39 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
     
     for result in all_results:
         key = (result.paper_code, result.status)
+        result_session = result.exam.session_code if result.exam else ''
         
-        # If key exists, compare session_codes and keep the latest
-        if key in latest_papers:
-            existing_session = latest_papers[key].exam.session_code if latest_papers[key].exam else ''
-            current_session = result.exam.session_code if result.exam else ''
-            
-            # Keep the one with the later session_code
-            if current_session > existing_session:
+        # If session_code is specified, prioritize papers from that session and earlier
+        if session_code:
+            # If we want papers from a specific session, only use those from that session or earlier
+            if result_session == session_code:
                 latest_papers[key] = result
-                logger.info(f"Override: {result.paper_code} {result.status} - {existing_session} → {current_session}")
+                logger.debug(f"Using {result.paper_code} from requested session {session_code}")
+            elif key not in latest_papers and result_session <= session_code:
+                # Only use earlier sessions if the paper is not available in the requested session
+                latest_papers[key] = result
+                logger.debug(f"Using {result.paper_code} from earlier session {result_session} (not available in {session_code})")
+            elif key not in latest_papers and result_session > session_code:
+                # Don't use papers from newer sessions than requested
+                logger.debug(f"Skipping {result.paper_code} from newer session {result_session} (requested: {session_code})")
         else:
-            latest_papers[key] = result
+            # No session specified - use latest logic
+            if key in latest_papers:
+                existing_session = latest_papers[key].exam.session_code if latest_papers[key].exam else ''
+                
+                # Keep the one with the later session_code
+                if result_session > existing_session:
+                    latest_papers[key] = result
+                    logger.info(f"Override: {result.paper_code} {result.status} - {existing_session} → {result_session}")
+            else:
+                latest_papers[key] = result
     
     # Now use the existing context function with these filtered results
     # We'll pass the results as a custom queryset
     return get_ug_old_ba_hons_part1_context(
         student, 
         exam_part=exam_part, 
-        exam_type=None,  # Don't filter by exam_type
-        course_code=course_code, 
-        batch_code=None,
+        course_code=course_code,
         custom_results=list(latest_papers.values())
     )
 
