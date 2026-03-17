@@ -303,7 +303,6 @@ class LLBStudentCourseAssessmentCreateView(APIView):
         registration_no = request.data.get("registration_no")
         roll_no = request.data.get("roll_no")
         exam_uid = request.data.get("exam_uid")
-        paper_code = request.data.get("paper_code")
         
         if not (registration_no or roll_no):
             return Response(
@@ -314,12 +313,6 @@ class LLBStudentCourseAssessmentCreateView(APIView):
         if not exam_uid:
             return Response(
                 {"error": "exam_uid is required"},
-                status=http_status.HTTP_400_BAD_REQUEST
-            )
-        
-        if not paper_code:
-            return Response(
-                {"error": "paper_code is required"},
                 status=http_status.HTTP_400_BAD_REQUEST
             )
         
