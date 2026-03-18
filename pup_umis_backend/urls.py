@@ -69,6 +69,8 @@ urlpatterns = [
     path('api/captcha/', CaptchaView.as_view(), name='common-captcha'),
     path('api/app-options/', CommonOptionsView.as_view(), name='app-options'),
     path('api/mba_sem/', include('mba_sem.urls')),
+    path('api/bba_year/', include('bba_year.urls')),
+    path('api/bca_hons_year/', include('bca_hons_year.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
