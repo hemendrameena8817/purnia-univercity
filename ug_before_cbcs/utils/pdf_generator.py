@@ -77,14 +77,19 @@ def _normalize_mark(value):
 
 def _get_pass_marks(paper, subject_key):
     """Fetch pass marks for a paper with sensible fallbacks."""
+    # Composition papers always use fixed thresholds (15 for 50-mark papers, otherwise 33)
+    if subject_key == 'composition':
+        max_marks = _normalize_mark(paper.get('max_marks'))
+        if max_marks is not None and max_marks <= 50:
+            return 15.0
+        return 33.0
+
     pass_mark = paper.get('pass_marks')
     normalized = _normalize_mark(pass_mark)
     if normalized is not None:
         return normalized
 
     # Fallbacks when individual pass marks are unavailable
-    if subject_key == 'composition':
-        return 33.0
     max_marks = _normalize_mark(paper.get('max_marks'))
     if max_marks is not None:
         return max_marks * 0.33
