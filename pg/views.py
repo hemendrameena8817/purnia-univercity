@@ -1806,7 +1806,10 @@ class PGAttendanceCountView(APIView):
 
         if center_uid:
             center = get_object_or_404(PGExamCenterMapping, uid=center_uid)
-            registration_qs = registration_qs.filter(center=center)
+            # Filter registrations where student's college is attached to this center for this exam
+            registration_qs = registration_qs.filter(
+                student__college__in=center.attached_colleges.all()
+            )
 
         if semester_filter:
             try:
