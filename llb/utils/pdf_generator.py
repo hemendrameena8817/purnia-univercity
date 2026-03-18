@@ -105,7 +105,10 @@ def build_semester2_display_rows(assessments):
             if isinstance(assessment_display, str) and assessment_display == 'AB':
                 combined_map[course_code]['display_marks'] = 'AB'
             elif current_display != 'AB':
-                combined_map[course_code]['display_marks'] = safe_marks_to_int(assessment.ind_marks_obtained)
+                combined_map[course_code]['display_marks'] = (
+                    current_display + safe_marks_to_int(assessment.ind_marks_obtained)
+                    if isinstance(current_display, (int, float)) else safe_marks_to_int(assessment.ind_marks_obtained)
+                )
             continue
 
         row = {
