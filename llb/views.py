@@ -477,7 +477,14 @@ class LLBResultPDFView(View):
         exam_type = request.GET.get('type', None)
         session_param = request.GET.get('session', None)
         
-        student = get_object_or_404(LLBStudentProfile, registration_no=registration_no)
+        # Try to find student by registration_no first, then by roll_no
+        try:
+            student = LLBStudentProfile.objects.get(registration_no=registration_no)
+        except LLBStudentProfile.DoesNotExist:
+            try:
+                student = LLBStudentProfile.objects.get(roll_no=registration_no)
+            except LLBStudentProfile.DoesNotExist:
+                raise Http404(f"No student found with registration_no or roll_no: {registration_no}")
         
         # Priority: session > type > default (latest consolidated)
         if session_param or not exam_type:
