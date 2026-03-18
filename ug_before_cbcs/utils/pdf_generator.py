@@ -52,7 +52,138 @@ def num2words(num):
         
     return " ".join(words)
 
-def get_ug_old_ba_hons_part1_context(student, exam_part='1', course_code=None, custom_results=None):
+def has_back_papers(results):
+    """
+    Check if any of the given results contain BACK exam papers.
+    
+    Args:
+        results: List of UGBeforeCBCSStudentResult objects
+    
+    Returns:
+        bool: True if any BACK papers are found
+    """
+    return any(result.exam_type and result.exam_type.upper() == 'BACK' for result in results)
+
+
+def _normalize_mark(value):
+    """Convert mark to float when possible, otherwise return None."""
+    if isinstance(value, (int, float, Decimal)):
+        return float(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_pass_marks(paper, subject_key):
+    """Fetch pass marks for a paper with sensible fallbacks."""
+    pass_mark = paper.get('pass_marks')
+    normalized = _normalize_mark(pass_mark)
+    if normalized is not None:
+        return normalized
+
+    # Fallbacks when individual pass marks are unavailable
+    if subject_key == 'composition':
+        return 33.0
+    max_marks = _normalize_mark(paper.get('max_marks'))
+    if max_marks is not None:
+        return max_marks * 0.33
+    return 0.0
+
+
+def calculate_back_subject_summary(subjects, session_code=None):
+    """
+    Determine BACK subject status across Honours, Subsidiaries, and Composition.
+    Returns a dictionary with totals and final qualification status.
+    """
+    if not subjects:
+        return {
+            'subjects': [],
+            'total': 0,
+            'passed': 0,
+            'failed': 0,
+            'result': None,
+        }
+
+    summary = []
+    subject_order = ['honours', 'subsidiary_1', 'subsidiary_2', 'composition']
+
+    for subject_key in subject_order:
+        subject_data = subjects.get(subject_key)
+        if not subject_data:
+            continue
+
+        papers = subject_data.get('papers', [])
+        back_papers = []
+        for paper in papers:
+            if (paper.get('exam_type', '').upper() != 'BACK'):
+                continue
+            if session_code and paper.get('session_code') and paper.get('session_code') != session_code:
+                continue
+            if session_code and not paper.get('session_code'):
+                continue
+            back_papers.append(paper)
+        if not back_papers:
+            continue
+
+        subject_passed = True
+        for paper in back_papers:
+            obtained = _normalize_mark(paper.get('obtained'))
+            pass_mark = _get_pass_marks(paper, subject_key)
+            if obtained is None or obtained < pass_mark:
+                subject_passed = False
+                break
+
+        summary.append({
+            'subject': subject_key,
+            'passed': subject_passed,
+        })
+
+    total = len(summary)
+    failed = len([item for item in summary if not item['passed']])
+    passed = total - failed
+
+    if total == 0:
+        result = None
+    elif failed == 0:
+        result = 'QUALIFIED'
+    elif failed == total:
+        result = 'NOT QUALIFIED'
+    else:
+        result = 'PARTIALLY QUALIFIED'
+
+    return {
+        'subjects': summary,
+        'total': total,
+        'passed': passed,
+        'failed': failed,
+        'result': result,
+    }
+
+
+def subject_has_back(papers, session_code=None):
+    """Helper to determine if any paper in the collection is BACK for the requested session."""
+    if not papers:
+        return False
+
+    for paper in papers:
+        if (paper.get('exam_type') or '').upper() != 'BACK':
+            continue
+        if session_code and paper.get('session_code') and paper.get('session_code') != session_code:
+            continue
+        if session_code and not paper.get('session_code'):
+            # When session filtering is requested but paper lacks session info, skip it
+            continue
+        return True
+    return False
+
+def get_ug_old_ba_hons_part1_context(
+    student,
+    exam_part='1',
+    course_code=None,
+    custom_results=None,
+    requested_session_code=None,
+):
     """
     Prepares and returns the context dictionary for the UG Before CBCS BA Hons Part 1 marksheet.
     
@@ -144,6 +275,8 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', course_code=None, c
             'name': result.subject_name or result.paper_code,
             'paper_code': result.paper_code,
             'status': result.status.upper() if result.status else '',
+            'exam_type': result.exam_type.upper() if result.exam_type else '',
+            'session_code': result.exam.session_code if result.exam else None,
             'max_marks': paper_max,
             'pass_marks': paper_pass,
             'obtained': paper_obt
@@ -569,6 +702,23 @@ def get_ug_old_ba_hons_part1_context(student, exam_part='1', course_code=None, c
         'controller_signature': image_to_base64(os.path.join(settings.BASE_DIR, "static/images/controller-of-examination-signature.png")),
     }
 
+    context['requested_session_code'] = requested_session_code
+    subjects_context = context.get('subjects', {})
+    back_summary = calculate_back_subject_summary(subjects_context, requested_session_code)
+    context['back_summary'] = back_summary
+    context['back_result'] = back_summary.get('result')
+
+    subject_flags = {}
+    for subject_key in ['honours', 'subsidiary_1', 'subsidiary_2', 'composition']:
+        subject_data = subjects_context.get(subject_key) or {}
+        has_back_flag = subject_has_back(subject_data.get('papers'), requested_session_code)
+        subject_data['has_back'] = has_back_flag
+        subject_flags[f"{subject_key}_has_back"] = has_back_flag
+
+    context.update(subject_flags)
+    context['composition_has_back'] = subject_flags.get('composition_has_back', False)
+    context['show_back_totals'] = back_summary.get('total', 0) > 0
+
     return context
 
 def get_bsc_chemistry_part1_context(student, exam_part=None, course_code=None, session_code=None):
@@ -579,7 +729,10 @@ def get_bsc_chemistry_part1_context(student, exam_part=None, course_code=None, s
     
     # Get the consolidated context first (without session_code since the base function doesn't support it)
     context = get_ug_old_ba_hons_part1_context(
-        student, exam_part=exam_part, course_code=course_code
+        student,
+        exam_part=exam_part,
+        course_code=course_code,
+        requested_session_code=session_code,
     )
     
     # Override the template name for BSC Chemistry Part-I
@@ -675,10 +828,11 @@ def get_ug_old_ba_hons_part1_latest_context(student, exam_part='1', course_code=
     # Now use the existing context function with these filtered results
     # We'll pass the results as a custom queryset
     return get_ug_old_ba_hons_part1_context(
-        student, 
-        exam_part=exam_part, 
+        student,
+        exam_part=exam_part,
         course_code=course_code,
-        custom_results=list(latest_papers.values())
+        custom_results=list(latest_papers.values()),
+        requested_session_code=session_code,
     )
 
 def get_center_info_for_student(student, exam):
