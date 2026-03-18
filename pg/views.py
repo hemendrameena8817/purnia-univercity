@@ -1718,7 +1718,7 @@ class PGCenterDropdown(APIView):
     Returns a list of PG centers with their UIDs and names.
     """
     def get(self, request):
-        centers = PGExamCenterMapping.objects.all().values('uid', 'center.name')
+        centers = PGExamCenterMapping.objects.all().values('uid', 'center__name')
         return Response({
             "centers": list(centers)
         }, status=status.HTTP_200_OK)
