@@ -26,19 +26,8 @@ from .serializers import (
 )
 from .utils.pdf_generator import generate_marksheet_pdf
 from .utils.progressive_context import get_center_info_for_student
+from .utils.common import normalize_semester
 # from .debug_center_mapping import debug_center_mapping
-
-def normalize_semester(semester):
-    """Convert semester names to consistent format (1ST, 2ND, etc.)"""
-    semester_mapping = {
-        '1st': '1ST', 'first': '1ST', '1': '1ST',
-        '2nd': '2ND', 'second': '2ND', '2': '2ND', 
-        '3rd': '3RD', 'third': '3RD', '3': '3RD',
-        '4th': '4TH', 'fourth': '4TH', '4': '4TH',
-        '5th': '5TH', 'fifth': '5TH', '5': '5TH',
-        '6th': '6TH', 'sixth': '6TH', '6': '6TH'
-    }
-    return semester_mapping.get(semester.lower(), semester.upper())
 
 # Course Views
 class LLBCourseListView(generics.ListCreateAPIView):
@@ -477,7 +466,14 @@ class LLBResultPDFView(View):
         exam_type = request.GET.get('type', None)
         session_param = request.GET.get('session', None)
         
-        student = get_object_or_404(LLBStudentProfile, registration_no=registration_no)
+        # Try to find student by registration_no first, then by roll_no
+        try:
+            student = LLBStudentProfile.objects.get(registration_no=registration_no)
+        except LLBStudentProfile.DoesNotExist:
+            try:
+                student = LLBStudentProfile.objects.get(roll_no=registration_no)
+            except LLBStudentProfile.DoesNotExist:
+                raise Http404(f"No student found with registration_no or roll_no: {registration_no}")
         
         # Priority: session > type > default (latest consolidated)
         if session_param or not exam_type:

@@ -8,7 +8,7 @@ from .permissions import IsExamCenterUser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.db import transaction
-from .models import PGStudentCourseAssessment, PGDepartment
+from .models import PGStudentCourseAssessment, PGDepartment,PGExamCenterMapping
 from .serializers import PGStudentCourseAssessmentSerializer
 from django.utils import timezone
 
@@ -1710,10 +1710,23 @@ class PGAttendanceMarkView(APIView):
             "results": results if is_bulk else results[0]
         }, status=status.HTTP_200_OK)
 
+class PGCenterDropdown(APIView):
+    permission_classes = []
+    """
+    GET /api/pg/center-dropdown/
+    
+    Returns a list of PG centers with their UIDs and names.
+    """
+    def get(self, request):
+        centers = PGExamCenterMapping.objects.all().values('uid', 'center')
+        return Response({
+            "centers": list(centers)
+        }, status=status.HTTP_200_OK)
+
 
 class PGAttendanceCountView(APIView):
     """
-    GET /api/pg/attendance/count/?exam_uid=<uid>[&college_uid=<uid>][&department_uid=<uid>]
+    GET /api/pg/attendance/count/?exam_uid=<uid>[&college_uid=<uid>][&department_uid=<uid>][&center_uid=<uid>]
 
     Returns subject-wise count of present and absent students for a particular exam.
     Data is sourced from PGStudentCourseAssessment.ind_is_absent (ESE assessments).
@@ -1722,6 +1735,7 @@ class PGAttendanceCountView(APIView):
         exam_uid       (required) – UID of the PGExam
         college_uid    (optional) – filter to a specific college
         department_uid (optional) – filter to a specific department
+        center_uid     (optional) – filter to a specific exam center
 
     Sample Response:
     {
@@ -1776,9 +1790,10 @@ class PGAttendanceCountView(APIView):
             sem=semester_filter
         )
 
-        # ── 4. Optional college / department / semester / course_code filters ─────
+        # ── 4. Optional college / department / center / semester / course_code filters ─────
         college_uid = request.query_params.get('college_uid')
         department_uid = request.query_params.get('department_uid')
+        center_uid = request.query_params.get('center_uid')
         course_code_filter = request.query_params.get('course_code') # e.g. AEC1
 
         if college_uid:
@@ -1788,6 +1803,13 @@ class PGAttendanceCountView(APIView):
         if department_uid:
             department = get_object_or_404(PGDepartment, uid=department_uid)
             registration_qs = registration_qs.filter(student__department=department)
+
+        if center_uid:
+            center = get_object_or_404(PGExamCenterMapping, uid=center_uid)
+            # Filter registrations where student's college is attached to this center for this exam
+            registration_qs = registration_qs.filter(
+                student__college__in=center.attached_colleges.all()
+            )
 
         if semester_filter:
             try:

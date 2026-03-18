@@ -1,0 +1,32 @@
+# BBA / BCA Hons Result Calculation Rules
+
+This document explains exactly how the system decides a student's result.
+
+## 1. Passing a SINGLE Subject
+A student MUST pass both the Theory (ESE) and Internal (CIA) parts for every subject.
+- Honours Paper: Must score at least 45% in both parts.
+- Subsidiary Paper: Must score at least 35% in both parts.
+*If a student fails in even one part (Theory or Internal), they fail the entire subject.*
+
+## 2. 1st Year and 2nd Year (Part I & II) Rules
+The result is calculated based on the total aggregate marks:
+- PASS WITH HONS. : Passed all subjects individually.
+- PASS : Not all subjects passed, but Total Marks are >= Total Pass Threshold (680/1600 or approx 42.5%).
+- FAIL : Total Marks are below the passing threshold.
+
+## 3. 3rd Year (Final Year / Graduation) Rules
+In the final year, the aggregate of all 3 years is checked:
+- 1st/2nd Class : Every subject from 1st, 2nd, and 3rd year is passed individually.
+- PASS : Not all subjects passed, but the overall 3-year aggregate is >= Total Pass Threshold.
+- FAIL : Overall aggregate is below the threshold.
+
+## 4. Degree Classification (Honours Division)
+For graduating students, the final "Class" is decided by the total marks in Honours papers only:
+- 1st Class With Distinction : 75% or above
+- 1st Class : 60% to 74%
+- 2nd Class : 45% to 59%
+
+## 5. Important Notes
+- ABSENT : Counts as 0 marks. If absent in any part, the student fails that subject.
+- BACK PAPERS : The system automatically picks the best marks from all attempts.
+- REMARKS : This column is always kept empty in the TR.
