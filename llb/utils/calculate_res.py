@@ -1,3 +1,5 @@
+from llb.utils.common import normalize_semester
+
 def calculate_llb_result(assessments):
     """
     Calculate LLB result based on assessments.
@@ -127,13 +129,14 @@ def calculate_llb_result_semester_3(assessments):
         if not course_structure:
             continue
 
-        semester = (getattr(assessment, 'semester', '') or '').upper()
+        semester = normalize_semester(getattr(assessment, 'semester', '') or '')
         part_key = None
-        if semester.startswith('1'):
+
+        if semester == '1ST':
             part_key = '1'
-        elif semester.startswith('2'):
+        elif semester == '2ND':
             part_key = '2'
-        elif semester.startswith('3'):
+        elif semester == '3RD':
             part_key = '3'
 
         if part_key not in part_groups:
@@ -144,13 +147,15 @@ def calculate_llb_result_semester_3(assessments):
         
         # Handle non-numeric marks (like 'AB' for absent) by treating them as 0
         marks_obtained = assessment.ind_marks_obtained
-        try:
-            obtained_marks = int(marks_obtained) if marks_obtained is not None else 0
-        except (ValueError, TypeError):
-            # If marks_obtained is a string like 'AB' or cannot be converted, treat as 0
-            obtained_marks = 0
-            
-        part_groups[part_key]['obtained_marks'] += obtained_marks
+        obtained_marks = 0
+        if marks_obtained is not None:
+            try:
+                obtained_marks = float(marks_obtained)
+            except (ValueError, TypeError):
+                # If marks_obtained is a string like 'AB' or cannot be converted, treat as 0
+                obtained_marks = 0
+
+        part_groups[part_key]['obtained_marks'] += int(obtained_marks)
 
     return {
         **result_stats,
