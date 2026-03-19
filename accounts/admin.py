@@ -6,7 +6,29 @@ from mca_sem.models import MCAStudentProfile
 from plw.models import PLWStudentProfile
 from ug.models import UGStudentProfile
 from pg.models import PGStudentProfile
+from import_export.admin import ImportExportModelAdmin, ImportExportMixin
+from import_export import resources, fields
+from import_export.widgets import ForeignKeyWidget
+from colleges.models import College
+class UserAccountResource(resources.ModelResource):
+    college = fields.Field(
+        column_name='college_code',
+        attribute='college',
+        widget=ForeignKeyWidget(College, 'college_code')
+    )
+    
+    class Meta:
+        model = UserAccount
+        import_id_fields = ('username',)
+        fields = (
+            'uid', 'username', 'email', 'first_name', 'last_name', 'phone',
+            'user_type', 'current_profile', 'college', 'is_verified',
+            'is_staff', 'is_active', 'is_password_changed', 'created_at'
+        )
+        export_order = fields
 
+    def get_queryset(self):
+        return super().get_queryset().select_related('college')
 
 class CollegeUserProfileInline(admin.StackedInline):
     model = CollegeUserProfile
@@ -96,7 +118,8 @@ class PGStudentProfileInline(admin.StackedInline):
 
 
 @admin.register(UserAccount)
-class UserAccountAdmin(BaseUserAdmin):
+class UserAccountAdmin(ImportExportMixin, BaseUserAdmin):
+    resource_class = UserAccountResource
     list_display = (
         "email",
         "username",
