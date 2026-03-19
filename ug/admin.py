@@ -9,12 +9,21 @@ from ug.services.semester_registration_service import SemesterRegistrationServic
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
-    CommonCourseStructure, UGExamResult,ExamRegistrationPayment
+    CommonCourseStructure, UGExamResult, ExamRegistrationPayment
+)
+
+# Import Resource classes from resources.py
+from .resources import (
+    UGFacultyResource, UGDepartmentResource, UGDegreeResource, UGProgramResource,
+    UGBatchResource, UGStudentProfileResource, CourseStructureResource,
+    StudentCourseAssessmentResource, UGExamResultResource, SemesterRegistrationResource,
+    ExamRegistrationResource, ExamRegistrationPaymentResource, CommonCourseStructureResource
 )
 
 
 @admin.register(UGFaculty)
-class UGFacultyAdmin(admin.ModelAdmin):
+class UGFacultyAdmin(ImportExportModelAdmin):
+    resource_class = UGFacultyResource
     list_display = ('name', 'short_name', 'university', 'is_publish', 'created_at')
     list_editable = ('is_publish',)
     list_filter = ('university', 'is_publish')
@@ -23,7 +32,8 @@ class UGFacultyAdmin(admin.ModelAdmin):
 
 
 @admin.register(UGDepartment)
-class UGDepartmentAdmin(admin.ModelAdmin):
+class UGDepartmentAdmin(ImportExportModelAdmin):
+    resource_class = UGDepartmentResource
     list_display = ('name', 'code', 'head_of_department', 'is_publish', 'created_at')
     list_editable = ('is_publish',)
     list_filter = ('is_publish',)
@@ -32,14 +42,16 @@ class UGDepartmentAdmin(admin.ModelAdmin):
 
 
 @admin.register(UGDegree)
-class UGDegreeAdmin(admin.ModelAdmin):
+class UGDegreeAdmin(ImportExportModelAdmin):
+    resource_class = UGDegreeResource
     list_display = ('name', 'short_name', 'total_semesters', 'total_years', 'created_at')
     search_fields = ('name', 'short_name')
     ordering = ('name',)
 
 
 @admin.register(UGProgram)
-class UGProgramAdmin(admin.ModelAdmin):
+class UGProgramAdmin(ImportExportModelAdmin):
+    resource_class = UGProgramResource
     list_display = ('name', 'short_name', 'degree', 'department', 'created_at')
     list_filter = ('degree',)
     search_fields = ('name', 'short_name', 'degree__name', 'department__name')
@@ -47,7 +59,8 @@ class UGProgramAdmin(admin.ModelAdmin):
 
 
 @admin.register(UGBatch)
-class UGBatchAdmin(admin.ModelAdmin):
+class UGBatchAdmin(ImportExportModelAdmin):
+    resource_class = UGBatchResource
     list_display = ('name', 'program', 'created_at')
     list_filter = ('program',)
     search_fields = ('name', 'program__name')
@@ -55,7 +68,8 @@ class UGBatchAdmin(admin.ModelAdmin):
 
 
 @admin.register(UGStudentProfile)
-class UGStudentProfileAdmin(admin.ModelAdmin):
+class UGStudentProfileAdmin(ImportExportModelAdmin):
+    resource_class = UGStudentProfileResource
     list_display = ('registration_no', 'first_name', 'last_name', 'roll_no', 'college', 
                    'major_course','minor_course','mdc_course','department', 'program', 'current_semester', 'status', 'is_active', 'batch')
     list_filter = ('status', 'gender', 'college', 'department', 'program', 'degree', 
@@ -105,7 +119,8 @@ class UGStudentProfileAdmin(admin.ModelAdmin):
 
 
 @admin.register(CourseStructure)
-class CourseStructureAdmin(admin.ModelAdmin):
+class CourseStructureAdmin(ImportExportModelAdmin):
+    resource_class = CourseStructureResource
     list_display = ('id','course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
     list_editable = ('course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
     list_filter = ('course_type','label', 'semester', 'course_code', 'department', )
@@ -114,7 +129,7 @@ class CourseStructureAdmin(admin.ModelAdmin):
     raw_id_fields = ('department',)
 
 
-
+"""
 class StudentCourseAssessmentResource(resources.ModelResource):
     student_registration_no = resources.Field(attribute='student__registration_no', column_name='Registration No')
     student_roll_no = resources.Field(attribute='student__roll_no', column_name='Roll No')
@@ -147,7 +162,7 @@ class StudentCourseAssessmentResource(resources.ModelResource):
              
         return res.semester_result if res else ''
 
-
+"""
 class ExamResultFilter(admin.SimpleListFilter):
     title = 'Semester Result (from ExamResult)'
     parameter_name = 'sem_result'
@@ -289,7 +304,8 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
 
 @admin.register(SemesterRegistration)
-class SemesterRegistrationAdmin(admin.ModelAdmin):
+class SemesterRegistrationAdmin(ImportExportModelAdmin):
+    resource_class = SemesterRegistrationResource
     list_display = ('student', 'batch', 'sem', 'status', 'exam_eligible', 'is_open', 'start_date', 'end_date', 'session')
     list_filter = ('batch', 'sem', 'status', 'exam_eligible', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name', 'batch__name')
@@ -302,7 +318,8 @@ class SemesterRegistrationAdmin(admin.ModelAdmin):
 
 
 @admin.register(ExamRegistration)
-class ExamRegistrationAdmin(admin.ModelAdmin):
+class ExamRegistrationAdmin(ImportExportModelAdmin):
+    resource_class = ExamRegistrationResource
     list_display = ('student', 'sem', 'status', 'fees', 'is_open')
     list_filter = ('sem', 'status', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name')
@@ -313,7 +330,8 @@ class ExamRegistrationAdmin(admin.ModelAdmin):
     list_per_page = 50
 
 @admin.register(CommonCourseStructure)
-class CommonCourseStructureAdmin(admin.ModelAdmin):
+class CommonCourseStructureAdmin(ImportExportModelAdmin):
+    resource_class = CommonCourseStructureResource
     list_display = ('id','semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
 
     list_filter = ('semester', 'course_type')
@@ -322,7 +340,7 @@ class CommonCourseStructureAdmin(admin.ModelAdmin):
     list_editable = ('semester', 'course_type','code', 'course_name', 'ltp', 'credit', 'marks')
 
 
-
+"""
 class UGExamResultResource(resources.ModelResource):
     registration_no = resources.Field(attribute='student__registration_no', column_name='Registration No')
     student_name = resources.Field(attribute='student__first_name', column_name='Student Name')
@@ -348,7 +366,7 @@ class UGExamResultResource(resources.ModelResource):
         )
         return ", ".join([a.paper_code for a in failures])
 
-
+"""
 @admin.register(UGExamResult)
 class UGExamResultAdmin(ImportExportModelAdmin):
     resource_class = UGExamResultResource
@@ -492,7 +510,8 @@ class UGExamResultAdmin(ImportExportModelAdmin):
 
 
 @admin.register(ExamRegistrationPayment)
-class ExamRegistrationPaymentAdmin(admin.ModelAdmin):
+class ExamRegistrationPaymentAdmin(ImportExportModelAdmin):
+    resource_class = ExamRegistrationPaymentResource
     list_display = ('order_id', 'registration', 'amount', 'payment_status', 'created_at', 'updated_at')
     list_filter = ('payment_status', 'created_at', 'updated_at')
     search_fields = ('order_id', 'registration__uid')   

@@ -9,6 +9,10 @@ from pathlib import Path
 
 import django
 from openpyxl import load_workbook
+try:
+    import xlrd
+except ImportError:
+    xlrd = None
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BASE_DIR))
@@ -100,7 +104,8 @@ def clean_text(value):
 
 def normalize_header(value):
     text = clean_text(value)
-    return HEADER_ALIASES.get(text.lower(), text)
+    alias_key = text.lower().replace('_', ' ')
+    return HEADER_ALIASES.get(alias_key, text)
 
 
 def normalize_paper_name(value):
@@ -194,10 +199,22 @@ def build_name_map(raw_map):
     return {normalize_paper_name(name): code for name, code in raw_map.items()}
 
 
-def load_students_from_file(file_path):
+def load_excel_rows(file_path):
+    suffix = file_path.suffix.lower()
+    if suffix == '.xls':
+        if xlrd is None:
+            raise ImportError('xlrd is required to read .xls files. Install it and run again.')
+        workbook = xlrd.open_workbook(str(file_path))
+        sheet = workbook.sheet_by_index(0)
+        return [tuple(sheet.row_values(row_index)) for row_index in range(sheet.nrows)]
+
     workbook = load_workbook(file_path, data_only=True)
     sheet = workbook.active
-    rows = list(sheet.iter_rows(values_only=True))
+    return list(sheet.iter_rows(values_only=True))
+
+
+def load_students_from_file(file_path):
+    rows = load_excel_rows(file_path)
     if not rows:
         return {}
 
