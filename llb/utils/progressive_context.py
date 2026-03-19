@@ -43,7 +43,7 @@ def get_llb_progressive_contexts(student, semester):
     
     for assessment in all_assessments:
         exam_type = (assessment.exam_type or '').upper()
-        session = assessment.exam.session if assessment.exam else 'UNKNOWN'
+        session = assessment.session if assessment.session else 'UNKNOWN'
         
         if session:
             all_sessions.add(session)
@@ -71,7 +71,7 @@ def get_llb_progressive_contexts(student, semester):
             'ind_grace_obtained': a.ind_grace_obtained,
             'ind_is_pass': a.ind_is_pass,
             'exam_type': a.exam_type,
-            'session': a.exam.session if a.exam else None,
+            'exam_year': a.exam.session if a.exam else None,
             'subject_result': a.subject_result,
             'grade': a.grade,
         }
@@ -82,7 +82,7 @@ def get_llb_progressive_contexts(student, semester):
         return {
             'uid': str(exam.uid),
             'name': exam.name,
-            'session': exam.session,
+            'exam_year': exam.session,
             'semester': exam.semester,
             'publication_date': str(exam.publication_date) if exam.publication_date else None,
             'exam_month_year': exam.exam_month_year,
@@ -95,7 +95,7 @@ def get_llb_progressive_contexts(student, semester):
         result_stats = calculate_llb_result(regular_assessments)
         results.append({
             'type': 'regular',
-            'session_code': regular_exam.session if regular_exam else None,
+            'session_code': regular_assessments[0].session if regular_assessments else None,
             'exam': format_exam(regular_exam),
             'centre': get_center_info_for_student(student, regular_exam),
             'assessments': [format_assessment(a) for a in regular_assessments],
@@ -111,7 +111,6 @@ def get_llb_progressive_contexts(student, semester):
         results.append({
             'type': 'back',
             'session_code': session,
-            'session': session,
             'exam': format_exam(back_exam),
             'centre': get_center_info_for_student(student, back_exam),
             'assessments': [format_assessment(a) for a in back_list],
@@ -160,7 +159,7 @@ def get_llb_latest_assessments(student, semester, session=None):
     
     for assessment in all_assessments:
         key = (assessment.paper_code, assessment.label)
-        result_session = assessment.exam.session if assessment.exam else ''
+        result_session = assessment.session or ''
         
         # If session is specified, prioritize papers from that session and earlier
         if session:
@@ -179,7 +178,7 @@ def get_llb_latest_assessments(student, semester, session=None):
             # No session specified - use latest logic
             if key in latest_papers:
                 existing = latest_papers[key]
-                existing_session = existing.exam.session if existing.exam else ''
+                existing_session = existing.session or ''
                 current_session = result_session
                 
                 # Keep the one with the later session
