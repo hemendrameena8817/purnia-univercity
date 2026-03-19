@@ -11,6 +11,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='studentcourseassessment',
             name='is_migrated',
-            field=models.BooleanField(db_index=True, default=False),
+            field=models.BooleanField(default=False),
         ),
     ]
