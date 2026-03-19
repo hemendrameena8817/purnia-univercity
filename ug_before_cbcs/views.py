@@ -27,7 +27,7 @@ from .serializers import (
     UGBeforeCBCSStudentResultSerializer,
     MarksheetDataSerializer
 )
-from .utils.pdf_generator import get_ug_old_ba_hons_part1_latest_context, get_bsc_chemistry_part1_context
+from .utils.pdf_generator import get_ug_old_ba_hons_part1_latest_context, get_bsc_chemistry_part1_context, has_back_papers
 from .utils.validation import validate_marksheet_context
 
 class BaseUGLV(APIView):
@@ -173,30 +173,73 @@ class UGOldMarksheetPDFView(View):
              return HttpResponse("Invalid course_code or part", status=400)
 
         # Call the appropriate PDF generator
-        # Always use the latest context with session_code support
+        # Check if there are BACK papers and use appropriate template
+        
+        # Determine if we should check for BACK papers (only when session_code is provided)
+        has_back = False
+        part_code = f"PART{part}"
+        if session_code:
+            results_query = UGBeforeCBCSStudentResult.objects.filter(
+                student=student,
+                exam__part=part_code,
+                exam__session_code__iexact=session_code
+            ).select_related('exam').order_by('-exam__exam_year')
+
+            results = list(results_query)
+            has_back = has_back_papers(results)
         
         # Check if this is BSC Chemistry Part-I - use special context
         if course_code and 'BSC' in course_code.upper() and str(part) == '1':
             # Check if student has Chemistry honours
             student_discipline = student.discipline_code.upper() if student.discipline_code else ""
             if 'CHEM' in student_discipline or 'CHEMISTRY' in student_discipline:
-                context = get_bsc_chemistry_part1_context(
-                    student, exam_part=part, course_code=course_code, session_code=session_code
-                )
+                if has_back:
+                    # Use BACK template for BSC Chemistry
+                    context = get_bsc_chemistry_part1_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+                    # Override template to use BACK version
+                    context['template_name'] = 'ug_before_cbcs/back_bsc_chemistry_part1_marksheet.html'
+                else:
+                    # Use regular BSC Chemistry context
+                    context = get_bsc_chemistry_part1_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
             else:
-                # Use regular context for other BSC subjects
+                if has_back:
+                    # Use BACK template for other BSC subjects
+                    context = get_ug_old_ba_hons_part1_latest_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+                    # Override template to use BACK version
+                    context['template_name'] = 'ug_before_cbcs/back_ba_hons_marksheet_part1.html'
+                else:
+                    # Use regular context for other BSC subjects
+                    context = get_ug_old_ba_hons_part1_latest_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+        else:
+            if has_back:
+                # Use BACK template for non-BSC or other parts
                 context = get_ug_old_ba_hons_part1_latest_context(
                     student, exam_part=part, course_code=course_code, session_code=session_code
                 )
-        else:
-            # Use regular context for non-BSC or other parts
-            context = get_ug_old_ba_hons_part1_latest_context(
-                student, exam_part=part, course_code=course_code, session_code=session_code
-            )
+                # Override template to use BACK version
+                context['template_name'] = 'ug_before_cbcs/back_ba_hons_marksheet_part1.html'
+            else:
+                # Use regular context for non-BSC or other parts
+                context = get_ug_old_ba_hons_part1_latest_context(
+                    student, exam_part=part, course_code=course_code, session_code=session_code
+                )
         
         if not context:
             return HttpResponse(f"Marksheet data not found for {student.student_name} ({part}).", status=404, content_type='text/plain')
-        
+
+        # Propagate BACK detection info into context so templates can decide what to display
+        context['has_back_in_requested_session'] = has_back
+        if session_code:
+            context['show_back_totals'] = has_back
+
         # Validate before generating PDF
         is_valid, error_messages = validate_marksheet_context(student, part, context, course_code, batch_code, session_code)
         if not is_valid:
