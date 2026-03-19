@@ -800,18 +800,18 @@ class LLBMarksheetUpdateView(APIView):
         exam_name = request.data.get("exam_name")
         exam_month_year = request.data.get("exam_month_year")
         publication_date = request.data.get("publication_date")
-        new_session = request.data.get("new_session")
+        exam_year = request.data.get("exam_year")
         centre_name = request.data.get("center_name") or request.data.get("centre_name")
         
-        if exam and (exam_name or exam_month_year or publication_date or new_session):
+        if exam and (exam_name or exam_month_year or publication_date or exam_year):
             if exam_name:
                 exam.name = exam_name
             if exam_month_year:
                 exam.exam_month_year = exam_month_year
             if publication_date:
                 exam.publication_date = publication_date
-            if new_session:
-                exam.session = new_session
+            if exam_year:
+                exam.session = exam_year
             exam.save()
         
         # Update Center Mapping (if provided)
