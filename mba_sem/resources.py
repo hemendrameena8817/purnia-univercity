@@ -13,13 +13,13 @@ class MBACourseResource(resources.ModelResource):
     class Meta:
         model = MBACourse
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'discipline_code', 'duration_years')
+        fields = ('uid', 'name', 'discipline_code', 'duration_years', 'created_at', 'updated_at')
 
 class MBASessionResource(resources.ModelResource):
     class Meta:
         model = MBASession
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'start_year', 'end_year', 'is_active')
+        fields = ('uid', 'name', 'start_year', 'end_year', 'is_active', 'created_at', 'updated_at')
 
 class MBABatchResource(resources.ModelResource):
     session = fields.Field(
@@ -30,7 +30,7 @@ class MBABatchResource(resources.ModelResource):
     class Meta:
         model = MBABatch
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'session', 'is_active')
+        fields = ('uid', 'name', 'session', 'is_active', 'json_data', 'created_at', 'updated_at')
 
 class MBAStudentProfileResource(resources.ModelResource):
     user = fields.Field(
@@ -62,8 +62,10 @@ class MBAStudentProfileResource(resources.ModelResource):
             'roll_no', 'father_name', 'mother_name', 'date_of_birth', 'gender',
             'mobile_no', 'address', 'aadhar_no', 'college', 'course', 'batch',
             'current_semester', 'session_str', 'status', 'is_active',
+            'profile_image', 'signature',
             'sem_1_gpa', 'sem_1_credit_earned', 'sem_2_gpa', 'sem_2_credit_earned',
-            'sem_3_gpa', 'sem_3_credit_earned', 'sem_4_gpa', 'sem_4_credit_earned'
+            'sem_3_gpa', 'sem_3_credit_earned', 'sem_4_gpa', 'sem_4_credit_earned',
+            'json_data', 'created_at', 'updated_at'
         )
 
 class MBACourseStructureResource(resources.ModelResource):
@@ -72,20 +74,21 @@ class MBACourseStructureResource(resources.ModelResource):
         import_id_fields = ('uid',)
         fields = (
             'uid', 'course_name', 'course_short_name', 'course_type', 'course_code',
-            'max_marks', 'min_marks', 'label', 'semester', 'credit', 'description'
+            'max_marks', 'min_marks', 'label', 'semester', 'credit', 'description',
+            'json_data', 'created_at', 'updated_at'
         )
 
 class MBACommonCourseStructureResource(resources.ModelResource):
     class Meta:
         model = MBACommonCourseStructure
         import_id_fields = ('uid',)
-        fields = ('uid', 'semester', 'course_name', 'course_type', 'ltp', 'marks', 'code')
+        fields = ('uid', 'semester', 'course_name', 'course_type', 'ltp', 'marks', 'code', 'json_data', 'created_at', 'updated_at')
 
 class MBAExamResource(resources.ModelResource):
     class Meta:
         model = MBAExam
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'semester', 'session', 'exam_month_year', 'publication_date')
+        fields = ('uid', 'name', 'semester', 'session', 'exam_month_year', 'publication_date', 'created_at', 'updated_at')
 
 class MBAExamCenterMappingResource(resources.ModelResource):
     exam = fields.Field(
@@ -106,7 +109,7 @@ class MBAExamCenterMappingResource(resources.ModelResource):
     class Meta:
         model = MBAExamCenterMapping
         import_id_fields = ('uid',)
-        fields = ('uid', 'exam', 'center', 'attached_colleges')
+        fields = ('uid', 'exam', 'center', 'attached_colleges', 'created_at', 'updated_at')
 
 class MBAExamScheduleResource(resources.ModelResource):
     exam = fields.Field(
@@ -122,7 +125,7 @@ class MBAExamScheduleResource(resources.ModelResource):
     class Meta:
         model = MBAExamSchedule
         import_id_fields = ('uid',)
-        fields = ('uid', 'exam', 'common_course_structure', 'exam_date', 'exam_time', 'sitting')
+        fields = ('uid', 'exam', 'common_course_structure', 'exam_date', 'exam_time', 'sitting', 'created_at', 'updated_at')
 
 class MBASemesterRegistrationResource(resources.ModelResource):
     student = fields.Field(
@@ -135,7 +138,8 @@ class MBASemesterRegistrationResource(resources.ModelResource):
         import_id_fields = ('uid',)
         fields = (
             'uid', 'student', 'start_date', 'end_date', 'is_open', 'sem',
-            'status', 'exam_eligible', 'remarks', 'session'
+            'status', 'exam_eligible', 'remarks', 'session', 'json_data',
+            'created_at', 'updated_at'
         )
 
 class MBAExamRegistrationResource(resources.ModelResource):
@@ -159,7 +163,8 @@ class MBAExamRegistrationResource(resources.ModelResource):
         import_id_fields = ('uid',)
         fields = (
             'uid', 'student', 'exam', 'exam_type', 'exam_subjects', 'start_date',
-            'end_date', 'is_open', 'fees', 'sem', 'status', 'session'
+            'end_date', 'is_open', 'fees', 'sem', 'status', 'session', 'json_data',
+            'created_at', 'updated_at'
         )
 
 class MBAStudentAssessmentResource(resources.ModelResource):
@@ -182,9 +187,9 @@ class MBAStudentAssessmentResource(resources.ModelResource):
             'attendance', 'ind_max_marks', 'ind_pass_marks', 'ind_is_absent',
             'ind_marks_obtained', 'ind_grace_obtained', 'ind_final_marks_obtained',
             'ind_is_pass', 'comb_max_marks', 'comb_pass_marks', 'comb_marks_obtained',
-            'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point',
+            'comb_grace_obtained', 'comb_numeric_grade', 'comb_letter_grade', 'comb_grade_point',
             'course_max_marks', 'course_marks_obtained', 'course_final_marks_obtained',
-            'sem_result', 'next_sem_status'
+            'sem_result', 'next_sem_status', 'json_data', 'created_at', 'updated_at'
         )
 
 class MBAExamResultResource(resources.ModelResource):
@@ -199,7 +204,8 @@ class MBAExamResultResource(resources.ModelResource):
         fields = (
             'uid', 'student', 'semester', 'session', 'cia_pass', 'ese_pass',
             'semester_result', 'total_marks_obtained', 'percentage',
-            'next_semester', 'next_sem_status', 'is_legacy', 'published_at'
+            'next_semester', 'next_sem_status', 'is_legacy', 'published_at',
+            'created_at', 'updated_at'
         )
 
 class MBAStudentCourseAssessmentResource(resources.ModelResource):
@@ -240,7 +246,8 @@ class MBAStudentCourseAssessmentResource(resources.ModelResource):
             'course_pass_marks', 'course_marks_obtained', 'course_grace_obtained',
             'course_final_marks_obtained', 'course_credit_obtained',
             'course_grade_point', 'sem_max_credit', 'sem_credit_obtained',
-            'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained'
+            'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained',
+            'temp_total_gp', 'json_data', 'created_at', 'updated_at'
         )
         export_order = (
             'uid', 'student_registration_no', 'student_roll_no', 'student_name',
