@@ -223,7 +223,7 @@ class Command(BaseCommand):
 
                     # ── 4. Create or Update UGStudentProfile on live DB ──────────
                     existing = UGStudentProfile.objects.using('live').filter(
-                        registration_no=reg_no
+                        user__username=local_user.username
                     ).first()
 
                     profile_fields = dict(
@@ -245,8 +245,10 @@ class Command(BaseCommand):
                         roll_no=local_profile.roll_no,
                         father_name=local_profile.father_name,
                         mother_name=local_profile.mother_name,
-                        current_semester=2,
-                        session='2025-26',
+                        # current_semester=2,
+                        # session='2025-26',
+                        current_semester=None,
+                        session=None,
                         status=local_profile.status,
                         is_active=local_profile.is_active,
                         json_data=local_profile.json_data,
@@ -273,19 +275,19 @@ class Command(BaseCommand):
                         stats['synced'] += 1
                     else:
                         UGStudentProfile.objects.using('live').create(
-                            registration_no=reg_no,
+                            registration_no=local_profile.registration_no,
                             **profile_fields,
                             # Note: profile_image/signature not copied — shared S3 storage
                         )
                         self.stdout.write(self.style.SUCCESS(
-                            f"  ✓ Created UGStudentProfile: {reg_no}"
+                            f"  ✓ Created UGStudentProfile: {local_user.username}"
                         ))
                         stats['synced'] += 1
 
                     # ── 5. SemesterRegistration on live DB (skip if already exists) ──
                     # Get the live profile reference (whether just created or pre-existing)
                     live_ug_profile = UGStudentProfile.objects.using('live').filter(
-                        registration_no=reg_no
+                        user__username=local_user.username
                     ).first()
 
                     if live_ug_profile:

@@ -161,9 +161,14 @@ def generate_marksheet_pdf(result=None, semester=None, student=None, exam=None, 
 
     # 1. Calculate result statistics
     if semester == '3RD':
-        cumulative_assessments = student.course_assessments.filter(
-            semester__in=['1ST', '2ND', '3RD']
-        ).select_related('course_structure').order_by('semester', 'paper_code')
+        from .progressive_context import get_llb_latest_assessments
+
+        cumulative_assessments = []
+        for part_semester in ('1ST', '2ND', '3RD'):
+            part_assessments, _ = get_llb_latest_assessments(student, part_semester)
+            if part_assessments:
+                cumulative_assessments.extend(part_assessments)
+
         result_stats = calculate_llb_result_semester_3(cumulative_assessments)
     else:
         result_stats = calculate_llb_result(assessments)
