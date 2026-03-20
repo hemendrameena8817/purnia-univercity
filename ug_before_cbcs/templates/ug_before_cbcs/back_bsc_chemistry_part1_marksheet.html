@@ -553,7 +553,15 @@
               </td>
               <td><strong>{{ grand_total_max|default:"500" }}</strong></td>
               <td colspan="2">&nbsp;</td>
-              <td colspan="2"><strong>{% if show_back_totals %}{{ grand_total }}{% endif %}</strong></td>
+              <td colspan="2"><strong>
+                {% if show_back_totals %}
+                  {% if back_total_marks_obtained %}
+                    {{ back_total_marks_obtained }}
+                  {% else %}
+                    {{ grand_total }}
+                  {% endif %}
+                {% endif %}
+              </strong></td>
             </tr>
           </tbody>
         </table>
