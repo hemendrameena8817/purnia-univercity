@@ -172,6 +172,35 @@ def calculate_back_subject_summary(subjects, session_code=None):
     }
 
 
+def calculate_back_total_marks(subjects, session_code=None):
+    total_marks = 0.0
+    if not subjects:
+        return 0
+
+    subject_order = ['honours', 'subsidiary_1', 'subsidiary_2', 'composition']
+
+    for subject_key in subject_order:
+        subject_data = subjects.get(subject_key) if subjects else None
+        if not subject_data:
+            continue
+
+        for paper in subject_data.get('papers', []):
+            if (paper.get('exam_type', '') or '').upper() != 'BACK':
+                continue
+            if session_code and paper.get('session_code') and paper.get('session_code') != session_code:
+                continue
+            if session_code and not paper.get('session_code'):
+                continue
+
+            obtained = _normalize_mark(paper.get('obtained'))
+            if obtained is not None:
+                total_marks += obtained
+
+    if total_marks == 0:
+        return 0
+    return _coerce_display_mark(total_marks)
+
+
 def subject_has_back(papers, session_code=None):
     """Helper to determine if any paper in the collection is BACK for the requested session."""
     if not papers:
@@ -795,6 +824,7 @@ def get_ug_old_ba_hons_part1_context(
     context.update(subject_flags)
     context['composition_has_back'] = subject_flags.get('composition_has_back', False)
     context['show_back_totals'] = back_summary.get('total', 0) > 0
+    context['back_total_marks_obtained'] = calculate_back_total_marks(subjects_context, requested_session_code)
 
     return context
 
