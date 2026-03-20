@@ -361,6 +361,8 @@ def get_ug_old_ba_hons_part1_context(
     # e.g. BA104 (RB or NRB) and BA105 (MB if NRB)
     final_composition_papers = []
     comp_papers_raw = sorted(composition_papers, key=lambda x: x['paper_code'])
+    composition_individual_fail = False
+    composition_total_pass = 0
     for p in comp_papers_raw:
         res_obj = next((r for r in results if r.uid == p['uid']), None)
         p_type = res_obj.paper_type_code.upper() if res_obj and res_obj.paper_type_code else ""
@@ -375,6 +377,15 @@ def get_ug_old_ba_hons_part1_context(
                 p['display_name'] = f"MB: {p['name'].title()}"
         else:
             p['display_name'] = p['name']
+
+        paper_pass = _get_pass_marks(p, 'composition')
+        p['pass_marks'] = paper_pass
+        composition_total_pass += paper_pass
+
+        obtained_mark = _normalize_mark(p.get('obtained'))
+        if obtained_mark is None or obtained_mark < paper_pass:
+            composition_individual_fail = True
+
         final_composition_papers.append(p)
     composition_papers = final_composition_papers
 
@@ -676,8 +687,9 @@ def get_ug_old_ba_hons_part1_context(
                 'name': 'Composition',
                 'papers': composition_papers,
                 'total_max': comp_total_max,
-                'total_pass': int(comp_total_max * 0.33),
-                'total_obtained': comp_total_obt
+                'total_pass': composition_total_pass,
+                'total_obtained': comp_total_obt,
+                'has_individual_fail': composition_individual_fail,
             },
         },
         'grand_total_max': grand_total_max,
@@ -686,7 +698,8 @@ def get_ug_old_ba_hons_part1_context(
             hons_total_obt, hons_total_max,
             sub1.get('total_obtained', 0) if sub1 else 0, sub1.get('total_max', 0) if sub1 else 0,
             sub2.get('total_obtained', 0) if sub2 else 0, sub2.get('total_max', 0) if sub2 else 0,
-            comp_total_obt, comp_total_max
+            comp_total_obt, comp_total_max,
+            composition_individual_fail=composition_individual_fail,
         ),
         'hons_total_words': num2words(hons_total_obt),
         'grand_total_words': num2words(final_grand_total) + " Only",
