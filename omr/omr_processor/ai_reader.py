@@ -14,6 +14,7 @@ rest of the pipeline (models, views, serialisation) works unchanged.
 """
 
 import logging
+import json
 import re
 import shutil
 from pathlib import Path
@@ -22,7 +23,8 @@ from typing import Dict, Literal, Optional
 import numpy as np
 from google import genai
 from google.genai import types
-from pydantic import BaseModel, Field
+from google.genai.errors import ClientError
+from pydantic import BaseModel, Field, ValidationError
 from PIL import Image, ImageEnhance, ImageOps
 from decouple import config
 
@@ -32,6 +34,14 @@ from .roi_utils import crop_roi as crop_section_roi, locate_content_frame, resol
 from .section_config import SECTION_MAP
 
 logger = logging.getLogger(__name__)
+
+GEMINI_3_MODEL_CANDIDATES = [
+    "gemini-2.0-flash",
+]
+
+
+class TruncatedGeminiJSONError(ValueError):
+    pass
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -121,23 +131,23 @@ class PartCMarks(BaseModel):
 
 
 class PartDBarcodeOnly(BaseModel):
-    barcode: BarcodeField
+    barcode: Optional[BarcodeField] = None
 
 
 class PartDRollCenter(BaseModel):
-    roll_number: GridField
-    center_code: GridField
+    roll_number: Optional[GridField] = None
+    center_code: Optional[GridField] = None
 
 
 class PartDCourseSession(BaseModel):
-    year_sem: YearSemField
-    course_code: GridField
-    session: GridField
+    year_sem: Optional[YearSemField] = None
+    course_code: Optional[GridField] = None
+    session: Optional[GridField] = None
 
 
 class PartDExamDetails(BaseModel):
-    exam_type: RadioField
-    sitting: RadioField
+    exam_type: Optional[RadioField] = None
+    sitting: Optional[RadioField] = None
     name: Optional[str] = None
     father_name: Optional[str] = None
     paper_name: Optional[str] = None
@@ -206,6 +216,9 @@ SECTIONS TO READ:
 3. CENTER CODE: Grid of 4 columns, digits 0-9. Read HANDWRITTEN AND filled bubbles.
 
 4. Year/Sem: Read HANDWRITTEN number AND filled bubble.
+    - YEAR bubble has only 3 options labeled 1, 2, 3 from top to bottom.
+    - SEM bubble has options labeled 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 from top to bottom.
+    - Report the actual bubble labels, not the row index.
 
 5. COURSE CODE: EXACTLY 7 columns:
    - Column 0 (leftmost): ONLY 2 bubbles — "U" at top, "P" below. No other bubbles.
@@ -239,6 +252,9 @@ SECTION_PROMPTS = {
         "course_session": """Read this cropped section of an OMR sheet. Read BOTH handwritten AND filled bubbles.
 
 1. Year/Sem — Handwritten number in box AND filled bubble.
+    - YEAR bubble has only 3 options labeled 1, 2, 3 from top to bottom.
+    - SEM bubble has options labeled 0 through 9 from top to bottom.
+    - Report actual bubble labels, not row indexes.
 2. COURSE CODE — EXACTLY 7 columns. Column 0 has ONLY "U" at top and "P" below (no other bubbles). Columns 1-6 have digits 0-9. Result is ALWAYS 7 characters like "U216880" or "P246890". Read handwritten code AND filled bubbles.
 3. SESSION — 4-column grid, digits 0-9. Read handwritten AND filled bubbles.""",
 
@@ -285,10 +301,141 @@ SECTION_MODELS = {
     },
 }
 
+SECTION_FIELD_GROUPS = {
+    "C": {
+        "semester_info": ["ug_old", "ug_new", "pg_sem"],
+        "faculty_codes": ["faculty", "course_code", "center_code"],
+        "marks": ["marks_obtained", "total_marks"],
+    },
+    "D": {
+        "barcode_only": [],
+        "roll_center": ["roll_number", "center_code"],
+        "course_session": ["year", "sem", "course_code", "session"],
+        "exam_details": ["exam_type", "sitting"],
+    },
+}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Public API
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _response_text_variants(response) -> list[str]:
+    variants = []
+
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        variants.append(text.strip())
+
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        content = getattr(candidate, "content", None)
+        parts = getattr(content, "parts", None) or []
+        part_texts = []
+        for part in parts:
+            part_text = getattr(part, "text", None)
+            if isinstance(part_text, str) and part_text.strip():
+                part_texts.append(part_text.strip())
+        if part_texts:
+            variants.append("".join(part_texts))
+
+    cleaned_variants = []
+    seen = set()
+    for text in variants:
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = cleaned.strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            cleaned_variants.append(cleaned)
+    return cleaned_variants
+
+
+def _load_json_payload(text: str):
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        if exc.msg.startswith("EOF while parsing") or exc.msg.startswith("Unterminated string"):
+            raise TruncatedGeminiJSONError(str(exc)) from exc
+        raise
+
+
+def _parse_structured_response(response, schema_model: type[BaseModel]) -> BaseModel:
+    parsed = getattr(response, "parsed", None)
+    if parsed is not None:
+        if isinstance(parsed, schema_model):
+            return parsed
+        if isinstance(parsed, BaseModel):
+            return schema_model.model_validate(parsed.model_dump())
+        return schema_model.model_validate(parsed)
+
+    last_schema_error = None
+    last_truncated_error = None
+    for text in _response_text_variants(response):
+        try:
+            payload = _load_json_payload(text)
+            return schema_model.model_validate(payload)
+        except TruncatedGeminiJSONError as exc:
+            last_truncated_error = exc
+        except ValidationError as exc:
+            last_schema_error = exc
+        except json.JSONDecodeError as exc:
+            last_schema_error = exc
+
+    if last_schema_error is not None:
+        raise last_schema_error
+
+    if last_truncated_error is not None:
+        raise last_truncated_error
+
+    raise TruncatedGeminiJSONError("Gemini returned no parseable JSON content")
+
+
+def _generate_structured_content(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
+    model_names = [model_name] if isinstance(model_name, str) else list(model_name)
+    last_error = None
+ 
+    for candidate_model in model_names:
+        for attempt in range(3):
+            try:
+                response = client.models.generate_content(
+                    model=candidate_model,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        temperature=0.0,
+                        max_output_tokens=max_output_tokens,
+                        response_mime_type="application/json",
+                        response_schema=schema_model,
+                    ),
+                )
+                return _parse_structured_response(response, schema_model), candidate_model
+            except ClientError as exc:
+                last_error = exc
+                status_code = getattr(exc, "status_code", None)
+                if status_code is None:
+                    response = getattr(exc, "response", None)
+                    status_code = getattr(response, "status_code", None)
+                if status_code is None:
+                    status_code = getattr(exc, "code", None)
+                if status_code == 404:
+                    logger.warning("Gemini model %s is unavailable, trying next candidate", candidate_model)
+                    break
+                if attempt == 2:
+                    raise
+                logger.warning("Gemini API request failed, retrying: %s", exc)
+            except TruncatedGeminiJSONError as exc:
+                last_error = exc
+                if attempt == 2:
+                    raise
+                logger.warning("Gemini returned truncated JSON, retrying: %s", exc)
+            except Exception as exc:
+                last_error = exc
+                if attempt == 2:
+                    raise
+                logger.warning("Gemini structured response parse failed, retrying: %s", exc)
+
+    raise last_error
 
 
 def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
@@ -299,7 +446,7 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
     """
     api_key = config("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
-    model_name = "gemini-2.0-flash"
+    model_name = GEMINI_3_MODEL_CANDIDATES
 
     image_path = Path(image_path)
     if not image_path.exists():
@@ -312,23 +459,23 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 
     logger.info("Calling Gemini Vision API for Part %s: %s", part, image_path.name)
 
-    # ── Full image analysis (Pydantic structured output) ─────────────────────
-    full_response = client.models.generate_content(
-        model=model_name,
-        contents=[prompt, img],
-        config=types.GenerateContentConfig(
-            temperature=0.0,
-            max_output_tokens=2048,
-            response_mime_type="application/json",
-            response_schema=response_model,
-        ),
-    )
-    full_parsed: BaseModel = response_model.model_validate_json(full_response.text)
-    logger.debug("Gemini full-image response: %s", full_parsed.model_dump())
+    full_parsed = None
+    full_error = None
+    resolved_model_name = model_name
+    try:
+        full_parsed, resolved_model_name = _generate_structured_content(
+            client,
+            model_name,
+            [prompt, img],
+            response_model,
+            4096,
+        )
+        logger.debug("Gemini full-image response: %s", full_parsed.model_dump())
+    except Exception as exc:
+        full_error = exc
+        logger.warning("Full image Gemini analysis failed, falling back to section-based assembly: %s", exc)
 
-    # ── Section-by-section for verification (Pydantic structured output) ─────
     crops = _crop_sections(img, part_key)
-    # debug_dir = _export_debug_crops(image_path, img, part, crops)
     section_models = SECTION_MODELS.get(part_key, {})
     section_results: dict[str, BaseModel] = {}
 
@@ -338,22 +485,22 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
         if not section_prompt or not sec_model:
             continue
         try:
-            sec_resp = client.models.generate_content(
-                model=model_name,
-                contents=[section_prompt, crop_img],
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    max_output_tokens=1024,
-                    response_mime_type="application/json",
-                    response_schema=sec_model,
-                ),
+            section_result, _ = _generate_structured_content(
+                client,
+                resolved_model_name,
+                [section_prompt, crop_img],
+                sec_model,
+                1536,
             )
-            section_results[section_name] = sec_model.model_validate_json(sec_resp.text)
+            section_results[section_name] = section_result
         except Exception as exc:
             logger.warning("Section %s failed: %s", section_name, exc)
 
     # ── Merge: section results override full image per field ─────────────────
-    merged = full_parsed.model_dump()
+    if full_parsed is None and not section_results:
+        raise full_error or RuntimeError("Gemini could not produce usable full-image or section output")
+
+    merged = full_parsed.model_dump() if full_parsed is not None else {}
     for sec_parsed in section_results.values():
         sec_data = sec_parsed.model_dump()
         for key, val in sec_data.items():
@@ -403,11 +550,13 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 
     # ── Build flags ──────────────────────────────────────────────────────────
     flags = _check_multi_bubble_flags(merged)
+    verification = _build_verification_report(merged, part)
 
     # ── Convert to pipeline-compatible format ────────────────────────────────
     result = _normalize_result(merged, part)
     result["mode"] = "ai"
     result["flags"] = flags
+    result["verification"] = verification
     result["ai_raw"] = merged
     # result["debug_crops_dir"] = str(debug_dir)
 
@@ -420,7 +569,6 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 # Image loading & enhancement
 # ──────────────────────────────────────────────────────────────────────────────
-
 
 def _load_image(image_path: str) -> Image.Image:
     """Load, auto-rotate (EXIF), enhance contrast for better bubble reading."""
@@ -484,7 +632,6 @@ def _pad_gray_crop(crop: np.ndarray, pad_x_ratio: float, pad_y_ratio: float) -> 
 # ──────────────────────────────────────────────────────────────────────────────
 # Section cropping
 # ──────────────────────────────────────────────────────────────────────────────
-
 
 def _crop_sections(img: Image.Image, part_type: str) -> Dict[str, Image.Image]:
     """Crop OMR sheet into grouped sections for more accurate AI reading."""
@@ -613,7 +760,6 @@ def _expand_bounds(
 # Merge helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-
 def _has_real_data(val) -> bool:
     """Check if a Pydantic-serialised field has actual data (not all None/empty)."""
     if val is None:
@@ -648,9 +794,215 @@ def _check_multi_bubble_flags(data: dict) -> list:
     return flags
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Normalize → pipeline dict format
-# ──────────────────────────────────────────────────────────────────────────────
+def _clean_compare_value(value) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    text = re.sub(r"\s+", "", text.upper())
+    return text or None
+
+
+def _split_year_sem_value(value) -> tuple[Optional[str], Optional[str]]:
+    if value is None:
+        return None, None
+
+    text = str(value).strip()
+    if not text:
+        return None, None
+
+    cleaned = re.sub(r"\s+", " ", text.upper()).strip()
+
+    match = re.search(r"YEAR\s*[:\-/ ]*([A-Z0-9]+).*?SEM(?:ESTER)?\s*[:\-/ ]*([A-Z0-9]+)", cleaned)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+
+    match = re.search(r"SEM(?:ESTER)?\s*[:\-/ ]*([A-Z0-9]+).*?YEAR\s*[:\-/ ]*([A-Z0-9]+)", cleaned)
+    if match:
+        return match.group(2).strip(), match.group(1).strip()
+
+    parts = [part.strip() for part in re.split(r"\s*[/,\-]\s*", cleaned) if part.strip()]
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+
+    tokens = re.findall(r"[A-Z0-9]+", cleaned)
+    if len(tokens) >= 2:
+        return tokens[0], tokens[1]
+
+    compact = re.sub(r"\s+", "", cleaned)
+    if compact.isdigit() and len(compact) == 2:
+        return compact[0], compact[1]
+
+    return cleaned, None
+
+
+def _normalize_year_component(value, reference: Optional[str] = None) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if not text.isdigit():
+        return text
+
+    number = int(text)
+    if number == 0:
+        return "1"
+
+    if reference and str(reference).isdigit():
+        ref_number = int(str(reference))
+        if 1 <= ref_number <= 3 and number + 1 == ref_number:
+            return str(ref_number)
+
+    if 1 <= number <= 3:
+        return str(number)
+    if 0 <= number <= 2:
+        return str(number + 1)
+    return str(number)
+
+
+def _normalize_sem_component(value) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text
+
+
+def _expand_year_sem_fields(data: dict, part: str) -> dict:
+    if part != "D":
+        return data
+
+    year_sem = data.get("year_sem")
+    if not isinstance(year_sem, dict):
+        return data
+
+    expanded = dict(data)
+    handwritten_year, handwritten_sem = _split_year_sem_value(year_sem.get("handwritten"))
+    filled_bubbles = year_sem.get("filled_bubbles") or []
+    bubble_year = filled_bubbles[0] if len(filled_bubbles) > 0 else None
+    bubble_sem = filled_bubbles[1] if len(filled_bubbles) > 1 else None
+    if bubble_year is None and bubble_sem is None:
+        bubble_year, bubble_sem = _split_year_sem_value(year_sem.get("bubble_value") or year_sem.get("bubble"))
+    handwritten_year = _normalize_year_component(handwritten_year)
+    handwritten_sem = _normalize_sem_component(handwritten_sem)
+    bubble_year = _normalize_year_component(bubble_year, reference=handwritten_year)
+    bubble_sem = _normalize_sem_component(bubble_sem)
+
+    expanded["year"] = {
+        "handwritten": handwritten_year,
+        "bubble_value": bubble_year,
+        "filled_bubbles": filled_bubbles,
+        "multiple_filled": year_sem.get("multiple_filled", False),
+    }
+    expanded["sem"] = {
+        "handwritten": handwritten_sem,
+        "bubble_value": bubble_sem,
+        "filled_bubbles": filled_bubbles,
+        "multiple_filled": year_sem.get("multiple_filled", False),
+    }
+    return expanded
+
+
+def _field_verification(field_name: str, field_data: dict) -> Optional[dict]:
+    if not isinstance(field_data, dict):
+        return None
+
+    handwritten = field_data.get("handwritten")
+    bubble = field_data.get("bubble_value")
+    if field_name == "year_sem":
+        bubble = field_data.get("bubble_value") or field_data.get("bubble")
+    if field_name in ["year", "sem"]:
+        bubble = field_data.get("bubble_value")
+
+    normalized_handwritten = _clean_compare_value(handwritten)
+    normalized_bubble = _clean_compare_value(bubble)
+
+    if normalized_handwritten is None and normalized_bubble is None:
+        return None
+
+    if normalized_handwritten is None or normalized_bubble is None:
+        status = "missing"
+        remark = "Missing handwritten or bubble value"
+    elif normalized_handwritten == normalized_bubble:
+        status = "match"
+        remark = "Handwritten and bubble values match"
+    else:
+        status = "mismatch"
+        remark = "Handwritten and bubble values do not match"
+
+    verification = {
+        "field": field_name,
+        "handwritten": handwritten,
+        "bubble": bubble,
+        "status": status,
+        "remark": remark,
+    }
+    if field_data.get("multiple_filled"):
+        verification["multiple_filled"] = True
+        verification["columns_with_multiple"] = field_data.get("columns_with_multiple", [])
+    return verification
+
+
+def _build_verification_report(data: dict, part: str) -> dict:
+    data = _expand_year_sem_fields(data, part)
+    field_checks = []
+    section_checks = []
+    mismatched_sections = []
+
+    for section_name, field_names in SECTION_FIELD_GROUPS.get(part, {}).items():
+        section_field_checks = []
+        section_has_mismatch = False
+        has_missing = False
+
+        for field_name in field_names:
+            verification = _field_verification(field_name, data.get(field_name, {}))
+            if verification is None:
+                continue
+            section_field_checks.append(verification)
+            field_checks.append({"section": section_name, **verification})
+            if verification["status"] == "mismatch":
+                section_has_mismatch = True
+            if verification["status"] == "missing":
+                has_missing = True
+
+        if not section_field_checks:
+            section_checks.append({
+                "section": section_name,
+                "status": "not_applicable",
+                "remark": "No handwritten/bubble comparison fields in this section",
+                "fields": [],
+            })
+            continue
+
+        if section_has_mismatch:
+            section_status = "mismatch"
+            section_remark = "One or more handwritten and bubble values do not match"
+            mismatched_sections.append(section_name)
+        elif has_missing:
+            section_status = "missing"
+            section_remark = "One or more handwritten or bubble values are missing"
+        else:
+            section_status = "match"
+            section_remark = "All handwritten and bubble values match"
+
+        section_checks.append({
+            "section": section_name,
+            "status": section_status,
+            "remark": section_remark,
+            "fields": section_field_checks,
+        })
+
+    has_mismatch = any(check["status"] != "match" for check in field_checks)
+
+    return {
+        "field_checks": field_checks,
+        "section_checks": section_checks,
+        "mismatched_sections": mismatched_sections,
+        "has_mismatch": has_mismatch,
+    }
 
 
 def _val(field: dict | None, *keys: str) -> Optional[str]:
@@ -669,6 +1021,7 @@ def _normalize_result(data: dict, part: str) -> dict:
     Convert merged Pydantic dict into the flat dict that
     models.OMRScan.apply_result() expects.
     """
+    data = _expand_year_sem_fields(data, part)
     result = {"part": part}
     readings = {}
 
@@ -683,16 +1036,8 @@ def _normalize_result(data: dict, part: str) -> dict:
         result["exam_type"] = _val(data.get("exam_type"), "value")
         result["sitting"] = _val(data.get("sitting"), "value")
 
-        # year_sem split
-        ys = data.get("year_sem", {})
-        ys_val = _val(ys, "handwritten", "bubble_value")
-        if ys_val and "/" in ys_val:
-            parts_split = ys_val.split("/")
-            result["year"] = parts_split[0].strip() if parts_split else None
-            result["sem"] = parts_split[1].strip() if len(parts_split) > 1 else None
-        else:
-            result["year"] = ys_val
-            result["sem"] = None
+        result["year"] = _val(data.get("year"), "handwritten", "bubble_value")
+        result["sem"] = _val(data.get("sem"), "handwritten", "bubble_value")
 
         # Extra handwritten fields
         result["name"] = data.get("name") or None
@@ -704,7 +1049,9 @@ def _normalize_result(data: dict, part: str) -> dict:
         for f in ("roll_number", "center_code", "course_code", "session"):
             fd = data.get(f, {})
             readings[f] = {"handwritten": fd.get("handwritten"), "bubble": fd.get("bubble_value")}
-        readings["year_sem"] = {"handwritten": ys.get("handwritten"), "bubble": ys.get("bubble_value")}
+        readings["year"] = {"handwritten": data.get("year", {}).get("handwritten"), "bubble": data.get("year", {}).get("bubble_value")}
+        readings["sem"] = {"handwritten": data.get("sem", {}).get("handwritten"), "bubble": data.get("sem", {}).get("bubble_value")}
+        readings["year_sem"] = {"handwritten": data.get("year_sem", {}).get("handwritten"), "bubble": data.get("year_sem", {}).get("bubble_value")}
         readings["barcode"] = {"decoded": bc.get("decoded_value"), "printed_digits": bc.get("printed_digits")}
 
     elif part == "C":
