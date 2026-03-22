@@ -136,6 +136,7 @@ class PartDBarcodeOnly(BaseModel):
 class PartDRollCenter(BaseModel):
     roll_number: Optional[GridField] = None
     center_code: Optional[GridField] = None
+    registration_no: Optional[str] = None
 
 
 class PartDCourseSession(BaseModel):
@@ -147,7 +148,6 @@ class PartDCourseSession(BaseModel):
 class PartDExamDetails(BaseModel):
     exam_type: Optional[RadioField] = None
     sitting: Optional[RadioField] = None
-    registration_no: Optional[str] = None
     name: Optional[str] = None
     father_name: Optional[str] = None
     paper_name: Optional[str] = None
@@ -248,11 +248,10 @@ SECTIONS TO READ:
    - Return ONLY one of these exact labels: First, Second.
    - If none is clearly filled, return null.
 
-9. Registration No: Read handwritten text only.
-10. Name: Read handwritten text.
-11. Father Name: Read handwritten text.
-12. Paper Name: Read handwritten text.
-13. Date of Exam: Read handwritten text."""
+9. Name: Read handwritten text.
+10. Father Name: Read handwritten text.
+11. Paper Name: Read handwritten text.
+12. Date of Exam: Read handwritten text."""
 
 # ── Section crop prompts ──────────────────────────────────────────────────────
 
@@ -270,7 +269,8 @@ SECTION_PROMPTS = {
 2. CENTER CODE — Handwritten digits at top of smaller grid (typically 4 digits). Then read filled bubbles.
    - Read column by column from left to right.
    - Report the actual digit label, not the row index.
-   - Keep handwritten and bubble values separate.""",
+   - Keep handwritten and bubble values separate.
+3. REGISTRATION NO — Read handwritten text only from this same cropped section. Do not infer it from any other section.""",
 
         "course_session": """Read this cropped section of an OMR sheet. Read BOTH handwritten AND filled bubbles.
 
@@ -303,7 +303,7 @@ SECTION_PROMPTS = {
 2. Sitting — Two options: First, Second.
    - Return ONLY one exact value from this list: First, Second.
    - If none is clearly filled, return null.
-3. Handwritten text: Registration No, Name, Father Name, Paper Name, Date of Exam.""",
+3. Handwritten text: Name, Father Name, Paper Name, Date of Exam.""",
     },
     "part_c": {
         "semester_info": """Read this cropped section of a Part-C OMR sheet:
