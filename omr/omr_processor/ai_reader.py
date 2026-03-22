@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field, ValidationError
 from PIL import Image, ImageEnhance, ImageOps
 from decouple import config
 
-from .barcode_reader import read_barcode
+from .barcode_reader import is_valid_barcode_value, normalize_barcode_value, read_barcode
 from .preprocessor import load_original_gray
 from .roi_utils import crop_roi as crop_section_roi, locate_content_frame, resolve_roi_bounds
 from .section_config import SECTION_MAP
@@ -36,7 +36,7 @@ from .section_config import SECTION_MAP
 logger = logging.getLogger(__name__)
 
 GEMINI_MODEL_CANDIDATES = [
-    "gemini-2.5-flash",
+    "gemini-2.0-flash",
 ]
 
 
@@ -520,9 +520,14 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
         ai_barcode_value = None
         if isinstance(existing_barcode, dict):
             ai_barcode_value = existing_barcode.get("decoded_value") or existing_barcode.get("printed_digits")
-        if ai_barcode_value:
-            logger.info("AI barcode already present, skipping pyzbar/zxing override: %s", ai_barcode_value)
+        normalized_ai_barcode = normalize_barcode_value(ai_barcode_value)
+        if normalized_ai_barcode and is_valid_barcode_value(normalized_ai_barcode):
+            if isinstance(merged.get("barcode"), dict):
+                merged["barcode"]["decoded_value"] = normalized_ai_barcode
+            logger.info("AI barcode already present, skipping pyzbar/zxing override: %s", normalized_ai_barcode)
         else:
+            if ai_barcode_value:
+                logger.warning("Ignoring invalid AI barcode value: %s", ai_barcode_value)
             decoded_barcode = None
             if part == "C":
                 semester_info_crop = crops.get("semester_info")
