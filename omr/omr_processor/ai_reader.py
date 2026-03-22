@@ -16,7 +16,6 @@ rest of the pipeline (models, views, serialisation) works unchanged.
 import logging
 import json
 import re
-import shutil
 from pathlib import Path
 from typing import Dict, Literal, Optional
 
@@ -502,7 +501,6 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 
     resolved_model_name = model_name
     crops = _crop_sections(img, part_key)
-    debug_dir = _export_debug_crops(image_path, img, part, crops)
     section_models = SECTION_MODELS.get(part_key, {})
     section_results: dict[str, BaseModel] = {}
 
@@ -594,7 +592,6 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
     result["flags"] = flags
     result["verification"] = verification
     result["ai_raw"] = merged
-    result["debug_crops_dir"] = str(debug_dir)
 
     logger.info("AI Vision result for Part %s: %s", part, {
         k: v for k, v in result.items() if k not in ("ai_raw",)
@@ -624,26 +621,6 @@ def _load_image(image_path: str) -> Image.Image:
     img = ImageOps.autocontrast(img, cutoff=1)
 
     return img
-
-
-def _export_debug_crops(
-    image_path: Path,
-    img: Image.Image,
-    part: str,
-    crops: Dict[str, Image.Image],
-) -> Path:
-    debug_dir = Path(__file__).resolve().parents[2] / "omr_debug_crops" / "latest" / f"part_{part.lower()}"
-    if debug_dir.exists():
-        shutil.rmtree(debug_dir)
-    debug_dir.mkdir(parents=True, exist_ok=True)
-
-    img.save(debug_dir / "00_full_ai_input.png")
-
-    for idx, (name, crop_img) in enumerate(crops.items(), start=1):
-        crop_img.save(debug_dir / f"{idx:02d}_{name}.png")
-
-    logger.info("Saved OMR debug crops to %s", debug_dir)
-    return debug_dir
 
 
 def _pad_gray_crop(crop: np.ndarray, pad_x_ratio: float, pad_y_ratio: float) -> np.ndarray:
