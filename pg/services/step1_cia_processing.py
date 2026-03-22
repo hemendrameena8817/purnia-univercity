@@ -2,10 +2,16 @@
 Step 1: CIA Processing for PG Students
 
 Processes CIA (Internal Assessment) results for a batch and semester:
-1. Checks if students passed ALL CIA assessments
+1. Checks if students passed ALL CIA assessments (including previous sessions)
 2. Creates PGExamResult entries with cia_pass flag (CIA status)
 3. Creates PGExamRegistration entries for ESE if CIA passed
 4. Sets initial values for ESE processing
+
+Enhanced Features:
+- Picks previous CIA data from same session and batch
+- Calculates CIA based on best performance across sessions
+- Handles multiple attempts for same paper (best of all attempts)
+- Maintains session-wise result history
 
 Note: PG uses CIA/ESE terminology.
 
@@ -187,12 +193,31 @@ class PGCIAResultProcessingService:
             show_detail: If True, print detailed assessment information
         """
         # Get all CIA (Internal Assessment) assessments for this student in semester
-        cia_assessments = PGStudentCourseAssessment.objects.filter(
+        # Enhanced: Include previous sessions for same batch to get best performance
+        
+        # Current session assessments (primary)
+        current_cia_assessments = PGStudentCourseAssessment.objects.filter(
             student=student,
             semester=self.semester,
             session=self.session,
             label__icontains='CIA'  # PG uses CIA for internal assessment
         )
+        
+        # Previous session assessments for same batch (fallback for better performance)
+        previous_cia_assessments = PGStudentCourseAssessment.objects.filter(
+            student=student,
+            semester=self.semester,
+            label__icontains='CIA'
+        ).exclude(session=self.session)
+        
+        if self.batch:
+            # Filter previous assessments by batch if specified
+            previous_cia_assessments = previous_cia_assessments.filter(
+                batch=self.batch
+            )
+
+        # Combine assessments for processing (current + previous)
+        all_assessments = current_cia_assessments.union(previous_cia_assessments)
 
         # CHECK PROMOTION STATUS (For Semesters > 1)
         # Convert semester to int to check if > 1
@@ -231,7 +256,7 @@ class PGCIAResultProcessingService:
                         print(f"⚠️ SKIPPING: No result record found for {prev_sem_str}")
                     return
         
-        if not cia_assessments.exists():
+        if not all_assessments.exists():
             # No CIA assessments found - skip
             return
         
@@ -246,24 +271,27 @@ class PGCIAResultProcessingService:
             print(f"Reg No:  {student.registration_no}")
             print(f"Batch:   {student.batch if student.batch else 'N/A'}")
             print(f"Dept:    {student.department.name if student.department else 'N/A'}")
-            print(f"\nCIA Assessments ({cia_assessments.count()} courses):")
+            print(f"\nCurrent Session CIA Assessments ({current_cia_assessments.count()} courses):")
+            print(f"Previous Session CIA Assessments ({previous_cia_assessments.count()} courses)")
+            print(f"Total Combined Assessments ({all_assessments.count()} courses):")
             print(f"{'-'*100}")
             
-            for idx, assessment in enumerate(cia_assessments, 1):
+            for idx, assessment in enumerate(all_assessments, 1):
                 # Calculate pass/fail status
                 is_pass = False
                 if assessment.ind_marks_obtained is not None and assessment.ind_pass_marks is not None:
                     if not assessment.ind_is_absent:
                         is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
                 
+                session_info = f"[{assessment.session}]" if assessment.session != self.session else ""
                 status_icon = "✅" if is_pass else "❌"
-                print(f"{idx}. {status_icon} {assessment.course_name[:50]:50} | "
+                print(f"{idx}. {status_icon} {assessment.course_name[:50]:50} {session_info} | "
                       f"Marks: {assessment.ind_marks_obtained}/{assessment.ind_max_marks} | "
                       f"Pass: {assessment.ind_pass_marks} | "
                       f"Status: {'PASS' if is_pass else 'FAIL'}")
             
-        # Check if student passed ALL CIA assessments
-        cia_passed = self._check_cia_passed(cia_assessments, student, dry_run=dry_run)
+        # Check if student passed ALL CIA assessments (using best performance)
+        cia_passed = self._check_cia_passed(all_assessments, student, dry_run=dry_run)
         
         if show_detail:
             overall_status = "✅ PASS" if cia_passed else "❌ FAIL"
@@ -293,28 +321,30 @@ class PGCIAResultProcessingService:
     ################################################################################
     
     
-    def _check_cia_passed(self, cia_assessments, student, dry_run: bool = False) -> bool:
+    def _check_cia_passed(self, all_assessments, student, dry_run: bool = False) -> bool:
         """
-        Check if student passed ALL CIA assessments (Grouped by Paper Code)
+        Enhanced CIA pass check - considers best performance across sessions
         
         Passing Criteria:
-        - For each unique paper_code, the student must have at least ONE passed attempt (Best of).
-        - If any paper has NO passed attempts, then the student fails CIA.
+        - For each unique paper_code, the student must have at least ONE passed attempt 
+          from ANY session (current or previous, same batch)
+        - Uses best-of-all-attempts approach for each paper
+        - Prioritizes current session but falls back to previous sessions if needed
         
         Args:
-            cia_assessments: QuerySet of CIA assessments (includes usage from multiple sessions)
+            all_assessments: QuerySet of CIA assessments (includes multiple sessions)
             student: The student object
             dry_run: If True, don't update database
             
         Returns:
             True if passed all CIA, False otherwise
         """
-        if not cia_assessments:
+        if not all_assessments:
             return True # Should not happen based on caller logic, or implies no requirement? Caller handles empty check.
             
-        # Group assessments by paper_code
+        # Group assessments by paper_code across all sessions
         paper_assessments = {}
-        for assessment in cia_assessments:
+        for assessment in all_assessments:
             code = assessment.paper_code
             if code not in paper_assessments:
                 paper_assessments[code] = []
@@ -323,10 +353,22 @@ class PGCIAResultProcessingService:
         all_papers_cleared = True
         
         for code, assessments in paper_assessments.items():
+            # Sort assessments: current session first, then by marks (highest first)
+            current_session_assessments = [a for a in assessments if a.session == self.session]
+            other_session_assessments = [a for a in assessments if a.session != self.session]
+            
+            # Sort other sessions by marks obtained (best first)
+            other_session_assessments.sort(key=lambda x: x.ind_marks_obtained or 0, reverse=True)
+            
+            # Combine: current session assessments first, then best from other sessions
+            sorted_assessments = current_session_assessments + other_session_assessments
+            
             # Check if ANY attempt for this paper is passed
             paper_cleared = False
+            best_attempt = None
+            best_marks = -1
             
-            for assessment in assessments:
+            for assessment in sorted_assessments:
                 is_pass = False
                 
                 # Calculate pass/fail based on actual marks
@@ -335,6 +377,10 @@ class PGCIAResultProcessingService:
                         is_pass = False
                     else:
                         is_pass = assessment.ind_marks_obtained >= assessment.ind_pass_marks
+                        # Track best attempt
+                        if assessment.ind_marks_obtained > best_marks:
+                            best_marks = assessment.ind_marks_obtained
+                            best_attempt = assessment
                 elif assessment.ind_is_absent:
                     is_pass = False
                 
@@ -345,55 +391,27 @@ class PGCIAResultProcessingService:
                 
                 if is_pass:
                     paper_cleared = True
+                    # Found a passing attempt, no need to check others for this paper
+                    break
             
-            if not paper_cleared:
-                # [NEW] Check History: If not cleared in current session, check previous sessions
-                # This handles cases where student passed earlier but re-appeared and failed,
-                # or if we are processing a mix of current/back papers.
-                historical_pass = PGStudentCourseAssessment.objects.filter(
-                    student=student,
-                    paper_code=code,
-                    label__icontains='CIA',
-                    ind_is_pass=True
-                ).exclude(session=self.session).exists()
-                
-                if historical_pass:
-                    paper_cleared = True
-
+            # If not cleared in any attempt, this paper fails
             if not paper_cleared:
                 all_papers_cleared = False
+                if dry_run and best_attempt:
+                    print(f"❌ Paper {code}: Best attempt was {best_attempt.ind_marks_obtained}/{best_attempt.ind_max_marks} in session {best_attempt.session}")
         
-        # Passed all CIA assessments?
+        # If all papers cleared, return True
         if all_papers_cleared:
             return True
             
-        # If NOT passed based on current assessments (or no current assessments), 
-        # check if they passed CIA in a PREVIOUS attempt for this SAME semester.
-        # ... (rest of logic)
-            
-        # If NOT passed based on current assessments (or no current assessments), 
-        # check if they passed CIA in a PREVIOUS attempt for this SAME semester.
-        # This handles cases where a student is retaking the semester (back paper)
-        # but already cleared internal assessments in the past.
-        
-        # We need to find valid previous results for this student + semester
-        # But we must exclude the result we are about to create/update for THIS session
-        # (Though usually that record wouldn't exist or be updated yet in this flow, safe to check excluding current session potentially?)
-        # Actually simplest is to just check ANY record for this semester where cia_pass is True.
-        
-        # Normalized semester for lookup
+        # If NOT passed based on all assessments, check if they passed CIA in a PREVIOUS attempt 
+        # for this SAME semester (legacy check for existing results)
         normalized_sem = self.semester
         if normalized_sem.upper() in ['1ST', '2ND', '3RD', '4TH']:
              sem_map = {'1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4'}
              normalized_sem = sem_map.get(self.semester.upper(), self.semester)
 
         # Check for any existing exam result where CIA is passed for this semester
-        # Note: cia_assessments[0].student is safe because _process_student returns early if no assessments
-        student = cia_assessments[0].student if cia_assessments else None
-        
-        if not student:
-            return False
-
         previous_pass = PGExamResult.objects.filter(
             Q(semester=self.semester) | Q(semester=normalized_sem),
             student=student,

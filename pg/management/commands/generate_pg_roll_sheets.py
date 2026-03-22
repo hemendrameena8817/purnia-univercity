@@ -11,8 +11,9 @@ from pg.utils.pdf_generator import generate_pg_roll_sheet_pdf
 logger = logging.getLogger(__name__)
 
 
-# python manage.py generate_pg_roll_sheets --exam-uid 10f3ea2b-675b-4c5d-baf6-017ef4b6b0de --registration-no 2411M210259
-
+"""
+python manage.py generate_pg_roll_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd --registration-no 2033B130020
+ """
 
 class Command(BaseCommand):
     help = 'Generate PG Roll Sheets in PDF format for all colleges and departments associated with an exam.'
