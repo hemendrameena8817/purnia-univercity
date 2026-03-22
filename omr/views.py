@@ -197,7 +197,7 @@ class OMRListView(APIView):
 
         paginator = OMRScanPagination()
         page = paginator.paginate_queryset(qs, request)
-        serializer = OMRScanListSerializer(page, many=True)
+        serializer = OMRScanDetailSerializer(page, many=True, context={"request": request})
 
         return paginator.get_paginated_response(serializer.data)
 

@@ -28,14 +28,14 @@ from pydantic import BaseModel, Field, ValidationError
 from PIL import Image, ImageEnhance, ImageOps
 from decouple import config
 
-from .barcode_reader import is_valid_barcode_value, normalize_barcode_value, read_barcode
+from .barcode_reader import read_barcode
 from .preprocessor import load_original_gray
 from .roi_utils import crop_roi as crop_section_roi, locate_content_frame, resolve_roi_bounds
 from .section_config import SECTION_MAP
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL_CANDIDATES = [
+GEMINI_3_MODEL_CANDIDATES = [
     "gemini-2.0-flash",
 ]
 
@@ -203,7 +203,10 @@ IMPORTANT: The image may be rotated or upside-down. First orient yourself - the 
 INSTRUCTIONS:
 - A FILLED bubble is ONLY a circle that is COMPLETELY DARKENED / FULLY SHADED / entirely covered with pen ink.
 - A bubble with just a TICK MARK (✓) or CROSS MARK (✗) inside is NOT considered filled. IGNORE tick marks and crosses.
-- For EVERY section that has a bubble grid, read BOTH the handwritten text/numbers AND the filled bubbles. Report both separately.
+- For EVERY section that has a bubble grid, read BOTH the handwritten text/numbers AND the filled bubbles. Report them separately. Handwritten text must go only in the handwritten field. Filled bubbles must go only in the bubble/value field.
+- Read bubble grids COLUMN BY COLUMN from left to right. Do not guess missing columns.
+- Always report the ACTUAL LABEL written for the filled bubble, never the visual row index.
+- If NO bubble is clearly filled in a field/column, return null for that field/column instead of guessing from handwriting.
 - If MORE THAN ONE bubble is COMPLETELY FILLED in any single column, set multiple_filled=true and REPLACE that column's digit with * in bubble_value.
 - Be very precise - do not guess.
 
@@ -216,21 +219,34 @@ SECTIONS TO READ:
 3. CENTER CODE: Grid of 4 columns, digits 0-9. Read HANDWRITTEN AND filled bubbles.
 
 4. Year/Sem: Read HANDWRITTEN number AND filled bubble.
+    - YEAR and SEM are separate fields. Do not merge them into one combined value.
     - YEAR bubble has only 3 options labeled 1, 2, 3 from top to bottom.
     - SEM bubble has options labeled 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 from top to bottom.
     - Report the actual bubble labels, not the row index.
+    - If handwriting says one thing and bubbles show another, keep both separately. Do not copy handwritten text into bubble_value.
 
 5. COURSE CODE: EXACTLY 7 columns:
    - Column 0 (leftmost): ONLY 2 bubbles — "U" at top, "P" below. No other bubbles.
    - Columns 1-6: digits 0-9 (0 at top, 9 at bottom).
-   - Result is ALWAYS exactly 7 characters (1 letter + 6 digits) like "U216880" or "P246890". Do NOT output more than 7.
-   - Read HANDWRITTEN code AND filled bubbles.
+   - Read each column independently from left to right.
+   - Result is ALWAYS exactly 7 characters from bubbles: 1 letter + 6 digits, like "U216880" or "P246890". Do NOT output more than 7 characters.
+   - Do not invent extra digits. Do not copy handwritten text into bubble_value.
+   - Read HANDWRITTEN code AND filled bubbles separately.
 
-6. SESSION: Grid of 4 columns, digits 0-9. Read HANDWRITTEN AND filled bubbles.
+6. SESSION: Grid of 4 columns, digits 0-9.
+   - Read each column left to right.
+   - Report the label of the filled bubble in each column.
+   - Do not guess digits from handwriting if a bubble is unclear.
+   - Read HANDWRITTEN AND filled bubbles separately.
 
-7. EXAM TYPE: Options - Regular, Back Paper, Ex., Improvement. Which is completely filled?
+7. EXAM TYPE: Options - Regular, Back Paper, Ex., Improvement.
+   - Return ONLY one of these exact labels: Regular, Back Paper, Ex., Improvement.
+   - If none is clearly filled, return null.
+   - Do not paraphrase or rename the option.
 
-8. Sitting: Options - First, Second. Which is completely filled?
+8. Sitting: Options - First, Second.
+   - Return ONLY one of these exact labels: First, Second.
+   - If none is clearly filled, return null.
 
 9. Name: Read handwritten text.
 10. Father Name: Read handwritten text.
@@ -247,20 +263,45 @@ SECTION_PROMPTS = {
         "roll_center": """Read this cropped section of an OMR sheet. Read BOTH handwritten AND filled bubbles.
 
 1. ROLL NUMBER — Handwritten digits in boxes at top of bubble grid (typically 10 digits). Then read the bubble grid below — each column has digits 0-9 (0 at top), one filled per column.
-2. CENTER CODE — Handwritten digits at top of smaller grid (typically 4 digits). Then read filled bubbles.""",
+   - Read column by column from left to right.
+   - Report the actual digit label, not the row index.
+   - Do not copy handwritten digits into bubble_value.
+2. CENTER CODE — Handwritten digits at top of smaller grid (typically 4 digits). Then read filled bubbles.
+   - Read column by column from left to right.
+   - Report the actual digit label, not the row index.
+   - Keep handwritten and bubble values separate.""",
 
         "course_session": """Read this cropped section of an OMR sheet. Read BOTH handwritten AND filled bubbles.
 
-1. Year/Sem — Handwritten number in box AND filled bubble.
-    - YEAR bubble has only 3 options labeled 1, 2, 3 from top to bottom.
-    - SEM bubble has options labeled 0 through 9 from top to bottom.
-    - Report actual bubble labels, not row indexes.
-2. COURSE CODE — EXACTLY 7 columns. Column 0 has ONLY "U" at top and "P" below (no other bubbles). Columns 1-6 have digits 0-9. Result is ALWAYS 7 characters like "U216880" or "P246890". Read handwritten code AND filled bubbles.
-3. SESSION — 4-column grid, digits 0-9. Read handwritten AND filled bubbles.""",
+1. YEAR — Read handwritten year and the YEAR bubble separately.
+    - YEAR has only 3 bubble options labeled 1, 2, 3 from top to bottom.
+    - Return the actual label of the filled bubble, not the row index.
+    - Do not merge YEAR with SEM.
+2. SEM — Read handwritten semester and the SEM bubble separately.
+    - SEM has 10 bubble options labeled 0 through 9 from top to bottom.
+    - Return the actual label of the filled bubble, not the row index.
+    - Do not copy handwritten text into bubble_value.
+3. COURSE CODE — EXACTLY 7 columns.
+    - Column 0 has ONLY "U" at top and "P" below. No other bubbles are valid in this column.
+    - Columns 1-6 each have digits 0-9 from top to bottom.
+    - Read each column independently from left to right.
+    - Bubble result must be exactly 7 characters: 1 letter + 6 digits.
+    - Do not invent extra digits and do not use handwriting to fill unclear bubble columns.
+    - Read handwritten code AND filled bubbles separately.
+4. SESSION — 4-column grid, digits 0-9.
+    - Read each column left to right.
+    - Return actual bubble labels, not row indexes.
+    - Do not use handwriting to guess unclear bubble digits.
+    - Read handwritten AND filled bubbles separately.""",
 
         "exam_details": """Read this cropped section of an OMR sheet:
-1. EXAM TYPE — Four options: Regular, Back Paper, Ex., Improvement. Which is completely filled/darkened?
-2. Sitting — Two options: First, Second. Which is completely filled?
+1. EXAM TYPE — Four options: Regular, Back Paper, Ex., Improvement.
+   - Return ONLY one exact value from this list: Regular, Back Paper, Ex., Improvement.
+   - Do not paraphrase the option name.
+   - If none is clearly filled, return null.
+2. Sitting — Two options: First, Second.
+   - Return ONLY one exact value from this list: First, Second.
+   - If none is clearly filled, return null.
 3. Handwritten text: Name, Father Name, Paper Name, Date of Exam.""",
     },
     "part_c": {
@@ -361,7 +402,7 @@ def _load_json_payload(text: str):
         raise
 
 
-def _parse_gemini_structured_response(response, schema_model: type[BaseModel]) -> BaseModel:
+def _parse_structured_response(response, schema_model: type[BaseModel]) -> BaseModel:
     parsed = getattr(response, "parsed", None)
     if parsed is not None:
         if isinstance(parsed, schema_model):
@@ -392,10 +433,10 @@ def _parse_gemini_structured_response(response, schema_model: type[BaseModel]) -
     raise TruncatedGeminiJSONError("Gemini returned no parseable JSON content")
 
 
-def _generate_structured_content_gemini(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
+def _generate_structured_content(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
     model_names = [model_name] if isinstance(model_name, str) else list(model_name)
     last_error = None
-
+ 
     for candidate_model in model_names:
         for attempt in range(3):
             try:
@@ -409,7 +450,7 @@ def _generate_structured_content_gemini(client, model_name, contents, schema_mod
                         response_schema=schema_model,
                     ),
                 )
-                return _parse_gemini_structured_response(response, schema_model), candidate_model
+                return _parse_structured_response(response, schema_model), candidate_model
             except ClientError as exc:
                 last_error = exc
                 status_code = getattr(exc, "status_code", None)
@@ -438,20 +479,15 @@ def _generate_structured_content_gemini(client, model_name, contents, schema_mod
     raise last_error
 
 
-def _generate_structured_content(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
-    return _generate_structured_content_gemini(client, model_name, contents, schema_model, max_output_tokens)
-
-
 def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
     """
     Read an OMR sheet using Gemini Vision API with Pydantic structured output.
 
     Returns the same dict format as omr_reader.process_omr().
     """
-    provider = "gemini"
     api_key = config("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
-    model_name = GEMINI_MODEL_CANDIDATES
+    model_name = GEMINI_3_MODEL_CANDIDATES
 
     image_path = Path(image_path)
     if not image_path.exists():
@@ -459,28 +495,12 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 
     img = _load_image(str(image_path))
     part_key = "part_c" if part == "C" else "part_d"
-    # prompt = PART_C_PROMPT if part == "C" else PART_D_PROMPT
-    # response_model = PartCResponse if part == "C" else PartDResponse
 
-    logger.info("Calling %s Vision API for Part %s: %s", provider, part, image_path.name)
+    logger.info("Calling Gemini Vision API for Part %s: %s", part, image_path.name)
 
-    full_parsed = None
-    full_error = None
     resolved_model_name = model_name
-    # try:
-    #     full_parsed, resolved_model_name = _generate_structured_content(
-    #         client,
-    #         model_name,
-    #         [prompt, img],
-    #         response_model,
-    #         4096,
-    #     )
-    #     logger.debug("Gemini full-image response: %s", full_parsed.model_dump())
-    # except Exception as exc:
-    #     full_error = exc
-    #     logger.warning("Full image Gemini analysis failed, falling back to section-based assembly: %s", exc)
-
     crops = _crop_sections(img, part_key)
+    debug_dir = _export_debug_crops(image_path, img, part, crops)
     section_models = SECTION_MODELS.get(part_key, {})
     section_results: dict[str, BaseModel] = {}
 
@@ -489,8 +509,10 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
         sec_model = section_models.get(section_name)
         if not section_prompt or not sec_model:
             continue
+        if part == "D" and section_name == "barcode_only":
+            continue
         try:
-            section_result, resolved_model_name = _generate_structured_content(
+            section_result, _ = _generate_structured_content(
                 client,
                 resolved_model_name,
                 [section_prompt, crop_img],
@@ -501,11 +523,10 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
         except Exception as exc:
             logger.warning("Section %s failed: %s", section_name, exc)
 
-    # ── Merge: section results override full image per field ─────────────────
-    if full_parsed is None and not section_results:
-        raise full_error or RuntimeError("AI reader could not produce usable section output")
+    if not section_results:
+        raise RuntimeError("Gemini could not produce usable section output")
 
-    merged = full_parsed.model_dump() if full_parsed is not None else {}
+    merged = {}
     for sec_parsed in section_results.values():
         sec_data = sec_parsed.model_dump()
         for key, val in sec_data.items():
@@ -520,41 +541,44 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
         ai_barcode_value = None
         if isinstance(existing_barcode, dict):
             ai_barcode_value = existing_barcode.get("decoded_value") or existing_barcode.get("printed_digits")
-        normalized_ai_barcode = normalize_barcode_value(ai_barcode_value)
-        if normalized_ai_barcode and is_valid_barcode_value(normalized_ai_barcode):
-            if isinstance(merged.get("barcode"), dict):
-                merged["barcode"]["decoded_value"] = normalized_ai_barcode
-            logger.info("AI barcode already present, skipping pyzbar/zxing override: %s", normalized_ai_barcode)
-        else:
-            if ai_barcode_value:
-                logger.warning("Ignoring invalid AI barcode value: %s", ai_barcode_value)
-            decoded_barcode = None
-            if part == "C":
-                semester_info_crop = crops.get("semester_info")
-                if semester_info_crop is not None:
-                    semester_info_gray = np.array(semester_info_crop.convert("L"))
-                    decoded_barcode = read_barcode(
-                        semester_info_gray,
-                        roi_rel=(0.0, 0.0, 1.0, 1.0),
-                        orientation=barcode_def.get("orientation", "vertical"),
-                    )
-                    if decoded_barcode:
-                        logger.info("Barcode decoded (semester_info crop): %s", decoded_barcode)
-            else:
-                original_gray = load_original_gray(str(image_path))
+        decoded_barcode = None
+        if part == "C":
+            semester_info_crop = crops.get("semester_info")
+            if semester_info_crop is not None:
+                semester_info_gray = np.array(semester_info_crop.convert("L"))
                 decoded_barcode = read_barcode(
-                    original_gray,
-                    roi_rel=barcode_def.get("roi", (0, 0, 1, 1)),
+                    semester_info_gray,
+                    roi_rel=(0.0, 0.0, 1.0, 1.0),
+                    orientation=barcode_def.get("orientation", "vertical"),
+                )
+                if decoded_barcode:
+                    logger.info("Barcode decoded (semester_info crop): %s", decoded_barcode)
+        else:
+            barcode_only_crop = crops.get("barcode_only")
+            if barcode_only_crop is not None:
+                barcode_only_gray = np.array(barcode_only_crop.convert("L"))
+                decoded_barcode = read_barcode(
+                    barcode_only_gray,
+                    roi_rel=(0.0, 0.0, 1.0, 1.0),
                     orientation=barcode_def.get("orientation", "horizontal"),
                 )
-            if decoded_barcode:
-                logger.info("Barcode decoded (pyzbar/zxing fallback): %s", decoded_barcode)
-                if isinstance(merged.get("barcode"), dict):
-                    merged["barcode"]["decoded_value"] = decoded_barcode
-                else:
-                    merged["barcode"] = {"decoded_value": decoded_barcode, "printed_digits": None}
+                if decoded_barcode:
+                    logger.info("Barcode decoded (barcode_only crop): %s", decoded_barcode)
+
+        if decoded_barcode:
+            logger.info("Barcode decoded (pyzbar/zxing fallback): %s", decoded_barcode)
+            if isinstance(merged.get("barcode"), dict):
+                merged["barcode"]["decoded_value"] = decoded_barcode
             else:
-                logger.warning("Barcode could not be decoded by pyzbar/zxing fallback")
+                merged["barcode"] = {"decoded_value": decoded_barcode, "printed_digits": None}
+        elif ai_barcode_value:
+            logger.info("Using AI barcode because local decoder returned nothing: %s", ai_barcode_value)
+            if isinstance(merged.get("barcode"), dict):
+                merged["barcode"]["decoded_value"] = ai_barcode_value
+            else:
+                merged["barcode"] = {"decoded_value": ai_barcode_value, "printed_digits": None}
+        else:
+            logger.warning("Barcode could not be decoded by pyzbar/zxing fallback")
     except Exception as exc:
         logger.error("Barcode decoding failed: %s", exc)
 
@@ -565,11 +589,10 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
     # ── Convert to pipeline-compatible format ────────────────────────────────
     result = _normalize_result(merged, part)
     result["mode"] = "ai"
-    result["ai_provider"] = provider
-    result["ai_model"] = resolved_model_name[0] if isinstance(resolved_model_name, list) else resolved_model_name
     result["flags"] = flags
     result["verification"] = verification
     result["ai_raw"] = merged
+    result["debug_crops_dir"] = str(debug_dir)
 
     logger.info("AI Vision result for Part %s: %s", part, {
         k: v for k, v in result.items() if k not in ("ai_raw",)
@@ -617,16 +640,6 @@ def _export_debug_crops(
     for idx, (name, crop_img) in enumerate(crops.items(), start=1):
         crop_img.save(debug_dir / f"{idx:02d}_{name}.png")
 
-    try:
-        original_gray = load_original_gray(str(image_path))
-        Image.fromarray(original_gray).save(debug_dir / "90_barcode_source_gray.png")
-        barcode_def = SECTION_MAP[part].get("barcode", {})
-        barcode_roi = crop_section_roi(original_gray, barcode_def.get("roi", (0, 0, 1, 1)))
-        if barcode_roi.size:
-            Image.fromarray(_pad_gray_crop(barcode_roi, pad_x_ratio=0.08, pad_y_ratio=0.05)).save(debug_dir / "91_barcode_roi_gray.png")
-    except Exception as exc:
-        logger.warning("Failed to export debug barcode crops: %s", exc)
-
     logger.info("Saved OMR debug crops to %s", debug_dir)
     return debug_dir
 
@@ -659,8 +672,8 @@ def _crop_sections(img: Image.Image, part_type: str) -> Dict[str, Image.Image]:
             section_defs,
             ["barcode"],
             content_frame,
-            fallback=(0, 0, w, int(h * 0.22)),
-            expand=(0.08, 0.02, 0.35, 0.10),
+            fallback=(0, 0, w, int(h * 0.30)),
+            expand=(0.08, 0.02, 0.35, 0.22),
         )
         crops["roll_center"] = _crop_group(
             img,
@@ -680,15 +693,7 @@ def _crop_sections(img: Image.Image, part_type: str) -> Dict[str, Image.Image]:
             fallback=(0, int(h * 0.48), w, int(h * 0.75)),
             expand=(0.03, 0.04, 0.03, 0.04),
         )
-        crops["exam_details"] = _crop_group(
-            img,
-            gray,
-            section_defs,
-            ["exam_type", "sitting"],
-            content_frame,
-            fallback=(0, int(h * 0.72), w, h),
-            expand=(0.05, 0.03, 0.05, 0.18),
-        )
+        crops["exam_details"] = crops["course_session"]
     elif part_type == "part_c":
         section_defs = SECTION_MAP["C"]
         crops["semester_info"] = _crop_group(
@@ -882,6 +887,25 @@ def _normalize_sem_component(value) -> Optional[str]:
     return text
 
 
+def _normalize_exam_type_value(value) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+
+    compact = re.sub(r"[^a-z]", "", text.lower())
+    if compact == "regular":
+        return "Regular"
+    if compact == "backpaper":
+        return "Back Paper"
+    if compact in {"ex", "exam", "external"}:
+        return "Ex."
+    if compact == "improvement":
+        return "Improvement"
+    return text
+
+
 def _expand_year_sem_fields(data: dict, part: str) -> dict:
     if part != "D":
         return data
@@ -960,58 +984,24 @@ def _field_verification(field_name: str, field_data: dict) -> Optional[dict]:
 def _build_verification_report(data: dict, part: str) -> dict:
     data = _expand_year_sem_fields(data, part)
     field_checks = []
-    section_checks = []
-    mismatched_sections = []
 
     for section_name, field_names in SECTION_FIELD_GROUPS.get(part, {}).items():
-        section_field_checks = []
-        section_has_mismatch = False
-        has_missing = False
-
         for field_name in field_names:
             verification = _field_verification(field_name, data.get(field_name, {}))
             if verification is None:
                 continue
-            section_field_checks.append(verification)
             field_checks.append({"section": section_name, **verification})
-            if verification["status"] == "mismatch":
-                section_has_mismatch = True
-            if verification["status"] == "missing":
-                has_missing = True
 
-        if not section_field_checks:
-            section_checks.append({
-                "section": section_name,
-                "status": "not_applicable",
-                "remark": "No handwritten/bubble comparison fields in this section",
-                "fields": [],
-            })
-            continue
-
-        if section_has_mismatch:
-            section_status = "mismatch"
-            section_remark = "One or more handwritten and bubble values do not match"
-            mismatched_sections.append(section_name)
-        elif has_missing:
-            section_status = "missing"
-            section_remark = "One or more handwritten or bubble values are missing"
-        else:
-            section_status = "match"
-            section_remark = "All handwritten and bubble values match"
-
-        section_checks.append({
-            "section": section_name,
-            "status": section_status,
-            "remark": section_remark,
-            "fields": section_field_checks,
-        })
-
+    mismatch_fields = [
+        check["field"]
+        for check in field_checks
+        if check.get("status") == "mismatch"
+    ]
     has_mismatch = any(check["status"] != "match" for check in field_checks)
 
     return {
         "field_checks": field_checks,
-        "section_checks": section_checks,
-        "mismatched_sections": mismatched_sections,
+        "mismatch_fields": mismatch_fields,
         "has_mismatch": has_mismatch,
     }
 
@@ -1044,7 +1034,7 @@ def _normalize_result(data: dict, part: str) -> dict:
         result["center_code"] = _val(data.get("center_code"), "handwritten", "bubble_value")
         result["course_code"] = _val(data.get("course_code"), "handwritten", "bubble_value")
         result["session"] = _val(data.get("session"), "handwritten", "bubble_value")
-        result["exam_type"] = _val(data.get("exam_type"), "value")
+        result["exam_type"] = _normalize_exam_type_value(_val(data.get("exam_type"), "value"))
         result["sitting"] = _val(data.get("sitting"), "value")
 
         result["year"] = _val(data.get("year"), "handwritten", "bubble_value")

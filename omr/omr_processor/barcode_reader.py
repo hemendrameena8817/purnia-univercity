@@ -20,30 +20,24 @@ from .roi_utils import crop_roi as crop_section_roi
 logger = logging.getLogger(__name__)
 
 
-def normalize_barcode_value(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-
-    compact = str(value).strip().replace(" ", "").replace("-", "")
-    if not compact or not compact.isdigit():
-        return None
-    if len(compact) < 6 or len(compact) > 12:
-        return None
-    return compact
-
-
-def is_valid_barcode_value(value: Optional[str]) -> bool:
-    return normalize_barcode_value(value) is not None
-
-
 def read_barcode(
     gray: np.ndarray, roi_rel: tuple, orientation: str = "horizontal"
 ) -> Optional[str]:
     """
     Decode barcode from the original (unwarped) grayscale image.
 
-    Strategy: try ROI crop first, then fall back to full image rotations.
+    Strategy: try full image first (fast), then rotations, then ROI crop.
     """
+    # ── Fast path: full image + rotations ──
+    for img in [gray,
+                cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE),
+                cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)]:
+        result = _try_pyzbar(img)
+        if result:
+            logger.info("Barcode decoded (pyzbar, full image): %s", result)
+            return result
+
+    # ── Fallback: ROI crop with enhanced candidates ──
     roi = crop_section_roi(gray, roi_rel)
     for roi_variant in _barcode_roi_variants(roi, orientation):
         for candidate in _barcode_candidates(roi_variant, orientation):
@@ -56,19 +50,6 @@ def read_barcode(
             if result:
                 logger.info("Barcode decoded (zxing, ROI): %s", result)
                 return result
-
-    for img in [gray,
-                cv2.rotate(gray, cv2.ROTATE_90_CLOCKWISE),
-                cv2.rotate(gray, cv2.ROTATE_90_COUNTERCLOCKWISE)]:
-        result = _try_pyzbar(img)
-        if result:
-            logger.info("Barcode decoded (pyzbar, full image): %s", result)
-            return result
-
-        result = _try_zxing(img)
-        if result:
-            logger.info("Barcode decoded (zxing, full image): %s", result)
-            return result
 
     logger.warning("Barcode could not be decoded.")
     return None
@@ -84,10 +65,8 @@ def _try_pyzbar(img: np.ndarray) -> Optional[str]:
         from pyzbar.pyzbar import decode
 
         codes = decode(img)
-        for code in codes:
-            normalized = normalize_barcode_value(code.data.decode("utf-8", errors="replace"))
-            if normalized:
-                return normalized
+        if codes:
+            return codes[0].data.decode("utf-8", errors="replace")
     except ImportError:
         logger.debug("pyzbar not installed — skipping.")
     except Exception as exc:
@@ -101,7 +80,7 @@ def _try_zxing(img: np.ndarray) -> Optional[str]:
 
         result = zxingcpp.read_barcode(img)
         if result and result.valid:
-            return normalize_barcode_value(result.text)
+            return result.text
     except ImportError:
         logger.debug("zxingcpp not installed — skipping.")
     except Exception as exc:
