@@ -75,24 +75,30 @@ def _normalize_mark(value):
         return None
 
 
+def _coerce_display_mark(value):
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
 def _get_pass_marks(paper, subject_key):
     """Fetch pass marks for a paper with sensible fallbacks."""
     # Composition papers always use fixed thresholds (15 for 50-mark papers, otherwise 33)
     if subject_key == 'composition':
         max_marks = _normalize_mark(paper.get('max_marks'))
         if max_marks is not None and max_marks <= 50:
-            return 15.0
-        return 33.0
+            return 15
+        return 33
 
     pass_mark = paper.get('pass_marks')
     normalized = _normalize_mark(pass_mark)
     if normalized is not None:
-        return normalized
+        return _coerce_display_mark(normalized)
 
     # Fallbacks when individual pass marks are unavailable
     max_marks = _normalize_mark(paper.get('max_marks'))
     if max_marks is not None:
-        return max_marks * 0.33
+        return _coerce_display_mark(max_marks * 0.33)
     return 0.0
 
 
@@ -164,6 +170,35 @@ def calculate_back_subject_summary(subjects, session_code=None):
         'failed': failed,
         'result': result,
     }
+
+
+def calculate_back_total_marks(subjects, session_code=None):
+    total_marks = 0.0
+    if not subjects:
+        return 0
+
+    subject_order = ['honours', 'subsidiary_1', 'subsidiary_2', 'composition']
+
+    for subject_key in subject_order:
+        subject_data = subjects.get(subject_key) if subjects else None
+        if not subject_data:
+            continue
+
+        for paper in subject_data.get('papers', []):
+            if (paper.get('exam_type', '') or '').upper() != 'BACK':
+                continue
+            if session_code and paper.get('session_code') and paper.get('session_code') != session_code:
+                continue
+            if session_code and not paper.get('session_code'):
+                continue
+
+            obtained = _normalize_mark(paper.get('obtained'))
+            if obtained is not None:
+                total_marks += obtained
+
+    if total_marks == 0:
+        return 0
+    return _coerce_display_mark(total_marks)
 
 
 def subject_has_back(papers, session_code=None):
@@ -357,15 +392,66 @@ def get_ug_old_ba_hons_part1_context(
             # Fallback for old grouping logic
             subsidiary_subjects.append(sub)
 
+    def _detect_composition_track(paper, res_obj):
+        name = (paper.get('name') or '').upper()
+        code = (paper.get('paper_code') or '').upper()
+        type_code = res_obj.paper_type_code.upper() if res_obj and res_obj.paper_type_code else ''
+
+        if type_code == 'NRB':
+            return 'NRB'
+        if type_code == 'RB':
+            return 'RB'
+        if any(token in name for token in ['NON-HINDI', 'MB']) or 'NRB' in code:
+            return 'NRB'
+        if 'RASTRABHASH' in name or 'RBH' in code or 'R.B' in code:
+            return 'RB'
+        return None
+
     # Sort Composition papers and assign display names
     # e.g. BA104 (RB or NRB) and BA105 (MB if NRB)
-    final_composition_papers = []
     comp_papers_raw = sorted(composition_papers, key=lambda x: x['paper_code'])
+    comp_papers_augmented = []
+    composition_tracks_present = set()
     for p in comp_papers_raw:
         res_obj = next((r for r in results if r.uid == p['uid']), None)
+        track = _detect_composition_track(p, res_obj)
+        if track:
+            composition_tracks_present.add(track)
+        comp_papers_augmented.append((p, res_obj, track))
+
+    preferred_track = None
+    if 'NRB' in composition_tracks_present:
+        preferred_track = 'NRB'
+    elif 'RB' in composition_tracks_present:
+        preferred_track = 'RB'
+
+    final_composition_papers = []
+    composition_individual_fail = False
+    composition_total_pass = 0
+
+    for p, res_obj, track in comp_papers_augmented:
+        if preferred_track and track and track != preferred_track:
+            continue
+
         p_type = res_obj.paper_type_code.upper() if res_obj and res_obj.paper_type_code else ""
         p_code = p['paper_code'].upper() if p['paper_code'] else ""
-        
+
+        normalized_max = _normalize_mark(p.get('max_marks'))
+        normalized_pass = _normalize_mark(p.get('pass_marks'))
+
+        if track == 'NRB':
+            if normalized_max is None or normalized_max > 50:
+                p['max_marks'] = 50
+                normalized_max = 50
+            if normalized_pass is None or normalized_pass > 15:
+                p['pass_marks'] = 15
+        elif track == 'RB':
+            if normalized_max is None or normalized_max < 100:
+                p['max_marks'] = 100
+                normalized_max = 100
+            if normalized_pass is None or normalized_pass < 33:
+                p['pass_marks'] = 33
+
         if p_type == 'RB' or 'RBH' in p_code or 'R.B' in p_code:
             p['display_name'] = "Rastrabhasha hindi"
         elif p_type == 'NRB' or 'Non-Hindi' in p['name']:
@@ -375,8 +461,21 @@ def get_ug_old_ba_hons_part1_context(
                 p['display_name'] = f"MB: {p['name'].title()}"
         else:
             p['display_name'] = p['name']
+
+        paper_pass = _get_pass_marks(p, 'composition')
+        p['pass_marks'] = paper_pass
+        composition_total_pass += paper_pass
+
+        obtained_mark = _normalize_mark(p.get('obtained'))
+        if obtained_mark is None or obtained_mark < paper_pass:
+            composition_individual_fail = True
+
         final_composition_papers.append(p)
+
     composition_papers = final_composition_papers
+
+    if preferred_track == 'NRB' and composition_total_pass < 33:
+        composition_total_pass = 33
 
     # Get honours subject name to check for Music special case
     honours_subject_name = None
@@ -676,8 +775,9 @@ def get_ug_old_ba_hons_part1_context(
                 'name': 'Composition',
                 'papers': composition_papers,
                 'total_max': comp_total_max,
-                'total_pass': int(comp_total_max * 0.33),
-                'total_obtained': comp_total_obt
+                'total_pass': composition_total_pass,
+                'total_obtained': comp_total_obt,
+                'has_individual_fail': composition_individual_fail,
             },
         },
         'grand_total_max': grand_total_max,
@@ -686,7 +786,8 @@ def get_ug_old_ba_hons_part1_context(
             hons_total_obt, hons_total_max,
             sub1.get('total_obtained', 0) if sub1 else 0, sub1.get('total_max', 0) if sub1 else 0,
             sub2.get('total_obtained', 0) if sub2 else 0, sub2.get('total_max', 0) if sub2 else 0,
-            comp_total_obt, comp_total_max
+            comp_total_obt, comp_total_max,
+            composition_individual_fail=composition_individual_fail,
         ),
         'hons_total_words': num2words(hons_total_obt),
         'grand_total_words': num2words(final_grand_total) + " Only",
@@ -723,6 +824,7 @@ def get_ug_old_ba_hons_part1_context(
     context.update(subject_flags)
     context['composition_has_back'] = subject_flags.get('composition_has_back', False)
     context['show_back_totals'] = back_summary.get('total', 0) > 0
+    context['back_total_marks_obtained'] = calculate_back_total_marks(subjects_context, requested_session_code)
 
     return context
 
