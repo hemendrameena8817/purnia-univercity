@@ -148,6 +148,7 @@ class PartDCourseSession(BaseModel):
 class PartDExamDetails(BaseModel):
     exam_type: Optional[RadioField] = None
     sitting: Optional[RadioField] = None
+    registration_no: Optional[str] = None
     name: Optional[str] = None
     father_name: Optional[str] = None
     paper_name: Optional[str] = None
@@ -248,10 +249,11 @@ SECTIONS TO READ:
    - Return ONLY one of these exact labels: First, Second.
    - If none is clearly filled, return null.
 
-9. Name: Read handwritten text.
-10. Father Name: Read handwritten text.
-11. Paper Name: Read handwritten text.
-12. Date of Exam: Read handwritten text."""
+9. Registration No: Read handwritten text only.
+10. Name: Read handwritten text.
+11. Father Name: Read handwritten text.
+12. Paper Name: Read handwritten text.
+13. Date of Exam: Read handwritten text."""
 
 # ── Section crop prompts ──────────────────────────────────────────────────────
 
@@ -302,7 +304,7 @@ SECTION_PROMPTS = {
 2. Sitting — Two options: First, Second.
    - Return ONLY one exact value from this list: First, Second.
    - If none is clearly filled, return null.
-3. Handwritten text: Name, Father Name, Paper Name, Date of Exam.""",
+3. Handwritten text: Registration No, Name, Father Name, Paper Name, Date of Exam.""",
     },
     "part_c": {
         "semester_info": """Read this cropped section of a Part-C OMR sheet:
@@ -1041,6 +1043,7 @@ def _normalize_result(data: dict, part: str) -> dict:
         result["sem"] = _val(data.get("sem"), "handwritten", "bubble_value")
 
         # Extra handwritten fields
+        result["registration_no"] = data.get("registration_no") or None
         result["name"] = data.get("name") or None
         result["father_name"] = data.get("father_name") or None
         result["paper_name"] = data.get("paper_name") or None

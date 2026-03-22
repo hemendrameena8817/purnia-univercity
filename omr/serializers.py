@@ -45,7 +45,7 @@ class OMRScanUpdateSerializer(serializers.ModelSerializer):
         fields = [
             "part", "mode", "status", "error_msg",
             "barcode", "center_code", "course_code",
-            "roll_number", "year", "sem", "session", "exam_type", "sitting",
+            "roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting",
             "ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks",
             "json_result",
         ]
@@ -57,7 +57,7 @@ class OMRScanCVSerializer(serializers.ModelSerializer):
         model = OMRScan
         fields = [
             "id", "uid", "part", "status", "barcode", "center_code", "course_code",
-            "roll_number", "year", "sem", "session", "exam_type", "sitting",
+            "roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting",
             "ug_old", "ug_new", "pg_sem", "faculty",
             "marks_obtained", "total_marks",
             "uploaded_at", "processed_at", "error_msg",
@@ -67,7 +67,7 @@ class OMRScanCVSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         # Remove Part-D fields from Part-C response and vice versa
         if instance.part == "C":
-            for f in ("roll_number", "year", "sem", "session", "exam_type", "sitting"):
+            for f in ("roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting"):
                 data.pop(f, None)
         elif instance.part == "D":
             for f in ("ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks"):
@@ -89,7 +89,7 @@ class OMRScanDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "uid", "image_url", "part", "mode", "status",
             "barcode", "center_code", "course_code",
-            "roll_number", "year", "sem", "session", "exam_type", "sitting",
+            "roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting",
             "ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks",
             "uploaded_at", "processed_at", "error", "verification", "flags", "data",
         ]
@@ -101,7 +101,7 @@ class OMRScanDetailSerializer(serializers.ModelSerializer):
                 data[key] = None
 
         if instance.part == "C":
-            for f in ("roll_number", "year", "sem", "session", "exam_type", "sitting"):
+            for f in ("roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting"):
                 data.pop(f, None)
         elif instance.part == "D":
             for f in ("ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks"):
@@ -154,6 +154,7 @@ def _build_cv_data(scan: OMRScan) -> dict:
     if scan.part == "D":
         data.update({
             "roll_number": scan.roll_number or None,
+            "registration_no": scan.registration_no or None,
             "year": scan.year or None,
             "sem": scan.sem or None,
             "session": scan.session or None,
@@ -194,6 +195,7 @@ def _build_ai_data(scan: OMRScan, raw: dict) -> dict:
 
         year_reading = readings.get("year", {})
         sem_reading = readings.get("sem", {})
+        fields["registration_no"] = {"value": scan.registration_no or None, "handwritten": raw.get("registration_no")}
         fields["year"] = {"value": scan.year or None, "handwritten": year_reading.get("handwritten"), "bubble": year_reading.get("bubble")}
         fields["sem"] = {"value": scan.sem or None, "handwritten": sem_reading.get("handwritten"), "bubble": sem_reading.get("bubble")}
 
@@ -225,6 +227,7 @@ def _ai_grid_field(readings: dict, src: dict, final_value) -> dict:
         "value": final_value,
         "handwritten": readings.get("handwritten"),
         "bubble": readings.get("bubble"),
+        
     }
     if isinstance(src, dict):
         if src.get("column_values"):
