@@ -35,8 +35,8 @@ from .section_config import SECTION_MAP
 
 logger = logging.getLogger(__name__)
 
-GEMINI_3_MODEL_CANDIDATES = [
-    "gemini-2.0-flash",
+GEMINI_MODEL_CANDIDATES = [
+    "gemini-2.5-flash",
 ]
 
 
@@ -361,7 +361,7 @@ def _load_json_payload(text: str):
         raise
 
 
-def _parse_structured_response(response, schema_model: type[BaseModel]) -> BaseModel:
+def _parse_gemini_structured_response(response, schema_model: type[BaseModel]) -> BaseModel:
     parsed = getattr(response, "parsed", None)
     if parsed is not None:
         if isinstance(parsed, schema_model):
@@ -392,10 +392,10 @@ def _parse_structured_response(response, schema_model: type[BaseModel]) -> BaseM
     raise TruncatedGeminiJSONError("Gemini returned no parseable JSON content")
 
 
-def _generate_structured_content(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
+def _generate_structured_content_gemini(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
     model_names = [model_name] if isinstance(model_name, str) else list(model_name)
     last_error = None
- 
+
     for candidate_model in model_names:
         for attempt in range(3):
             try:
@@ -409,7 +409,7 @@ def _generate_structured_content(client, model_name, contents, schema_model: typ
                         response_schema=schema_model,
                     ),
                 )
-                return _parse_structured_response(response, schema_model), candidate_model
+                return _parse_gemini_structured_response(response, schema_model), candidate_model
             except ClientError as exc:
                 last_error = exc
                 status_code = getattr(exc, "status_code", None)
@@ -438,15 +438,20 @@ def _generate_structured_content(client, model_name, contents, schema_model: typ
     raise last_error
 
 
+def _generate_structured_content(client, model_name, contents, schema_model: type[BaseModel], max_output_tokens: int) -> tuple[BaseModel, str]:
+    return _generate_structured_content_gemini(client, model_name, contents, schema_model, max_output_tokens)
+
+
 def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
     """
     Read an OMR sheet using Gemini Vision API with Pydantic structured output.
 
     Returns the same dict format as omr_reader.process_omr().
     """
+    provider = "gemini"
     api_key = config("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
-    model_name = GEMINI_3_MODEL_CANDIDATES
+    model_name = GEMINI_MODEL_CANDIDATES
 
     image_path = Path(image_path)
     if not image_path.exists():
@@ -454,26 +459,26 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 
     img = _load_image(str(image_path))
     part_key = "part_c" if part == "C" else "part_d"
-    prompt = PART_C_PROMPT if part == "C" else PART_D_PROMPT
-    response_model = PartCResponse if part == "C" else PartDResponse
+    # prompt = PART_C_PROMPT if part == "C" else PART_D_PROMPT
+    # response_model = PartCResponse if part == "C" else PartDResponse
 
-    logger.info("Calling Gemini Vision API for Part %s: %s", part, image_path.name)
+    logger.info("Calling %s Vision API for Part %s: %s", provider, part, image_path.name)
 
     full_parsed = None
     full_error = None
     resolved_model_name = model_name
-    try:
-        full_parsed, resolved_model_name = _generate_structured_content(
-            client,
-            model_name,
-            [prompt, img],
-            response_model,
-            4096,
-        )
-        logger.debug("Gemini full-image response: %s", full_parsed.model_dump())
-    except Exception as exc:
-        full_error = exc
-        logger.warning("Full image Gemini analysis failed, falling back to section-based assembly: %s", exc)
+    # try:
+    #     full_parsed, resolved_model_name = _generate_structured_content(
+    #         client,
+    #         model_name,
+    #         [prompt, img],
+    #         response_model,
+    #         4096,
+    #     )
+    #     logger.debug("Gemini full-image response: %s", full_parsed.model_dump())
+    # except Exception as exc:
+    #     full_error = exc
+    #     logger.warning("Full image Gemini analysis failed, falling back to section-based assembly: %s", exc)
 
     crops = _crop_sections(img, part_key)
     section_models = SECTION_MODELS.get(part_key, {})
@@ -485,7 +490,7 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
         if not section_prompt or not sec_model:
             continue
         try:
-            section_result, _ = _generate_structured_content(
+            section_result, resolved_model_name = _generate_structured_content(
                 client,
                 resolved_model_name,
                 [section_prompt, crop_img],
@@ -498,7 +503,7 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
 
     # ── Merge: section results override full image per field ─────────────────
     if full_parsed is None and not section_results:
-        raise full_error or RuntimeError("Gemini could not produce usable full-image or section output")
+        raise full_error or RuntimeError("AI reader could not produce usable section output")
 
     merged = full_parsed.model_dump() if full_parsed is not None else {}
     for sec_parsed in section_results.values():
@@ -555,10 +560,11 @@ def process_omr_ai(image_path: str, part: Literal["C", "D"]) -> dict:
     # ── Convert to pipeline-compatible format ────────────────────────────────
     result = _normalize_result(merged, part)
     result["mode"] = "ai"
+    result["ai_provider"] = provider
+    result["ai_model"] = resolved_model_name[0] if isinstance(resolved_model_name, list) else resolved_model_name
     result["flags"] = flags
     result["verification"] = verification
     result["ai_raw"] = merged
-    # result["debug_crops_dir"] = str(debug_dir)
 
     logger.info("AI Vision result for Part %s: %s", part, {
         k: v for k, v in result.items() if k not in ("ai_raw",)
