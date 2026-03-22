@@ -67,5 +67,9 @@ class ExamDocumentStorage(PrivateMediaStorage):
     location = "exams/documents"
 
 
+class OMRUploadStorage(PrivateMediaStorage):
+    location = "omr_uploads"
+
+
 class TemporaryStorage(PrivateMediaStorage):
     location = "temp"
