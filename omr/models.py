@@ -39,8 +39,8 @@ class OMRScan(models.Model):
 
     # ── Part D specific ───────────────────────────────────────────────────────
     roll_number = models.CharField(max_length=15, blank=True)
-    year = models.CharField(max_length=2, blank=True)
-    sem = models.CharField(max_length=2, blank=True)
+    year = models.CharField(max_length=10, blank=True)
+    sem = models.CharField(max_length=10, blank=True)
     session = models.CharField(max_length=10, blank=True)
     exam_type = models.CharField(max_length=20, blank=True)
     sitting = models.CharField(max_length=10, blank=True)

@@ -310,12 +310,12 @@ class PGExamMasterDumpAdmin(ImportExportModelAdmin):
     list_display = (
         'source_id', 'exam_type', 'exam_code', 'exam_name', 'batch_code',
         'session_code', 'course_code', 'discipline_code', 'semester_code',
-        'exam_start_date', 'exam_end_date', 'publish_status', 'institute_code',
+        'exam_start_date', 'exam_end_date', 'institute_code',
         'imported_at',
     )
     list_filter = (
         'course_code', 'batch_code', 'session_code', 'semester_code',
-        'exam_type', 'discipline_code', 'publish_status', 'is_sem',
+        'exam_type', 'discipline_code', 'is_sem',
     )
     search_fields = (
         'source_id', 'exam_code', 'exam_name', 'batch_code',
@@ -339,7 +339,6 @@ class PGExamMasterDumpAdmin(ImportExportModelAdmin):
                 ('apply_start_date', 'apply_end_date'),
                 ('exam_mark_entry_date', 'online_payment_transaction_no'),
                 ('omr_no', 'template_code'),
-                ('publish_status', 'institute_code'),
                 ('created_by', 'created_on'),
                 ('updated_by', 'updated_on'),
                 ('record_status', 'last_updated'),
