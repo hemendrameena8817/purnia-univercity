@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'bba_year',
     'bca_hons_year',
     'pgoldresult'
+    'omr',
 ]
 
 
