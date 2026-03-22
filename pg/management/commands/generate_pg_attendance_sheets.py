@@ -13,48 +13,49 @@ logger = logging.getLogger(__name__)
 
 
 # Generate Attendance Sheet for one student
-# python manage.py generate_pg_attendance_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd 
-# python manage.py generate_pg_attendance_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd --registration-no 2005B160035
+"""
+python manage.py generate_pg_attendance_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd 
+python manage.py generate_pg_attendance_sheets --exam-uid cfe90454-306b-4d2f-ba26-e8a36a8984cd --registration-no 2033B130020
 
-    #Political Science
-# python manage.py generate_pg_attendance_sheets \
-#   --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48 \
-#   --college-uid \
-#     a82e1271-05ba-4199-9f92-02cd0d33ce5c \
-#     fb1589be-fffc-4f25-a064-b46472646f74 \
-#     a5fa9c5a-4cbe-4376-ba2e-e9688e0384f2 \
-#     a584b9fb-ab99-4b88-804e-3f789dd0732a \
-#     8764ba4e-6968-4882-8020-06dd7ec4d0dd \
-#     1dbeddef-ae4a-47d5-ac1d-973652466479 \
-#   --department-uid \
-#     d22e6316-113b-4dca-b6ec-743514497acd \
-#     2b7c5882-d86c-4579-8add-3db1b0bf4b05 \
-#     343aca47-80a2-48ab-b4e5-35cc686db4bd \
-#     5db309ef-e9ea-492b-89fa-d27a51f101de \
-#     229fbdab-5b07-4652-b836-0d68d00d0b5c \
-#     678465e3-da4c-4a1f-9139-d4c653f85b14 \
-#     1b294fa2-2973-491d-b24f-8a4fa0143428 \
-#     5a11c83b-f460-4c29-9874-1ab31816acd1 \
-#     a06640a0-ac39-49a1-8a6d-440da8836885 \
-#     316c518f-972e-43f6-8be5-06fbb1ad27a4 \
-#     b2f20a5f-5a0c-4382-b052-b31e8a895820 \
-#     ce908839-d63a-4ac2-8ced-9bd1aba35640 \
-#     2c05e7bb-e7d8-472b-af55-4dc5ca2c64c0 \
-#     bd6f3ea0-908f-4d30-a896-d16f6b8eaeb1 \
-#     ec77dc97-1d3e-443a-9ba5-d1db2508c776 \
-#     e510c4d9-0b7d-4bda-957b-4acfa7f13895 \
-#     24f38e5a-9593-4ac3-99f0-b4c81df96af9 \
-#     7ee3795e-7d3d-4e6a-9e64-03727153f36b \
-#     d3ed3a5b-778f-4df1-b279-ae5d2287c2e6 \
-#     a522e2a4-bf93-4074-b553-b2fe04258de6 \
-#     b4507b0a-5359-494a-bdc5-86a1944af693
+    Political Science
+python manage.py generate_pg_attendance_sheets \
+  --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48 \
+  --college-uid \
+    a82e1271-05ba-4199-9f92-02cd0d33ce5c \
+    fb1589be-fffc-4f25-a064-b46472646f74 \
+    a5fa9c5a-4cbe-4376-ba2e-e9688e0384f2 \
+    a584b9fb-ab99-4b88-804e-3f789dd0732a \
+    8764ba4e-6968-4882-8020-06dd7ec4d0dd \
+    1dbeddef-ae4a-47d5-ac1d-973652466479 \
+  --department-uid \
+    d22e6316-113b-4dca-b6ec-743514497acd \
+    2b7c5882-d86c-4579-8add-3db1b0bf4b05 \
+    343aca47-80a2-48ab-b4e5-35cc686db4bd \
+    5db309ef-e9ea-492b-89fa-d27a51f101de \
+    229fbdab-5b07-4652-b836-0d68d00d0b5c \
+    678465e3-da4c-4a1f-9139-d4c653f85b14 \
+    1b294fa2-2973-491d-b24f-8a4fa0143428 \
+    5a11c83b-f460-4c29-9874-1ab31816acd1 \
+    a06640a0-ac39-49a1-8a6d-440da8836885 \
+    316c518f-972e-43f6-8be5-06fbb1ad27a4 \
+    b2f20a5f-5a0c-4382-b052-b31e8a895820 \
+    ce908839-d63a-4ac2-8ced-9bd1aba35640 \
+    2c05e7bb-e7d8-472b-af55-4dc5ca2c64c0 \
+    bd6f3ea0-908f-4d30-a896-d16f6b8eaeb1 \
+    ec77dc97-1d3e-443a-9ba5-d1db2508c776 \
+    e510c4d9-0b7d-4bda-957b-4acfa7f13895 \
+    24f38e5a-9593-4ac3-99f0-b4c81df96af9 \
+    7ee3795e-7d3d-4e6a-9e64-03727153f36b \
+    d3ed3a5b-778f-4df1-b279-ae5d2287c2e6 \
+    a522e2a4-bf93-4074-b553-b2fe04258de6 \
+    b4507b0a-5359-494a-bdc5-86a1944af693
 
 
 
 
-#olocakl 
-#  python manage.py generate_pg_attendance_sheets --exam-uid 10f3ea2b-675b-4c5d-baf6-017ef4b6b0de --college-uid 3788a4ef-76b6-4acc-9b33-e3f4b00868b4 314384cc-ad4b-43ad-aabe-ca58c7a97e48 --department-uid de58d650-0b33-4262-8991-050b94ff283c 76b6dde4-c363-4913-bcbb-453928c3e71b
-
+olocakl 
+ python manage.py generate_pg_attendance_sheets --exam-uid 10f3ea2b-675b-4c5d-baf6-017ef4b6b0de --college-uid 3788a4ef-76b6-4acc-9b33-e3f4b00868b4 314384cc-ad4b-43ad-aabe-ca58c7a97e48 --department-uid de58d650-0b33-4262-8991-050b94ff283c 76b6dde4-c363-4913-bcbb-453928c3e71b
+"""
 class Command(BaseCommand):
     help = 'Generate PG Attendance Sheets in batch for all colleges and departments associated with an exam.'
 
