@@ -251,17 +251,19 @@ class PGResultService:
         """
         from pg.models import PGStudentCourseAssessment, PGCourseStructure
         
-        # [Assessments Fetching] ...
-        # NOTE: For back papers, fetch ALL attempts across all sessions
+        # [Assessments Fetching]
+        # When session is provided, only fetch assessments from that session
+        # When session is not provided, fetch all attempts (for back paper logic)
         if assessments is None:
             filters = {
                 'student_id': student_id,
                 'semester': semester,
                 'paper_code': paper_code
             }
-            # DO NOT filter by session - we need all attempts for back papers
-            # if session: filters['session'] = session  # REMOVED
-            
+            # Only filter by session when explicitly provided
+            if session:
+                filters['session'] = session
+
             assessment_list = list(
                 PGStudentCourseAssessment.objects.filter(**filters).order_by('label', '-session', '-updated_at')
             )
@@ -434,13 +436,12 @@ class PGResultService:
         """
         from pg.models import PGStudentCourseAssessment
         
-        # [Assessments Fetching] ...
-        # NOTE: For back papers, we need ALL assessments across all sessions
-        # The course-level logic will handle selecting the best attempt
+        # [Assessments Fetching]
+        # When session is provided, only fetch assessments from that session
         if assessments is None:
             filters = {'student_id': student_id, 'semester': semester}
-            # DO NOT filter by session - we need all attempts for back papers
-            # if session: filters['session'] = session  # REMOVED
+            if session:
+                filters['session'] = session
             assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         paper_codes = set(a.paper_code for a in assessments if a.paper_code)
@@ -512,11 +513,12 @@ class PGResultService:
         """
         from pg.models import PGStudentCourseAssessment
         
-        # [Assessments Fetching] ...
-        # NOTE: For back papers, fetch ALL attempts across all sessions
+        # [Assessments Fetching]
+        # When session is provided, only fetch assessments from that session
         if assessments is None:
             filters = {'student_id': student_id, 'semester': semester}
-            # DO NOT filter by session - we need all attempts
+            if session:
+                filters['session'] = session
             assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         if not assessments:
@@ -646,12 +648,10 @@ class PGResultService:
             'student_id': student_id,
             'semester': semester
         }
-        # CRITICAL CHANGE: Do NOT filter by session.
-        # We need ALL assessments from all sessions to calculate the "Best of" result (Cumulative).
-        # This ensures that when a student takes a back paper, we consider their previous passed papers too.
-        # if session:
-        #     filters['session'] = session
-        
+        # Only filter by session when explicitly provided
+        if session:
+            filters['session'] = session
+
         assessments = list(PGStudentCourseAssessment.objects.filter(**filters))
         
         paper_codes = set(a.paper_code for a in assessments if a.paper_code)

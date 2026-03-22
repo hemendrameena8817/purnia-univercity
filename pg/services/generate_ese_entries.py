@@ -189,7 +189,7 @@ def generate_ese_entries(batch=None, semester=None, session=None, dry_run=False,
                             course_type=cia_entry.course_type,
                             
                             is_cia_fill=False,
-                            is_ese_fill=True # It is an ESE entry
+                            is_ese_fill=False # It is an ESE entry
                         )
                         stats['ese_entries_created'] += 1
                     except Exception as e:
