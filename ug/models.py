@@ -697,3 +697,105 @@ class CommonCourseStructure(models.Model):
 
     def __str__(self):
         return f"{self.semester} - {self.course_type} ({self.course_name})"
+
+#=============Admit Card Genrate Models================
+
+class UGExam(models.Model):
+    """
+    Represents the overall UG Examination Event.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=255, null=True, blank=True)
+    semester = models.CharField(max_length=50, null=True, blank=True)
+    session = models.CharField(max_length=20, null=True, blank=True)
+    exam_month_year = models.CharField(max_length=50, null=True, blank=True)
+    publication_date = models.DateField(null=True, blank=True)
+    
+    is_active = models.BooleanField(default=True)
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'UG Exam'
+        verbose_name_plural = 'UG Exams'
+
+    def __str__(self):
+        return f"{self.name} ({self.session})"
+
+class UGExamCenterMapping(models.Model):
+    """
+    Center Fixation: Maps a UG Exam + Center College to one or more College(s).
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    exam = models.ForeignKey(
+        UGExam,
+        on_delete=models.CASCADE,
+        related_name='center_mappings'
+    )
+    center = models.ForeignKey(
+        'colleges.College',
+        on_delete=models.CASCADE,
+        related_name='ug_as_center_mappings'
+    )
+    # Colleges whose students will go to this center
+    attached_colleges = models.ManyToManyField(
+        'colleges.College',
+        related_name='ug_exam_centers'
+    )
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'UG Exam Center Mapping'
+        verbose_name_plural = 'UG Exam Center Mappings'
+        unique_together = ('exam', 'center')
+
+    def __str__(self):
+        return f"{self.exam.name} @ {self.center.name}"
+
+class UGExamSchedule(models.Model):
+    """
+    Exam Routine/Datesheet for UG.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    exam = models.ForeignKey(
+        UGExam, 
+        on_delete=models.CASCADE, 
+        related_name='schedules'
+    )
+    # For Honours subjects/Departments
+    # For Honours subjects/Departments (M2M for shared exams)
+    department = models.ManyToManyField(
+        'ug.UGDepartment',
+        blank=True,
+        related_name='exam_schedules'
+    )
+
+    
+    mjc = models.ManyToManyField(
+        'ug.UGDepartment',
+        blank=True,
+        related_name='exam_mjc'
+    )
+    
+    exam_date = models.DateField(null=True, blank=True)
+    exam_time = models.CharField(max_length=100, null=True, blank=True)
+    sitting = models.CharField(max_length=50, null=True, blank=True)
+    
+    json_data = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'UG Exam Schedule'
+        verbose_name_plural = 'UG Exam Schedules'
+        ordering = ['exam_date', 'exam_time']
+
+    def __str__(self):
+        depts = self.department.all()
+        dept_info = ", ".join([d.code or d.name for d in depts]) if depts.exists() else "N/A"
+        return f"{self.exam.name} - {dept_info} ({self.exam_date})"
+
+
