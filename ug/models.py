@@ -579,6 +579,7 @@ class SemesterRegistration(models.Model):
     status = models.CharField(max_length=15, choices=REGISTRATION_STATUS_CHOICES, default='PENDING', help_text="Registration Status")
     exam_eligible = models.BooleanField(default=False, help_text="Eligible for Exam")
     remarks = models.TextField(null=True, blank=True, help_text="Remarks")
+    assessment = models.ManyToManyField('ug.StudentCourseAssessment', blank=True, related_name='semester_registrations')
     session = models.CharField(max_length=10, null=True, blank=True, help_text="Session")
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
@@ -624,6 +625,7 @@ class ExamRegistration(models.Model):
         ('REGULAR', 'Regular'),
         ('BACK', 'Back'),
     ), default='REGULAR', help_text="Exam Type", null=True, blank=True)
+    assessment = models.ManyToManyField('ug.StudentCourseAssessment', blank=True, related_name='exam_registrations')
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")

@@ -312,7 +312,7 @@ class SemesterRegistrationAdmin(ImportExportModelAdmin):
     search_fields = ('student__registration_no', 'student__first_name', 'batch__name')
     ordering = ('-sem', 'student')
     list_per_page = 50
-    raw_id_fields = ('student', 'batch')
+    raw_id_fields = ('student', 'batch', 'assessment')
     list_select_related = ('student', 'batch')
     show_full_result_count = False
     list_editable = ('status', 'exam_eligible')
@@ -325,7 +325,7 @@ class ExamRegistrationAdmin(ImportExportModelAdmin):
     list_filter = ('sem', 'status', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name')
     ordering = ('student', 'sem')
-    raw_id_fields = ('student',)
+    raw_id_fields = ('student', 'assessment')
     list_select_related = ('student',)
     show_full_result_count = False
     list_per_page = 50
