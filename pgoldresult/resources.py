@@ -30,6 +30,9 @@ class PGOldStudentProfileResource(resources.ModelResource):
             if len(row) > 8:  # college field exists
                 college_value = row[8]  # college field index
                 if college_value in college_mapping:
-                    row[8] = college_mapping[college_value]
+                    # Convert tuple to list for modification
+                    row_list = list(row)
+                    row_list[8] = college_mapping[college_value]
+                    dataset[i] = tuple(row_list)
         
         return dataset
