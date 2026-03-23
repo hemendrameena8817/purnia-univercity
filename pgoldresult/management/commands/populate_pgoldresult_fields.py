@@ -23,37 +23,13 @@ class Command(BaseCommand):
             help='Show what would be updated without actually updating'
         )
 
-    def handle(self, *args, **options):
-        dry_run = options['dry_run']
-        
-        if dry_run:
-            self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be made'))
-        
-        # Build department lookup by code
-        departments = {}
-        for dept in PGDepartment.objects.select_related('faculty').all():
-            if dept.code:
-                departments[dept.code.lower().strip()] = dept
-        
-        self.stdout.write(f"Loaded {len(departments)} departments")
-        
-        # Build program lookup with degree info
-        programs = {}
-        for prog in PGProgram.objects.select_related('degree', 'department').all():
-            if prog.department and prog.department.code:
-                dept_code = prog.department.code.lower().strip()
-                if dept_code not in programs:
-                    programs[dept_code] = []
-                programs[dept_code].append(prog)
-        
-        self.stdout.write(f"Loaded {len(programs)} department-program mappings")
-        
-        # Get all PGOldResult records with empty pg_faculty
-        results_to_update = PGOldResult.objects.filter(pg_faculty__isnull=True) | \
-                           PGOldResult.objects.filter(pg_faculty='')
+    def process_model(self, model_class, departments, programs, dry_run):
+        # Get all records with empty pg_department (more reliable than pg_faculty)
+        results_to_update = model_class.objects.filter(pg_department__isnull=True) | \
+                           model_class.objects.filter(pg_department='')
         total = results_to_update.count()
         
-        self.stdout.write(f"Found {total} PGOldResult records to process")
+        self.stdout.write(f"\nFound {total} {model_class.__name__} records to process")
         
         if total == 0:
             self.stdout.write(self.style.SUCCESS('No records need updating'))
@@ -117,7 +93,7 @@ class Command(BaseCommand):
                 updated_count += 1
                 if updated_count <= 10:  # Show first 10 in dry-run
                     self.stdout.write(
-                        f"Would update: {result.college_roll_no} | "
+                        f"Would update record id {result.id} | "
                         f"discipline: {discipline_code} -> "
                         f"dept: {department.name}, "
                         f"faculty: {faculty_name}, "
@@ -127,9 +103,39 @@ class Command(BaseCommand):
         
         if dry_run:
             self.stdout.write(self.style.SUCCESS(
-                f"\nDRY RUN Complete: {updated_count} records would be updated, {skipped_count} skipped"
+                f"DRY RUN Complete for {model_class.__name__}: {updated_count} records would be updated, {skipped_count} skipped"
             ))
         else:
             self.stdout.write(self.style.SUCCESS(
-                f"\nComplete: {updated_count} records updated, {skipped_count} skipped, {error_count} errors"
+                f"Complete for {model_class.__name__}: {updated_count} records updated, {skipped_count} skipped, {error_count} errors"
             ))
+
+    def handle(self, *args, **options):
+        dry_run = options['dry_run']
+        
+        if dry_run:
+            self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be made'))
+        
+        # Build department lookup by code
+        departments = {}
+        for dept in PGDepartment.objects.select_related('faculty').all():
+            if dept.code:
+                departments[dept.code.lower().strip()] = dept
+        
+        self.stdout.write(f"Loaded {len(departments)} departments")
+        
+        # Build program lookup with degree info
+        programs = {}
+        for prog in PGProgram.objects.select_related('degree', 'department').all():
+            if prog.department and prog.department.code:
+                dept_code = prog.department.code.lower().strip()
+                if dept_code not in programs:
+                    programs[dept_code] = []
+                programs[dept_code].append(prog)
+        
+        self.stdout.write(f"Loaded {len(programs)} department-program mappings")
+        
+        from pgoldresult.models import PGOldStudentProfile, PGOldResult
+        self.process_model(PGOldResult, departments, programs, dry_run)
+        self.process_model(PGOldStudentProfile, departments, programs, dry_run)
+
