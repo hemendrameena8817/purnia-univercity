@@ -59,6 +59,9 @@ INSTALLED_APPS = [
     'ug_before_cbcs',
     'bba_year',
     'bca_hons_year',
+    'llb',
+    'pgoldresult',
+    'omr',
 ]
 
 
@@ -257,4 +260,9 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     "x-csrftoken",
     "x-requested-with",
     "ngrok-skip-browser-warning",
+]
+
+# Silence specific Django system checks
+SILENCED_SYSTEM_CHECKS = [
+    "models.W036",  # MySQL does not support unique constraints with conditions
 ]
