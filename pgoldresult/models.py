@@ -29,7 +29,8 @@ class PGOldStudentProfile(models.Model):
         null=True,
         blank=True
     )
-    
+        # Student-specific Information
+ 
     # Identity (from PGOldResult)
     registration_no = models.CharField(
         max_length=100, 
@@ -43,8 +44,8 @@ class PGOldStudentProfile(models.Model):
         blank=True,
         help_text='College Roll Number (college_roll_no from PGOldResult)'
     )
-    student_name = models.CharField(max_length=255)
-    student_name_hindi = models.CharField(max_length=255, null=True, blank=True)
+    first_name = models.CharField(max_length=255)
+    hindi_name = models.CharField(max_length=255, null=True, blank=True)
     fathers_name = models.CharField(max_length=255, null=True, blank=True)
     mothers_name = models.CharField(max_length=255, null=True, blank=True)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
@@ -83,7 +84,8 @@ class PGOldStudentProfile(models.Model):
     gpa = models.CharField(max_length=20, null=True, blank=True)
     cgpa = models.CharField(max_length=20, null=True, blank=True)
     total_percentage = models.CharField(max_length=20, null=True, blank=True)
-    
+    profile_image = models.ImageField(upload_to='pgold/profiles/', null=True, blank=True)
+    signature = models.ImageField(upload_to='pgold/signatures/', null=True, blank=True)
     # Original staging IDs (for reference)
     source_user_id = models.CharField(
         max_length=50, 
@@ -91,7 +93,15 @@ class PGOldStudentProfile(models.Model):
         blank=True, 
         help_text='Original user_id from staging'
     )
+    address = models.TextField(null=True, blank=True)
+    admission_date = models.DateField(null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
     
+    caste = models.CharField(max_length=20, null=True, blank=True)
+    enrollment_date = models.DateField(null=True, blank=True)
+    religion = models.CharField(max_length=50, null=True, blank=True)
+    nationality = models.CharField(max_length=50, null=True, blank=True)
+    medium_of_student = models.CharField(max_length=50, null=True, blank=True)
     # Metadata
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -107,7 +117,7 @@ class PGOldStudentProfile(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.registration_no} - {self.student_name}"
+        return f"{self.registration_no} - {self.first_name}"
 
 
 class PGOldResult(models.Model):

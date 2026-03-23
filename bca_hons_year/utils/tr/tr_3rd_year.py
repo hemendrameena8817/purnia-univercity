@@ -598,7 +598,7 @@ def generate_bca_hons_3rd_year_tr_pdf(students, college, batch_uid=None, year="3
     return generator.generate()
 
 def generate_static_bca_hons_3rd_year_tr_pdf():
-    template_path = os.path.join(settings.BASE_DIR, "bca_hons_year", "static", "tr", "BCA_Hons_3rd_year.xlsx")
+    template_path = os.path.join(settings.BASE_DIR, "bca_hons_year", "static", "tr", "BCA_Hons_3rd_year_static.xlsx")
     if not os.path.exists(template_path): return None
     temp_dir = os.environ.get("TEMP", "/tmp")
     temp_excel = os.path.join(temp_dir, f"BCA_Hons_3rd_year_{uuid.uuid4().hex}.xlsx")
