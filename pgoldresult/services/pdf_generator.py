@@ -5,6 +5,8 @@ Uses WeasyPrint for HTML to PDF conversion
 
 import os
 import base64
+import qrcode
+from io import BytesIO
 from django.conf import settings
 from django.template.loader import get_template
 from weasyprint import HTML, CSS
@@ -44,6 +46,44 @@ class PGMarksheetPDFGenerator:
         except Exception as e:
             print(f"Error loading signature: {e}")
         return ""
+    
+    def _generate_qr_code_base64(self, result_data: dict) -> str:
+        """
+        Generate dynamic QR code for the marksheet
+        """
+        try:
+            student_info = result_data.get('student_info', {})
+            exam_info = result_data.get('exam_info', {})
+            sgpa_data = result_data.get('sgpa_data', {})
+            
+            msno = f"{exam_info.get('exam_year', '')}-{student_info.get('roll_no', '')}"
+            course = 'POST GRADUATION(PG)'
+            name = student_info.get('name', '')
+            roll_no = student_info.get('roll_no', '')
+            reg_no = student_info.get('registration_no', '')
+            gpa = sgpa_data.get('sgpa', '0.00')
+            
+            qr_data = (
+                f"MSNO.: {msno} | "
+                f"Course : {course}| "
+                f"Name : {name} | "
+                f"Roll No: {roll_no} | "
+                f"Registration No. : {reg_no} | "
+                f"GPA : {gpa}"
+            )
+            
+            qr = qrcode.QRCode(version=1, box_size=4, border=2)
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            
+            buf = BytesIO()
+            qr_img.save(buf, format='PNG')
+            qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+            return f"data:image/png;base64,{qr_b64}"
+        except Exception as e:
+            print(f"QR generation error: {e}")
+            return ""
     
     def _get_css(self) -> str:
         """Get CSS styling for PDF"""
@@ -158,9 +198,13 @@ class PGMarksheetPDFGenerator:
             # Add images to result data
             result_data['university_logo'] = self._get_university_logo_base64()
             result_data['controller_sign'] = self._get_controller_sign_base64()
+            result_data['qr_code_image'] = self._generate_qr_code_base64(result_data)
             
             # Render HTML template
-            template = get_template('pgoldresult/marksheet_pdf.html')
+            template_name = 'pgoldresult/marksheet_pdf.html'
+            if result_data.get('semester') == '4TH':
+                template_name = 'pgoldresult/marksheet_sem4_pdf.html'
+            template = get_template(template_name)
             html_content = template.render(result_data)
             
             # Generate PDF without external CSS (use template CSS only)

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Marksheet - Semester 4</title>
+<style>
+    @page {
+        size: A4;
+        margin: 10mm 15mm 20mm 15mm;
+    }
+
+    html, body {
+        height: 98%;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        font-family: "Times New Roman", serif;
+        font-size: 11px;
+        color: #000;
+        position: relative;
+        min-height: 70%;
+        padding-bottom: 80px; /* Space for the absolute footer */
+        padding-top: 40px;
+    }
+
+    /* Top MSNO Number */
+    .msno-line {
+        font-weight:800;
+        font-size: 14px;
+    }
+
+    /* Header Block with Logo and centered Text */
+    .header-table {
+        width: 100%;
+        border: none;
+        margin-bottom: 20px;
+        margin-top: 50px;
+    }
+
+    .header-logo {
+        width: 100px;
+        vertical-align: top;
+    }
+
+    .header-logo img {
+        width: 100px;
+        margin-top: -45px;
+    }
+
+    .header-content {
+        text-align: center;
+        padding-top: 100px;
+    }
+
+    .statement-title {
+        font-size: 18px;
+        font-weight: bold;
+        text-decoration: underline;
+        margin: 15px 0 10px 0;
+    }
+
+    .sub-heading {
+        font-size: 12px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        margin-left: -50px;
+    }
+
+    /* Student Info Grid */
+    .info-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+
+    .info-table td {
+        padding: 3px 0;
+        line-height: 1.3;
+    }
+
+    .label-cell {
+        width: 160px;
+        text-align: left;
+        font-weight:normal;
+    }
+
+    .value-cell {
+        text-align: left;
+    }
+
+    /* Semester Title */
+    .sem-title {
+        text-align: center;
+        font-size: 14px;
+        font-weight: bold;
+        margin: 15px 0 10px 0;
+    }
+
+    /* Marks Table styling */
+    .marks-table, .cgpa-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 0.5px solid #000;
+    }
+
+    .marks-table th, .marks-table td, .cgpa-table th, .cgpa-table td {
+        border: 0.5px solid #000;
+        padding: 4px;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 11px;
+    }
+
+    .marks-table th, .cgpa-table th {
+        font-weight: bold;
+    }
+
+    .col-papers {
+        text-align: left !important;
+        padding-left: 8px !important;
+    }
+
+    /* GPA spanning column */
+    .gpa-cell {
+        vertical-align: middle;
+        font-weight: bold;
+    }
+
+    /* Summary Row style */
+    .summary-row td {
+        font-weight: bold;
+        padding: 6px;
+    }
+
+    /* Footer Area */
+    .footer-section {
+        margin-top: 20px;
+        width: 100%;
+    }
+
+    .legend-box {
+        font-size: 11px;
+        line-height: 1.5;
+        font-weight: normal;
+    }
+
+    .signature-row {
+        position: absolute;
+        bottom: 40px;
+        width: 100%;
+        display: table;
+        table-layout: fixed;
+    }
+
+    .signature-item {
+        display: table-cell;
+        text-align: center;
+        vertical-align: bottom;
+        font-weight: bold;
+        position: relative;
+    }
+
+    .sign-img {
+        position: absolute;
+        bottom: 25px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 120px;
+    }
+    
+    .text-left { text-align: left !important; }
+    .text-right { text-align: right !important; }
+
+    .cgpa-title {
+        text-align: center;
+        font-size: 14px;
+        font-weight: bold;
+        margin: 20px 0 10px 0;
+    }
+
+</style>
+</head>
+
+<body>
+
+    <!-- MSNO Header -->
+    <div class="msno-line">
+        MSNO.-{{exam_info.year}}-{{student_info.roll_no}}
+    </div>
+
+    <!-- Top Header Layout -->
+    <table class="header-table">
+        <tr>
+            <td class="header-logo">
+                {% if university_logo %}
+                <img src="data:image/png;base64,{{ university_logo }}">
+                {% else %}
+                <div style="width:80px;height:80px;border:0.5px solid #000; line-height:80px; text-align:center;">LOGO</div>
+                {% endif %}
+            </td>
+            <td class="header-content">
+                <div class="statement-title">STATEMENT OF MARKS</div>
+                <div class="sub-heading">
+                    {{ student_info.degree }} Semester -{{ student_info.semester|slice:":-2" }}<sup>{{ student_info.semester|slice:"-2:" }}</sup> {{ exam_info.actual_exam_month }}-{{ exam_info.year }} Examination held in the month of {{exam_info.exam_month}}-{{exam_info.exam_year}}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Student Details Structure -->
+    <table class="info-table">  
+        <tr>
+            <td class="label-cell">ROLL. NO.</td>
+            <td class="value-cell">: {{ student_info.roll_no }}</td>
+            <td class="label-cell">Name of Candidate</td>
+            <td class="value-cell">: {{ student_info.name }}</td>
+        </tr>
+        <tr>
+            <td class="label-cell">REG. NO.</td>
+            <td class="value-cell">: {{ student_info.registration_no }}</td>
+            <td class="label-cell">Father's Name</td>
+            <td class="value-cell">: {{ student_info.fathers_name }}</td>
+        </tr>
+        <tr>
+            <td class="label-cell">Subject Name</td>
+            <td class="value-cell">: {{ student_info.program }}</td>
+            <td class="label-cell">Mother's Name</td>
+            <td class="value-cell">: {{ student_info.mothers_name }}</td>
+        </tr>
+        <tr>
+            <td class="label-cell">Session</td>
+            <td class="value-cell">: {{ session|default:"2022-24" }}</td>
+            <td class="label-cell">Faculty</td>
+            <td class="value-cell">: {{ student_info.faculty }}</td>
+        </tr>
+        <tr>
+            <td class="label-cell">College Name</td>
+            <td class="value-cell">: {{ student_info.college }}</td>
+            <td class="label-cell">Centre Name</td>
+            <td class="value-cell">: {{ student_info.center }}</td>
+        </tr>
+    </table>
+
+    <div class="sem-title">SEMESTER - {{ semester|slice:":-2" }}<sup>{{ semester|slice:"-2:"|upper }}</sup></div>
+
+    <!-- Primary Marks Table -->
+    <table class="marks-table">
+        <thead>
+            <tr>
+                <th rowspan="4">Paper<br>Code</th>
+                <th rowspan="4">Papers</th>
+                <th colspan="6">Marks Obtained</th>
+                <th rowspan="2">Full Marks</th>
+                <th rowspan="4">Marks<br>Obtained</th>
+                <th rowspan="4">Grade</th>
+                <th rowspan="4">Numerical<br>Letter<br>Grade</th>
+                <th rowspan="4">Credit</th>
+                <th rowspan="4">GP=C*<br>N.G</th>
+                <th rowspan="4">GPA</th>
+            </tr>
+            <tr>
+                <th colspan="3">ESE</th>
+                <th colspan="3">CIA</th>
+            </tr>
+            <tr style="font-weight: normal;">
+                <th>F.M</th>
+                <th>70</th>
+                <th>50</th>
+                <th>F.M</th>
+                <th>30</th>
+                <th>50</th>
+                <th>100</th>
+            </tr>
+            <tr style="font-weight: normal;">
+                <th>P.M</th>
+                <th>31.5</th>
+                <th>22.5</th>
+                <th>P.M</th>
+                <th>13.5</th>
+                <th>22.5</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for subject in combined_results %}
+            <tr>
+                <td>{{ subject.paper_code }}</td>
+                <td class="col-papers">{{ subject.course_name }}</td>
+                <td> </td>
+                <td>{% if subject.ese.max_marks != 50 %}{{ subject.ese.marks_obtained }}{% else %} {% endif %}</td>
+                <td>{% if subject.ese.max_marks == 50 %}{{ subject.ese.marks_obtained }}{% else %} {% endif %}</td>
+                <td> </td>
+                <td>{% if subject.cia.max_marks != 50 %}{{ subject.cia.marks_obtained }}{% else %} {% endif %}</td>
+                <td>{% if subject.cia.max_marks == 50 %}{{ subject.cia.marks_obtained }}{% else %} {% endif %}</td>
+                <td>100</td>
+                <td>{{ subject.subject_total_mark|floatformat:0 }}</td>
+                <td>{{ subject.final_grade }}</td>
+                <td>{{ subject.grade_point|floatformat:0 }}</td>
+                <td>{{ subject.credits|floatformat:0 }}</td> 
+                <td>{{ subject.total_gp|floatformat:0 }}</td>
+                {% if forloop.first %}
+                <td rowspan="{{ combined_results|length }}" class="gpa-cell">{{ sgpa_data.sgpa }}</td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+            <tr class="summary-row">
+                <td colspan="7" class="text-left" style="padding-left: 10px;">REMARKS : {{ semester_result.status|upper }}</td>
+                <td colspan="6">Credit Earned :- {{ sgpa_data.total_credits|floatformat:0}}</td>
+                <td colspan="2" class="text-right" style="padding-right: 10px;">GPA : {{ sgpa_data.sgpa }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- CGPA Summary Table -->
+    <div class="cgpa-title">Final Result in Cumulative Grade Point Average (CGPA)</div>
+    <table class="cgpa-table">
+        <thead>
+            <tr>
+                <th colspan="2">Sem - I</th>
+                <th colspan="2">Sem - II</th>
+                <th colspan="2">Sem - III</th>
+                <th colspan="2">Sem - IV</th>
+                <th rowspan="2">CGPA</th>
+                <th rowspan="2">Numerical<br>Letter Grade</th>
+                <th rowspan="2">Letter<br>Grade</th>
+            </tr>
+            <tr>
+                <th>GPA</th>
+                <th>Credit Earned</th>
+                <th>GPA</th>
+                <th>Credit Earned</th>
+                <th>GPA</th>
+                <th>Credit Earned</th>
+                <th>GPA</th>
+                <th>Credit Earned</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{ cgpa_data.sem1.gpa|default:"0.00" }}</td>
+                <td>{{ cgpa_data.sem1.credits|floatformat:0|default:"0" }}</td>
+                <td>{{ cgpa_data.sem2.gpa|default:"0.00" }}</td>
+                <td>{{ cgpa_data.sem2.credits|floatformat:0|default:"0" }}</td>
+                <td>{{ cgpa_data.sem3.gpa|default:"0.00" }}</td>
+                <td>{{ cgpa_data.sem3.credits|floatformat:0|default:"0" }}</td>
+                <td>{{ cgpa_data.sem4.gpa|default:"0.00" }}</td>
+                <td>{{ cgpa_data.sem4.credits|floatformat:0|default:"0" }}</td>
+                <td>{{ cgpa_data.cgpa|default:"0.00" }}</td>
+                <td>{{ cgpa_data.numerical_grade|default:"0" }}</td>
+                <td>{{ cgpa_data.letter_grade|default:"F" }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="footer-section">
+        <div style="display: table; width: 100%;">
+            <p style="margin: 5px 0;">Remarks : <strong>{{ semester_result.status|upper }}</strong> <span style="float: right;">Grade : <strong>{{ cgpa_data.letter_grade|default:"--" }}</strong></span></p>
+            <div style="display: table-cell; width: 35%; vertical-align: bottom;">
+                <div style="margin-top: 25px; font-weight: normal;">
+                    Date of Publication : {{ exam_info.pub_date|default:"18-08-2024" }}
+                </div>
+            </div>
+            <div style="display: table-cell; width: 30%; text-align: center; vertical-align: top;">
+                <div style="margin-top: 20px;">
+                   {% if qr_code_image %}
+                   <img src="{{ qr_code_image }}" style="width: 80px; height: 80px; border: 0.5px solid #000;padding: 2.5px;">
+                   {% endif %}
+                </div>
+            </div>
+            <div style="display: table-cell; width: 35%;"></div>
+        </div>
+    </div>
+
+    <div class="signature-row">
+        <div class="signature-item" style="text-align: left;">Assistant</div>
+        <div class="signature-item">S.O</div>
+        <div class="signature-item">Tabulator</div>
+        <div class="signature-item" style="text-align: right;">
+            {% if controller_sign %}
+            <img src="data:image/png;base64,{{ controller_sign }}" class="sign-img" style="right: 0; left: auto; transform: none;">
+            {% endif %}
+            Controller of Examinations
+        </div>
+    </div>
+
+</body>
+</html>
