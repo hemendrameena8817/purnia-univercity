@@ -354,7 +354,8 @@ class MBAStudentCourseAssessmentResource(resources.ModelResource):
             'course_final_marks_obtained', 'course_credit_obtained',
             'course_grade_point', 'sem_max_credit', 'sem_credit_obtained',
             'sgpa', 'sem_result', 'next_sem_status', 'sem_grace_obtained',
-            'temp_total_gp', 'json_data', 'created_at', 'updated_at'
+            'temp_total_gp', 'json_data', 'created_at', 'updated_at',
+            'student_registration_no', 'student_roll_no', 'student_name'
         )
         export_order = (
             'uid', 'student_registration_no', 'student_roll_no', 'student_name',

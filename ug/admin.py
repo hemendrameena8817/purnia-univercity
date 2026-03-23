@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
 import openpyxl
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Case, When, Value, IntegerField
 from import_export import resources
 from import_export.admin import ImportExportModelAdmin
 from import_export.fields import Field
@@ -535,23 +535,60 @@ class UGExamCenterMappingAdmin(admin.ModelAdmin):
     search_fields = ('exam__name', 'center__name')
     raw_id_fields = ('exam', 'center')
     ordering = ('-created_at',)
-
+    
 @admin.register(UGExamSchedule)
 class UGExamScheduleAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'get_subject_name', 'exam_date', 'exam_time', 'sitting')
-    list_filter = ('exam', 'sitting', 'exam_date', 'department')
-    search_fields = ('exam__name', 'department__name')
-    raw_id_fields = ('exam', )
-    filter_horizontal = ('department','mjc',)
+    list_display = (
+        'exam',
+        'subject',
+        'get_department_names',
+        'get_mjc_names',
+        'exam_date',
+        'exam_time',
+        'sitting'
+    )
+
+    list_editable = ('subject', 'exam_date', 'exam_time', 'sitting')
+
+    # 🔥 Better filters
+    list_filter = (
+        'exam',
+        'sitting',
+        'department',
+        'mjc',
+        'subject',
+        ('exam_date', admin.DateFieldListFilter),  # already correct
+    )
+
+    # 🔥 Add date hierarchy (BEST for date filtering UX)
+    date_hierarchy = 'exam_date'
+
+    search_fields = (
+        'exam__name',
+        'department__name',
+        'mjc__name',
+        'subject',
+        'exam_time'
+    )
+
+    raw_id_fields = ('exam',)
+    filter_horizontal = ('department', 'mjc')
+
+    # 🔥 CLEAN ORDERING (no hack needed if time is proper)
     ordering = ('exam_date', 'exam_time')
 
-    @admin.display(description='Subject Name')
-    def get_subject_name(self, obj):
-        # M2M logic for department display - sorted alphabetically by name
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs.prefetch_related('department', 'mjc')
+
+    @admin.display(description='Departments')
+    def get_department_names(self, obj):
         depts = obj.department.all().order_by('name')
-        if depts.exists():
-            codes = [d.code or d.name for d in depts]
-            return f"{', '.join(codes)}"
-        return "N/A"
+        return ", ".join([d.code or d.name for d in depts]) if depts else "-"
+
+    @admin.display(description='MJC Subjects')
+    def get_mjc_names(self, obj):
+        mjcs = obj.mjc.all().order_by('name')
+        return ", ".join([m.code or m.name for m in mjcs]) if mjcs else "-"
 
 #=============End Admit Card Genrate Models Registration================

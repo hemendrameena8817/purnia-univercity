@@ -773,7 +773,7 @@ class UGExamSchedule(models.Model):
         related_name='exam_schedules'
     )
 
-    
+    subject = models.CharField(max_length=250, null=True, blank=True)
     mjc = models.ManyToManyField(
         'ug.UGDepartment',
         blank=True,
