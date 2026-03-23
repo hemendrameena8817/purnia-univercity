@@ -8,8 +8,12 @@ from django.template.loader import get_template
 from django.conf import settings
 import os
 
-from .models import PGOldResult, PGOldStudentProfile
-from .serializers import PGOldResultSerializer, StudentInfoSerializer, SubjectDetailSerializer, PGOldStudentProfileSerializer
+from .models import PGOldResult, PGOldStudentProfile, PGExamMasterDump
+from .serializers import (
+    PGOldResultSerializer, StudentInfoSerializer, SubjectDetailSerializer, 
+    PGOldStudentProfileSerializer, PGExamMasterDumpSerializer
+)
+
 from .services.result_calculator import (
     calculate_pg_result, 
     get_pg_old_result_for_pdf,
@@ -123,20 +127,35 @@ class PGOldResultAPIView(APIView):
                 first_result = results.first()
                 student_info = StudentInfoSerializer(first_result).data
             
-            # Get unique sessions as list for the current filtered results
-            sessions = list(results.values_list('session_code', flat=True).distinct())
+            # Get unique semester+session combinations for the current filtered results
+            # We use both to distinguish different exam appearances (e.g. backlogs)
+            exam_groups = list(results.values('semester_code', 'session_code').distinct().order_by('semester_code', 'session_code'))
             
             response_data = {
                 'success': True,
                 'student_info': student_info,
                 'academic_summary': academic_summary,
-                'sessions': []
+                'sessions': [] # Keeping name 'sessions' for compatibility, but each is a Sem+Sess group
             }
 
-            
-            # Process each session separately
-            for session in sessions:
-                session_results = results.filter(session_code=session)
+            # Process each exam group separately
+            for group in exam_groups:
+                semester = group['semester_code']
+                session = group['session_code']
+                session_results = results.filter(semester_code=semester, session_code=session)
+                
+                # Fetch exam master details for THIS specific semester and session
+                # Use batch_code from the results in this group
+                current_batch = session_results.first().batch_code if session_results.exists() else student_info.get('batch_code')
+                
+                exam_master = PGExamMasterDump.objects.filter(
+                    batch_code=current_batch,
+                    semester_code=semester,
+                    session_code=session
+                ).first()
+                
+                exam_details = PGExamMasterDumpSerializer(exam_master).data if exam_master else None
+
                 
                 # Separate results by exam_type for this session
                 regular_results = session_results.filter(exam_type='REGULAR')
@@ -159,7 +178,9 @@ class PGOldResultAPIView(APIView):
                     back_mid_term = SubjectDetailSerializer(back_results.filter(status='MID_TERM'), many=True).data
 
                 session_data = {
+                    'semester_code': semester,
                     'session_code': session,
+                    'exam_details': exam_details,
                     'regular_data': {
                         'total_subjects': regular_results.count(),
                         'end_term_subjects': regular_end_term,
@@ -172,12 +193,14 @@ class PGOldResultAPIView(APIView):
                     },
                     'total_subjects': session_results.count()
                 }
+
                 
                 response_data['sessions'].append(session_data)
             
             response_data.update({
                 'total_subjects': results.count(),
-                'total_sessions': len(sessions),
+                'total_groups': len(exam_groups),
+
                 'filters_applied': {
                     'batch_code': batch_code,
                     'semester_code': semester_code,
@@ -186,6 +209,11 @@ class PGOldResultAPIView(APIView):
                 'search_type': search_type,
                 'search_value': search_value
             })
+            
+            # Global exam details (optional legacy support)
+            response_data['exam_details'] = response_data['sessions'][0]['exam_details'] if response_data['sessions'] else None
+
+
             
             return Response(response_data)
 
@@ -205,7 +233,8 @@ class PGOldResultAPIView(APIView):
         Supports profile + multiple assessments update in single call
         """
         try:
-            profile_uid = request.data.get('profile_uid')
+            # Try to get profile UID from 'profile_uid' or 'uid'
+            profile_uid = request.data.get('profile_uid') or request.data.get('uid')
             profile = None
             response_data = []
             
@@ -290,6 +319,8 @@ class PGOldResultAPIView(APIView):
                 # Priority 1: Update by UID
                 if uid:
                     instance = PGOldResult.objects.filter(uid=uid).first()
+                    if not instance:
+                        return {'success': False, 'error': f'Assessment with UID {uid} not found'}
                 
                 # Priority 2: Update by student+paper+semester+status (most common case)
                 elif paper_code and semester and norm_status:
@@ -373,14 +404,71 @@ class PGOldResultAPIView(APIView):
             # Case 4: Single assessment (existing behavior)
             else:
                 response_data.append(save_result(request.data.copy(), profile))
+            
+            # --- PHASE 5: Handle Exam Master Data ---
+            exam_master_data = request.data.get('exam_master_data')
+            if exam_master_data:
+                exam_uid = exam_master_data.get('uid') or exam_master_data.get('exam_uid')
+                exam_code = exam_master_data.get('exam_code')
+                
+                exam_instance = None
+                if exam_uid:
+                    exam_instance = PGExamMasterDump.objects.filter(uid=exam_uid).first()
+                elif exam_code:
+                    exam_instance = PGExamMasterDump.objects.filter(exam_code=exam_code).first()
 
-            # --- PHASE 5: Complete ---
+                if exam_instance:
+                    exam_serializer = PGExamMasterDumpSerializer(exam_instance, data=exam_master_data, partial=True)
+                    action = "updated"
+                elif not exam_uid: # Create only if no UID provided (since UID record must exist)
+                    exam_serializer = PGExamMasterDumpSerializer(data=exam_master_data)
+                    action = "created"
+                else:
+                    exam_serializer = None
+                    response_data.append({
+                        'success': False,
+                        'type': 'exam_master',
+                        'error': f'Exam with UID {exam_uid} not found'
+                    })
+                
+                if exam_serializer:
+                    if exam_serializer.is_valid():
+                        exam_instance = exam_serializer.save()
+                        response_data.append({
+                            'success': True,
+                            'type': 'exam_master',
+                            'action': action,
+                            'data': exam_serializer.data
+                        })
+                    else:
+                        response_data.append({
+                            'success': False,
+                            'type': 'exam_master',
+                            'errors': exam_serializer.errors
+                        })
+
+            # --- PHASE 7: Recalculate SGPA/Totals ---
+            try:
+                # Use registration_no/semester/session from current context
+                current_reg_no = profile.registration_no
+                # We need sem/sess for recalculation. If not in request, try to get from first result
+                first_res = PGOldResult.objects.filter(student_profile=profile).first()
+                current_sem = request.data.get('semester_code') or request.data.get('semester') or (first_res.semester_code if first_res else None)
+                current_sess = request.data.get('session_code') or request.data.get('session') or (first_res.session_code if first_res else None)
+                
+                if current_reg_no and current_sem and current_sess:
+                    recalculate_pgo_sgpa(current_reg_no, current_sem, current_sess)
+            except Exception as e:
+                print(f"Recalculation error: {e}")
+
+            # --- PHASE 8: Complete ---
             return Response({
                 'success': True,
-                'message': 'Data updated successfully.',
+                'message': 'Data updated successfully and results recalculated.',
                 'results': [{k: v for k, v in r.items() if k != 'instance'} for r in response_data],
                 'student_profile': PGOldStudentProfileSerializer(profile).data
             }, status=status.HTTP_200_OK if profile_uid else status.HTTP_201_CREATED)
+
 
         except Exception as e:
             return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
