@@ -245,8 +245,26 @@ def get_ug_old_ba_hons_part1_context(
         if not results:
             logger.warning(f"No custom results provided for {student.registration_no} / {part_code}")
             return None
-        first_result = results[0]
-        exam = first_result.exam
+        
+        # If requested_session_code is provided, try to find an exam from that session
+        # Otherwise use the first result's exam
+        if requested_session_code:
+            session_result = next(
+                (r for r in results if r.exam and r.exam.session_code == requested_session_code),
+                None
+            )
+            if session_result:
+                exam = session_result.exam
+                first_result = session_result
+                logger.info(f"Using exam from requested session {requested_session_code}: {exam.name}")
+            else:
+                # Fallback to first result if no match found
+                first_result = results[0]
+                exam = first_result.exam
+                logger.warning(f"No exam found for session {requested_session_code} in custom results, using: {exam.session_code}")
+        else:
+            first_result = results[0]
+            exam = first_result.exam
     else:
         # Get all student results for this part
         results_query = UGBeforeCBCSStudentResult.objects.filter(
@@ -256,14 +274,34 @@ def get_ug_old_ba_hons_part1_context(
             
         if course_code:
             results_query = results_query.filter(exam__course_code__iexact=course_code)
-                
-        first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
-
-        if not first_result:
-            logger.warning(f"No results found for {student.registration_no} / {part_code}")
-            return None
-
-        exam = first_result.exam
+        
+        # If a specific session is requested, try to find exam matching that session first
+        if requested_session_code:
+            # Look for results with the requested session code
+            session_result = results_query.filter(
+                exam__session_code=requested_session_code
+            ).select_related('exam').first()
+            
+            if session_result:
+                exam = session_result.exam
+                first_result = session_result
+                logger.info(f"Using exam for requested session {requested_session_code}: {exam.name}")
+            else:
+                # Fallback to latest exam if no results found for requested session
+                first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
+                if first_result:
+                    exam = first_result.exam
+                    logger.warning(f"No results found for session {requested_session_code}, using latest exam: {exam.name}")
+                else:
+                    logger.warning(f"No results found for {student.registration_no} / {part_code}")
+                    return None
+        else:
+            # No session requested - use latest exam by year
+            first_result = results_query.select_related('exam').order_by('-exam__exam_year').first()
+            if not first_result:
+                logger.warning(f"No results found for {student.registration_no} / {part_code}")
+                return None
+            exam = first_result.exam
 
         # 2. Get all student results for this exam
         results = UGBeforeCBCSStudentResult.objects.filter(
