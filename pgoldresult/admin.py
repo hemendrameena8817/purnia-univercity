@@ -1,10 +1,13 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
 from .models import PGOldResult, PGCenterInstituteMap, PGOldStudentProfile, PGExamMasterDump
+from .resources import PGOldStudentProfileResource
 
 
 @admin.register(PGOldStudentProfile)
 class PGOldStudentProfileAdmin(ImportExportModelAdmin):
+    resource_class = PGOldStudentProfileResource
+    
     list_display = (
         'user',
         'registration_no',
@@ -133,6 +136,7 @@ class PGOldResultAdmin(ImportExportModelAdmin):
         'pg_department',
         'pg_degree',
         'pg_program',
+        'total_ce'
 
     )
     
@@ -275,7 +279,7 @@ class PGCenterInstituteMapAdmin(ImportExportModelAdmin):
         'exam_type', 'session_code', 'is_sem', 'imported_at'
     )
     list_filter = (
-        'course_code', 'batch_code', 'session_code', 'exam_type', 'is_sem'
+        'course_code', 'batch_code', 'session_code', 'exam_type', 'is_sem','semester_code'
     )
     search_fields = (
         'center_code', 'center_name', 'batch_code', 'course_code', 'semester_code',
@@ -310,12 +314,12 @@ class PGExamMasterDumpAdmin(ImportExportModelAdmin):
     list_display = (
         'source_id', 'exam_type', 'exam_code', 'exam_name', 'batch_code',
         'session_code', 'course_code', 'discipline_code', 'semester_code',
-        'exam_start_date', 'exam_end_date', 'publish_status', 'institute_code',
+        'exam_start_date', 'exam_end_date', 'publish_date', 'institute_code',
         'imported_at',
     )
     list_filter = (
         'course_code', 'batch_code', 'session_code', 'semester_code',
-        'exam_type', 'discipline_code', 'publish_status', 'is_sem',
+        'exam_type', 'discipline_code', 'publish_date', 'is_sem',
     )
     search_fields = (
         'source_id', 'exam_code', 'exam_name', 'batch_code',
@@ -339,7 +343,7 @@ class PGExamMasterDumpAdmin(ImportExportModelAdmin):
                 ('apply_start_date', 'apply_end_date'),
                 ('exam_mark_entry_date', 'online_payment_transaction_no'),
                 ('omr_no', 'template_code'),
-                ('publish_status', 'institute_code'),
+                ('publish_date', 'institute_code'),
                 ('created_by', 'created_on'),
                 ('updated_by', 'updated_on'),
                 ('record_status', 'last_updated'),

@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import PGOldResult, PGOldStudentProfile
+from .models import PGOldResult, PGOldStudentProfile, PGExamMasterDump
+
 
 
 class PGOldStudentProfileSerializer(serializers.ModelSerializer):
@@ -54,3 +55,9 @@ class PGOldResultDetailSerializer(serializers.ModelSerializer):
         model = PGOldResult
         fields = '__all__'
         depth = 1
+
+
+class PGExamMasterDumpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PGExamMasterDump
+        fields = ['uid','actual_exam_month','year','exam_month','exam_year','publish_date']
