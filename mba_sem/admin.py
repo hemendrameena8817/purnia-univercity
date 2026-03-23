@@ -158,4 +158,4 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
 
     raw_id_fields = ("student", "batch", "mba_exam")
 
-    ordering = ("-created_at",)
+    ordering = ("-created_at",)

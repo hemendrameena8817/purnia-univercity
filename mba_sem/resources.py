@@ -8,6 +8,20 @@ from .models import (
 )
 from colleges.models import College
 from accounts.models import UserAccount
+from django.db import models
+import re
+
+class RobustManyToManyWidget(ManyToManyWidget):
+    def __init__(self, model, separator=',', field='pk', *args, **kwargs):
+        super().__init__(model, separator, field, *args, **kwargs)
+
+    def clean(self, value, row=None, **kwargs):
+        if not value:
+            return self.model.objects.none()
+        ids = [i.strip() for i in str(value).split(self.separator) if i.strip() and i.strip().lower() != 'none']
+        if not ids:
+            return self.model.objects.none()
+        return self.model.objects.filter(models.Q(center_code__in=ids) | models.Q(college_code__in=ids))
 
 class MBACourseResource(resources.ModelResource):
     class Meta:
@@ -91,25 +105,85 @@ class MBAExamResource(resources.ModelResource):
         fields = ('uid', 'name', 'semester', 'session', 'exam_month_year', 'publication_date', 'created_at', 'updated_at')
 
 class MBAExamCenterMappingResource(resources.ModelResource):
+
     exam = fields.Field(
         column_name='exam_name',
         attribute='exam',
         widget=ForeignKeyWidget(MBAExam, 'name')
     )
+
     center = fields.Field(
         column_name='center_code',
         attribute='center',
         widget=ForeignKeyWidget(College, 'center_code')
     )
+
     attached_colleges = fields.Field(
         column_name='attached_college_codes',
         attribute='attached_colleges',
-        widget=ManyToManyWidget(College, field='center_code')
+        widget=RobustManyToManyWidget(College, field='center_code', separator=',')
     )
+
     class Meta:
         model = MBAExamCenterMapping
-        import_id_fields = ('uid',)
-        fields = ('uid', 'exam', 'center', 'attached_colleges', 'created_at', 'updated_at')
+
+        # 🔥 MAIN FIX (duplicate + update handle karega)
+        import_id_fields = ('exam', 'center')
+
+        fields = (
+            'uid',
+            'exam',
+            'center',
+            'attached_colleges',
+            'created_at',
+            'updated_at'
+        )
+
+    # 🔥 "None" aur garbage values clean karega
+    def before_import_row(self, row, **kwargs):
+        # clean attached colleges
+        value = row.get('attached_college_codes')
+
+        if value:
+            cleaned = [
+                v.strip() for v in str(value).split(',')
+                if v.strip() and v.strip().lower() != 'none'
+            ]
+            row['attached_college_codes'] = ",".join(cleaned)
+
+        # strip spaces
+        row['exam_name'] = (row.get('exam_name') or '').strip()
+        row['center_code'] = (row.get('center_code') or '').strip()
+
+    def dehydrate_attached_colleges(self, mapping):
+        # Prefer center_code, fallback to college_code
+        codes = []
+        for col in mapping.attached_colleges.all():
+            val = col.center_code or col.college_code
+            if val and str(val).lower() != 'none':
+                codes.append(str(val).strip())
+        return ",".join(set(codes))
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('attached_colleges').select_related('exam', 'center')
+        
+
+class SmartCourseStructureWidget(ForeignKeyWidget):
+    def __init__(self, model, field='pk', *args, **kwargs):
+        super().__init__(model, field, *args, **kwargs)
+
+    def get_queryset(self, value, row, *args, **kwargs):
+        queryset = super().get_queryset(value, row, *args, **kwargs)
+        exam_name = str(row.get('exam_name', '')).lower()
+        if '1st' in exam_name or 'semester 1' in exam_name:
+            return queryset.filter(semester='1')
+        if '2nd' in exam_name or 'semester 2' in exam_name:
+            return queryset.filter(semester='2')
+        if '3rd' in exam_name or 'semester 3' in exam_name:
+            return queryset.filter(semester='3')
+        if '4th' in exam_name or 'semester 4' in exam_name:
+            return queryset.filter(semester='4')
+        return queryset
 
 class MBAExamScheduleResource(resources.ModelResource):
     exam = fields.Field(
@@ -120,7 +194,7 @@ class MBAExamScheduleResource(resources.ModelResource):
     common_course_structure = fields.Field(
         column_name='course_code',
         attribute='common_course_structure',
-        widget=ForeignKeyWidget(MBACommonCourseStructure, 'code')
+        widget=SmartCourseStructureWidget(MBACommonCourseStructure, 'code')
     )
     class Meta:
         model = MBAExamSchedule
@@ -142,6 +216,36 @@ class MBASemesterRegistrationResource(resources.ModelResource):
             'created_at', 'updated_at'
         )
 
+class SmartManyToManyCourseStructureWidget(ManyToManyWidget):
+    def clean(self, value, row=None, *args, **kwargs):
+        if not value:
+            return self.model.objects.none()
+
+        codes = [
+            v.strip() for v in str(value).split(self.separator)
+            if v.strip() and v.strip().lower() != 'none'
+        ]
+
+        # detection from exam_name
+        exam_name = str(row.get('exam_name', '')).lower()
+        qs = self.model.objects.all()
+
+        if re.search(r'\b(1|1st|first)\b', exam_name):
+            qs = qs.filter(semester='1')
+        elif re.search(r'\b(2|2nd|second)\b', exam_name):
+            qs = qs.filter(semester='2')
+        elif re.search(r'\b(3|3rd|third)\b', exam_name):
+            qs = qs.filter(semester='3')
+        elif re.search(r'\b(4|4th|fourth)\b', exam_name):
+            qs = qs.filter(semester='4')
+
+        return qs.filter(code__in=codes)
+
+    def render(self, value, obj=None):
+        if not value:
+            return ""
+        return ",".join([str(s.code) for s in value.all() if s.code])
+
 class MBAExamRegistrationResource(resources.ModelResource):
     student = fields.Field(
         column_name='registration_no',
@@ -156,7 +260,7 @@ class MBAExamRegistrationResource(resources.ModelResource):
     exam_subjects = fields.Field(
         column_name='subject_codes',
         attribute='exam_subjects',
-        widget=ManyToManyWidget(MBACommonCourseStructure, field='code')
+        widget=SmartManyToManyCourseStructureWidget(MBACommonCourseStructure, field='code', separator=',')
     )
     class Meta:
         model = MBAExamRegistration
@@ -166,6 +270,9 @@ class MBAExamRegistrationResource(resources.ModelResource):
             'end_date', 'is_open', 'fees', 'sem', 'status', 'session', 'json_data',
             'created_at', 'updated_at'
         )
+
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related('exam_subjects').select_related('student', 'exam')
 
 class MBAStudentAssessmentResource(resources.ModelResource):
     student = fields.Field(
