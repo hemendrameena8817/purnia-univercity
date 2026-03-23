@@ -21,7 +21,6 @@ class OMRScanAdmin(admin.ModelAdmin):
     search_fields = ["uid", "barcode", "roll_number", "course_code", "center_code"]
     readonly_fields = [
         "uid",
-        "json_result",
         "processed_at",
         "created_at",
         "updated_at",
@@ -32,7 +31,7 @@ class OMRScanAdmin(admin.ModelAdmin):
     fieldsets = [
         (None, {"fields": ["uid", "image", "part", "mode", "status", "error_msg"]}),
         ("Common Fields", {"fields": ["barcode", "center_code", "course_code"]}),
-        ("Part D Fields", {"fields": ["roll_number", "year", "sem", "session", "exam_type", "sitting"]}),
+        ("Part D Fields", {"fields": ["roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting"]}),
         ("Part C Fields", {"fields": ["ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks"]}),
         ("Processing Data", {"fields": ["json_result", "uploaded_at", "processed_at", "created_at", "updated_at"]}),
     ]

@@ -45,7 +45,7 @@ class OMRScanUpdateSerializer(serializers.ModelSerializer):
         fields = [
             "part", "mode", "status", "error_msg",
             "barcode", "center_code", "course_code",
-            "roll_number", "year", "sem", "session", "exam_type", "sitting",
+            "roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting",
             "ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks",
             "json_result",
         ]
@@ -57,7 +57,7 @@ class OMRScanCVSerializer(serializers.ModelSerializer):
         model = OMRScan
         fields = [
             "id", "uid", "part", "status", "barcode", "center_code", "course_code",
-            "roll_number", "year", "sem", "session", "exam_type", "sitting",
+            "roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting",
             "ug_old", "ug_new", "pg_sem", "faculty",
             "marks_obtained", "total_marks",
             "uploaded_at", "processed_at", "error_msg",
@@ -67,7 +67,7 @@ class OMRScanCVSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         # Remove Part-D fields from Part-C response and vice versa
         if instance.part == "C":
-            for f in ("roll_number", "year", "sem", "session", "exam_type", "sitting"):
+            for f in ("roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting"):
                 data.pop(f, None)
         elif instance.part == "D":
             for f in ("ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks"):
@@ -80,15 +80,18 @@ class OMRScanDetailSerializer(serializers.ModelSerializer):
     """Full detail with raw_result for individual scan retrieval."""
     data = serializers.SerializerMethodField()
     image_url = serializers.SerializerMethodField()
+    verification = serializers.SerializerMethodField()
+    flags = serializers.SerializerMethodField()
+    error = serializers.CharField(source="error_msg", read_only=True)
 
     class Meta:
         model = OMRScan
         fields = [
             "id", "uid", "image_url", "part", "mode", "status",
             "barcode", "center_code", "course_code",
-            "roll_number", "year", "sem", "session", "exam_type", "sitting",
+            "roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting",
             "ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks",
-            "uploaded_at", "processed_at", "error_msg", "json_result", "data",
+            "uploaded_at", "processed_at", "error", "verification", "flags", "data",
         ]
 
     def to_representation(self, instance):
@@ -96,7 +99,20 @@ class OMRScanDetailSerializer(serializers.ModelSerializer):
         for key, value in list(data.items()):
             if value == "":
                 data[key] = None
-        data["error"] = data.pop("error_msg") or None
+
+        if instance.part == "C":
+            for f in ("roll_number", "registration_no", "year", "sem", "session", "exam_type", "sitting"):
+                data.pop(f, None)
+        elif instance.part == "D":
+            for f in ("ug_old", "ug_new", "pg_sem", "faculty", "marks_obtained", "total_marks"):
+                data.pop(f, None)
+
+        if instance.mode != "ai":
+            data.pop("verification", None)
+            data.pop("flags", None)
+
+        if data.get("error") == "":
+            data["error"] = None
         return data
 
     def get_image_url(self, obj):
@@ -116,6 +132,18 @@ class OMRScanDetailSerializer(serializers.ModelSerializer):
             return _build_ai_data(obj, raw)
         return _build_cv_data(obj)
 
+    def get_verification(self, obj):
+        raw = obj.json_result or {}
+        if raw.get("mode") != "ai":
+            return None
+        return raw.get("verification")
+
+    def get_flags(self, obj):
+        raw = obj.json_result or {}
+        if raw.get("mode") != "ai":
+            return []
+        return raw.get("flags", [])
+
 
 def _build_cv_data(scan: OMRScan) -> dict:
     data = {
@@ -126,6 +154,7 @@ def _build_cv_data(scan: OMRScan) -> dict:
     if scan.part == "D":
         data.update({
             "roll_number": scan.roll_number or None,
+            "registration_no": scan.registration_no or None,
             "year": scan.year or None,
             "sem": scan.sem or None,
             "session": scan.session or None,
@@ -148,6 +177,7 @@ def _build_ai_data(scan: OMRScan, raw: dict) -> dict:
     readings = raw.get("readings", {})
     ai_raw = raw.get("ai_raw", {})
     flags = raw.get("flags", [])
+    verification = raw.get("verification")
 
     fields = {}
 
@@ -163,9 +193,11 @@ def _build_ai_data(scan: OMRScan, raw: dict) -> dict:
         for name in ("roll_number", "center_code", "course_code", "session"):
             fields[name] = _ai_grid_field(readings.get(name, {}), ai_raw.get(name, {}), getattr(scan, name, "") or None)
 
-        ys = readings.get("year_sem", {})
-        fields["year"] = {"value": scan.year or None, "handwritten": ys.get("handwritten"), "bubble": ys.get("bubble")}
-        fields["sem"] = {"value": scan.sem or None}
+        year_reading = readings.get("year", {})
+        sem_reading = readings.get("sem", {})
+        fields["registration_no"] = {"value": scan.registration_no or None, "handwritten": raw.get("registration_no")}
+        fields["year"] = {"value": scan.year or None, "handwritten": year_reading.get("handwritten"), "bubble": year_reading.get("bubble")}
+        fields["sem"] = {"value": scan.sem or None, "handwritten": sem_reading.get("handwritten"), "bubble": sem_reading.get("bubble")}
 
         for name in ("exam_type", "sitting"):
             src = ai_raw.get(name, {})
@@ -187,10 +219,7 @@ def _build_ai_data(scan: OMRScan, raw: dict) -> dict:
         fields["subject_text"] = raw.get("subject_text")
         fields["marks_in_words"] = raw.get("marks_in_words")
 
-    result = {"fields": fields}
-    if flags:
-        result["flags"] = flags
-    return result
+    return {"fields": fields}
 
 
 def _ai_grid_field(readings: dict, src: dict, final_value) -> dict:
@@ -198,6 +227,7 @@ def _ai_grid_field(readings: dict, src: dict, final_value) -> dict:
         "value": final_value,
         "handwritten": readings.get("handwritten"),
         "bubble": readings.get("bubble"),
+        
     }
     if isinstance(src, dict):
         if src.get("column_values"):
