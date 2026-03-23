@@ -3,8 +3,7 @@ from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
     RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent,
-    UGResultCurrent, PGResultCurrent, DisciplineMasterDump, StagingLLBResultCurrent, \
-    CenterInstituteMapPurnea,ExamMasterDump
+    UGResultCurrent, PGResultCurrent, DisciplineMasterDump, StagingLLBResultCurrent, CenterInstituteMapPurnea,ExamMasterDump
 )
 
 
