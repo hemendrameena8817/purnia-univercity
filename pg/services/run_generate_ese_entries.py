@@ -3,7 +3,7 @@ Script to run ESE Entry Generation.
 
 Usage Examples:
     # Full batch - Dry run
-    python pg/services/run_generate_ese_entries.py --batch 2024-26 --semester 3RD --session 2024-25 --dry-run
+    python pg/services/run_generate_ese_entries.py --semester 1ST --session 2025-26 --dry-run
 
     # Full batch - Production
     python pg/services/run_generate_ese_entries.py --batch 2024-26 --semester 3RD --session 2024-25

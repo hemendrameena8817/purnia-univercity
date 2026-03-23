@@ -3,7 +3,7 @@ from ug_before_cbcs.models import UGBeforeCBCSStudentResult
 
 logger = logging.getLogger(__name__)
 
-def validate_marksheet_context(student, exam_part, context, exam_type=None, course_code=None, batch_code=None):
+def validate_marksheet_context(student, exam_part, context, course_code=None, batch_code=None, session_code=None):
     """
     Validates marksheet context data before PDF generation.
     Extracts data from context and validates completeness.
@@ -12,9 +12,9 @@ def validate_marksheet_context(student, exam_part, context, exam_type=None, cour
         student: UGBeforeCBCSStudentProfile instance
         exam_part: Part number as string ('1', '2', or '3')
         context: Context dictionary from get_ug_old_ba_hons_part1_context
-        exam_type: Optional exam type filter
         course_code: Optional course code filter
         batch_code: Optional batch code filter
+        session_code: Optional specific session code to validate
     
     Returns:
         tuple: (is_valid: bool, error_messages: list)
@@ -22,7 +22,11 @@ def validate_marksheet_context(student, exam_part, context, exam_type=None, cour
     if not context:
         return False, ["Context is empty or None"]
     
-    # Extract data from context
+    # If session_code is specified, validate that the session has all required papers
+    if session_code:
+        return validate_specific_session(student, exam_part, session_code, course_code)
+    
+    # Extract data from context for general validation
     honours_papers = context.get('subjects', {}).get('honours', {}).get('papers', [])
     composition_papers = context.get('subjects', {}).get('composition', {}).get('papers', [])
     sub1_data = context.get('subjects', {}).get('subsidiary_1', {})
@@ -38,8 +42,6 @@ def validate_marksheet_context(student, exam_part, context, exam_type=None, cour
         exam__part=part_code
     )
     
-    if exam_type:
-        results_query = results_query.filter(exam_type__iexact=exam_type)
     if course_code:
         results_query = results_query.filter(exam__course_code__iexact=course_code)
     if batch_code:
@@ -49,6 +51,133 @@ def validate_marksheet_context(student, exam_part, context, exam_type=None, cour
     
     # Validate using the existing function
     return validate_marksheet_data(student, exam_part, honours_papers, composition_papers, sub1, sub2, results)
+
+def validate_specific_session(student, exam_part, session_code, course_code=None):
+    """
+    Validates that a specific session has all required papers for marksheet generation.
+    Allows fallback to earlier sessions but not newer sessions.
+    
+    Args:
+        student: UGBeforeCBCSStudentProfile instance
+        exam_part: Part number as string ('1', '2', or '3')
+        session_code: Session code to validate
+        course_code: Optional course code filter
+    
+    Returns:
+        tuple: (is_valid: bool, error_messages: list)
+    """
+    is_valid = True
+    error_messages = []
+    
+    # Get results from the requested session AND earlier sessions (for fallback)
+    part_code = f"PART{exam_part}"
+    session_results = UGBeforeCBCSStudentResult.objects.filter(
+        student=student,
+        exam__part=part_code,
+        exam__session_code__lte=session_code  # Less than or equal to requested session
+    )
+    
+    if course_code:
+        session_results = session_results.filter(exam__course_code__iexact=course_code)
+    
+    if not session_results.exists():
+        return False, [f"No results found for session {session_code} or earlier"]
+    
+    # Group papers by type, prioritizing the requested session
+    honours_papers = {}
+    composition_papers = {}
+    subsidiary_subjects = {}
+    
+    for result in session_results:
+        p_code = result.paper_code.upper() if result.paper_code else ""
+        p_type = result.paper_type_code.upper() if result.paper_type_code else ""
+        result_session = result.exam.session_code if result.exam else ''
+        
+        # Create key for grouping
+        key = None
+        category = None
+        
+        # Categorize papers
+        if p_type in ['HONS', 'HON'] or p_code.endswith(f"{exam_part}01"):
+            key = f"honours_{p_code}_{result.status}"
+            category = 'honours'
+        elif p_type in ['RB', 'NRB'] or p_code.endswith(f"{exam_part}04") or p_code.endswith(f"{exam_part}05"):
+            key = f"composition_{p_code}_{result.status}"
+            category = 'composition'
+        elif p_code.endswith(f"{exam_part}02") or p_code.endswith(f"{exam_part}03"):
+            key = f"subsidiary_{p_code}_{result.status}"
+            category = 'subsidiary'
+        
+        if key and category:
+            # Keep the paper from the latest session (prioritize requested session)
+            if category == 'honours':
+                if key not in honours_papers or result_session > honours_papers[key].exam.session_code:
+                    honours_papers[key] = result
+            elif category == 'composition':
+                if key not in composition_papers or result_session > composition_papers[key].exam.session_code:
+                    composition_papers[key] = result
+            elif category == 'subsidiary':
+                subject_name = result.subject_name or "Unknown"
+                if subject_name not in subsidiary_subjects:
+                    subsidiary_subjects[subject_name] = {}
+                if key not in subsidiary_subjects[subject_name] or result_session > subsidiary_subjects[subject_name][key].exam.session_code:
+                    subsidiary_subjects[subject_name][key] = result
+    
+    # 1. Validate Honours papers (must have at least 2 for BA Hons)
+    if len(honours_papers) < 2:
+        is_valid = False
+        error_messages.append(f"Honours papers not available in session {session_code} or earlier. Found {len(honours_papers)}, required minimum 2.")
+    
+    # 2. Validate Subsidiary subjects (must have at least 2 different subsidiary subjects)
+    if len(subsidiary_subjects) < 2:
+        is_valid = False
+        error_messages.append(f"Subsidiary subjects not available in session {session_code} or earlier. Found {len(subsidiary_subjects)}, required minimum 2.")
+    
+    # 3. Validate Composition papers
+    is_rbh_student = any(p.paper_type_code == 'RB' for p in session_results)
+    is_nrb_student = any(p.paper_type_code == 'NRB' for p in session_results)
+    
+    if is_rbh_student:
+        # RBH student needs only 1 composition paper
+        if len(composition_papers) < 1:
+            is_valid = False
+            error_messages.append(f"RBH Composition paper not available in session {session_code} or earlier. Found {len(composition_papers)}, required 1.")
+    elif is_nrb_student:
+        # NRB student needs 2 composition papers (Non-Hindi + MB)
+        if len(composition_papers) < 2:
+            is_valid = False
+            error_messages.append(f"NRB Composition papers not available in session {session_code} or earlier. Found {len(composition_papers)}, required 2 (Non-Hindi + MB).")
+    elif not composition_papers:
+        # Neither RBH nor NRB detected, but still need composition papers
+        is_valid = False
+        error_messages.append(f"Composition papers not available in session {session_code} or earlier (neither RBH nor NRB detected).")
+    
+    # 4. Check for specific missing papers (like BA102) - only if they don't exist in requested session or earlier
+    if course_code:
+        expected_honours_code = f"{course_code.upper()}{exam_part}01"
+        
+        # Check if we have the required papers in the requested session or earlier
+        has_end_term = any(
+            expected_honours_code in r.paper_code.upper() and r.status == 'END_TERM'
+            for r in session_results
+        )
+        has_end2_term = any(
+            expected_honours_code in r.paper_code.upper() and r.status == 'END2_TERM'
+            for r in session_results
+        )
+        
+        if not has_end_term:
+            is_valid = False
+            error_messages.append(f"{expected_honours_code} END_TERM paper not available in session {session_code} or earlier.")
+        if not has_end2_term:
+            is_valid = False
+            error_messages.append(f"{expected_honours_code} END2_TERM paper not available in session {session_code} or earlier.")
+    
+    if not is_valid:
+        logger.warning(f"Validation failed for {student.registration_no} (Part {exam_part}, Session {session_code}): {'; '.join(error_messages)}")
+        return False, error_messages
+        
+    return True, []
 
 def validate_marksheet_data(student, exam_part, honours_papers, composition_papers, sub1, sub2, results):
     """
@@ -74,16 +203,22 @@ def validate_marksheet_data(student, exam_part, honours_papers, composition_pape
         error_messages.append("Subsidiary Subject 2 not available.")
 
     # 3. Validate Composition papers
+    # Priority: RBH > NRB (if student has RBH, they only need 1 composition paper)
     is_rbh_student = any(p.paper_type_code == 'RB' for p in results)
     is_nrb_student = any(p.paper_type_code == 'NRB' for p in results)
     
-    if is_rbh_student and len(composition_papers) < 1:
-        is_valid = False
-        error_messages.append(f"RBH Composition paper not available. Found {len(composition_papers)}, required 1.")
-    elif is_nrb_student and len(composition_papers) < 2:
-        is_valid = False
-        error_messages.append(f"NRB Composition papers not available. Found {len(composition_papers)}, required 2 (Non-Hindi + MB).")
-    elif not is_rbh_student and not is_nrb_student and not composition_papers:
+    if is_rbh_student:
+        # RBH student needs only 1 composition paper
+        if len(composition_papers) < 1:
+            is_valid = False
+            error_messages.append(f"RBH Composition paper not available. Found {len(composition_papers)}, required 1.")
+    elif is_nrb_student:
+        # NRB student needs 2 composition papers (Non-Hindi + MB)
+        if len(composition_papers) < 2:
+            is_valid = False
+            error_messages.append(f"NRB Composition papers not available. Found {len(composition_papers)}, required 2 (Non-Hindi + MB).")
+    elif not composition_papers:
+        # Neither RBH nor NRB detected, but still need composition papers
         is_valid = False
         error_messages.append("Composition papers not available (neither RBH nor NRB detected).")
 

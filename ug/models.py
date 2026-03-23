@@ -418,6 +418,7 @@ class StudentCourseAssessment(models.Model):
     
     is_cia_filled = models.BooleanField(default=False)
     cia_filled_on = models.DateTimeField(null=True, blank=True)
+    is_migrated = models.BooleanField(default=False)
 
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")

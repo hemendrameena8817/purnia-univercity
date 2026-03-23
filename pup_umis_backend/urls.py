@@ -59,17 +59,20 @@ urlpatterns = [
     path('api/academics/', include('academics.urls')),
     path('api/captcha/', include('captcha.urls')),
     path('api/plw/', include('plw.urls')),
+    path('api/llb/', include('llb.urls')),
     path('api/mca_sem/', include('mca_sem.urls')),
     path('api/btech/', include('btech.urls')),
     path('api/pg/', include('pg.urls')),
     path('api/ug/', include('ug.urls')),
     path('api/staging/', include('staging.urls')),
     path('api/ug_before_cbcs/', include('ug_before_cbcs.urls')),
+    path('api/pgoldresult/', include('pgoldresult.urls')),
     path('api/captcha/', CaptchaView.as_view(), name='common-captcha'),
     path('api/app-options/', CommonOptionsView.as_view(), name='app-options'),
     path('api/mba_sem/', include('mba_sem.urls')),
     path('api/bba_year/', include('bba_year.urls')),
     path('api/bca_hons_year/', include('bca_hons_year.urls')),
+    path('api/omr/', include('omr.urls')),
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

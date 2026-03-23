@@ -1,12 +1,22 @@
 
-def calculate_ba_hons_part1_result(hons_total_obt, hons_total_max, sub1_total_obt, sub1_total_max, sub2_total_obt, sub2_total_max, comp_total_obt, comp_total_max):
+def calculate_ba_hons_part1_result(
+    hons_total_obt,
+    hons_total_max,
+    sub1_total_obt,
+    sub1_total_max,
+    sub2_total_obt,
+    sub2_total_max,
+    comp_total_obt,
+    comp_total_max,
+    composition_individual_fail=False,
+):
     """
     Calculates the result status for BA Honours Part 1.
     
     Rules:
     - Pass Marks in Hons. Sub : 45%
     - Pass Marks in Subsidiary Sub : 33%
-    - Pass Marks in Composition Sub : 33%
+    - Pass Marks in Composition Sub : 33% overall AND minimum 15/50 on each 50-mark paper
     
     Result Status:
     - PASS WITH HONS: A student passes in all subjects
@@ -27,8 +37,14 @@ def calculate_ba_hons_part1_result(hons_total_obt, hons_total_max, sub1_total_ob
     if sub2_total_max > 0 and sub2_total_obt < (sub2_total_max * 0.33):
         failed_count += 1
         
-    # Composition Pass Check (33%)
+    # Composition Pass Check (33% overall + individual 50-mark minimums)
+    composition_failed = False
     if comp_total_max > 0 and comp_total_obt < (comp_total_max * 0.33):
+        composition_failed = True
+    if composition_individual_fail:
+        composition_failed = True
+
+    if composition_failed:
         failed_count += 1
         
     if failed_count == 0:

@@ -69,10 +69,11 @@ class CIAStudentListView(APIView):
         session = request.GET.get('session')
         course_type_filter = request.GET.get('course_type', '').upper().strip()
         department_uid = request.GET.get('department_uid', '').strip()
+        search_term = request.GET.get('search', '').strip()
         label_filter = request.GET.get('label', '').strip()
         entry_status = request.GET.get('entry_status', 'all').lower().strip()
 
-        exam_type = request.GET.get('exam_type', 'REGULAR').upper().strip()
+        exam_type = request.GET.get('exam_type', '').upper().strip()
 
         errors = {}
         if not sem or not sem.isdigit():
@@ -81,8 +82,8 @@ class CIAStudentListView(APIView):
             errors['session'] = 'Required (e.g. 2025-26).'
         if not course_type_filter or course_type_filter not in COURSE_TYPE_PREFIXES:
             errors['course_type'] = f'Required. Must be one of: {", ".join(COURSE_TYPE_PREFIXES)}'
-        if exam_type not in ('REGULAR', 'BACK'):
-            errors['exam_type'] = 'Must be REGULAR or BACK.'
+        # if exam_type not in ('REGULAR', 'BACK'):
+        #     errors['exam_type'] = 'Must be REGULAR or BACK.'
         if errors:
             return Response({'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -127,14 +128,24 @@ class CIAStudentListView(APIView):
             filter_kwargs['college_code'] = college.college_code
 
         qs = StudentCourseAssessment.objects.filter(**filter_kwargs).select_related(
-            'student', 'student__user', 'student__college', 'department'
+            'student', 'student__user', 'student__college', 'student__major_course', 'department'
         )
 
         # Department filtering: Only for MJC, MIC, MDC (Major/Minor)
         if course_type_filter in ('MJC', 'MIC', 'MDC'):
             if department_uid:
                 qs = qs.filter(department__uid=department_uid)
-        # For SEC, AEC, VAC - logic is to return all assessments for all students (department is ignored)
+        elif course_type_filter in ('AEC', 'SEC'):
+            if department_uid:
+                qs = qs.filter(
+                    student__major_course__uid=department_uid,
+                )
+
+        if search_term:
+            qs = qs.filter(
+                Q(student__roll_no__icontains=search_term) |
+                Q(student__registration_no__icontains=search_term)
+            )
         
         # ── Grouping by Student & Paper ──────────────
         # We fetch all to group faithfully, as pagination must be on the result rows.
@@ -205,15 +216,21 @@ class CIAStudentListView(APIView):
                 if has_pending:
                     final_rows.append(row)
 
+        final_rows.sort(
+            key=lambda row: (
+                str(row.get('roll_no') or '').strip().lower(),
+            )
+        )
+
         # ── Pagination ────────────────────────────────────────────────────────
         page = request.GET.get('page', 1)
-        page_size = request.GET.get('page_size', 50)
+        page_size = request.GET.get('page_size', 100)
         
         try:
             page_size = int(page_size)
-            if page_size > 50: page_size = 50
+            if page_size > 100: page_size = 100
         except ValueError:
-            page_size = 50
+            page_size = 100
             
         paginator = Paginator(final_rows, page_size)
         
@@ -228,6 +245,7 @@ class CIAStudentListView(APIView):
             'session': session,
             'course_type': course_type_filter,
             'exam_type': exam_type,
+            'search': search_term,
             'history_mode': is_history,
             'count': paginator.count,
             'total_pages': paginator.num_pages,

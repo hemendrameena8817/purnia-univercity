@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>
+      Statement of Marks 
+    </title>
+    <style>
+      @page {
+        size: A4;
+        margin: 15mm 15mm 15mm 15mm;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        position: relative;
+      }
+
+      body {
+        font-family: "Times New Roman", Times, serif;
+        font-size: 10pt;
+        line-height: 1.3;
+        position: relative;
+      }
+
+      .content-wrapper {
+        position: relative;
+        height: 100%;
+      }
+
+      /* Top Section: MSNO and Logo */
+      .top-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .msno-serial {
+        font-size: 7pt;
+        font-weight: bold;
+      }
+
+      .sl-no {
+        font-size: 9pt;
+        font-weight: bold;
+        text-align: right;
+      }
+
+      .logo-section {
+        text-align: left;
+        margin-bottom: 8px;
+      }
+
+      .university-logo-img {
+        width: 60px;
+        height: 60px;
+        display: block;
+      }
+
+      /* Header */
+      .header {
+        text-align: center;
+        margin-top: 60px;
+      }
+
+      .university-name-hindi {
+        font-size: 18pt;
+        font-weight: bold;
+        margin-bottom: 2px;
+        letter-spacing: 0.5px;
+      }
+
+      .university-name-english {
+        font-size: 16pt;
+        font-weight: bold;
+        margin-bottom: 12px;
+        letter-spacing: 1px;
+      }
+
+      .marksheet-title {
+        font-size: 13pt;
+        font-weight: bold;
+        margin-bottom: 2px;
+        text-decoration: underline;
+      }
+
+      .exam-details {
+        font-size: 10pt;
+        line-height: 1.4;
+      }
+
+      /* Student Details Grid */
+      .student-details {
+        width: 100%;
+        margin-bottom: 2px;
+      }
+
+      .student-details td {
+        vertical-align: top;
+        font-size: 10pt;
+      }
+
+      .student-details .label {
+        width: 18%;
+        font-weight: normal;
+      }
+
+      .student-details .colon {
+        width: 3%;
+        text-align: center;
+      }
+
+      .student-details .value {
+        font-weight: bold;
+      }
+
+      /* Marks Table */
+      .marks-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 8px;
+        font-size: 10pt;
+      }
+
+      .marks-table th,
+      .marks-table td {
+        border: 1px solid #000;
+        padding: 4px 6px;
+        text-align: center;
+        vertical-align: middle;
+      }
+
+      .marks-table th {
+        font-weight: bold;
+        background-color: transparent;
+        padding: 5px 6px;
+        font-size: 10pt;
+      }
+
+      .marks-table .sl-col {
+        width: 6%;
+      }
+
+      .marks-table .subject-col {
+        width: 36%;
+        text-align: left;
+        padding-left: 8px;
+      }
+
+      .marks-table .papers-col {
+        width: 18%;
+      }
+
+      .marks-table .full-marks-col {
+        width: 13%;
+      }
+
+      .marks-table .pass-marks-col {
+        width: 13%;
+      }
+
+      .marks-table .obtained-col {
+        width: 14%;
+      }
+
+      .marks-table .subject-name {
+        text-align: left;
+        padding-left: 8px;
+      }
+
+      .marks-table .subject-name span {
+        font-weight: bold;
+      }
+
+      .marks-table .total-row {
+        font-weight: bold;
+      }
+
+      .marks-table .grand-total-row {
+        font-weight: bold;
+        background-color: #f9f9f9;
+      }
+
+      /* Result Section */
+      .result-line {
+        margin-bottom: 6px;
+        font-size: 10pt;
+        width: 200px;
+      }
+
+      .result-line strong {
+        font-weight: bold;
+      }
+
+      .honours-words {
+        margin-bottom: 15px;
+        font-size: 10pt;
+        text-align: right;
+        padding-right: 20px;
+        width: 600px;
+      }
+
+      /* Bottom Section */
+      .bottom-section {
+        margin-top: 0px;
+      }
+
+      .bottom-grid {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .bottom-grid td {
+        vertical-align: top;
+      }
+
+      .publication-date {
+        font-size: 4pt;
+      }
+
+      .remarks {
+        font-size: 8pt;
+        line-height: 1;
+        width: 50%;
+      }
+
+      .remarks strong {
+        font-weight: bold;
+      }
+
+      .qr-wrapper {
+        width: 85px;
+        height: 85px;
+        border: 1px solid #000;
+        padding: 4px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .qr-code {
+        width: 80px;
+        height: 80px;
+        display: block;
+      }
+
+      /* Signature Section */
+      .signature-section {
+        position: fixed;
+        bottom: 10px;
+        left: 0;
+        width: 100%;
+      }
+
+      .signature-grid {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .signature-grid td {
+        text-align: center;
+        vertical-align: bottom;
+        padding: 0 5px;
+        font-size: 10pt;
+        font-weight: bold;
+      }
+
+      .signature-grid .controller-cell {
+        text-align: right;
+      }
+
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="page-border">
+      <div class="content-wrapper">
+        <!-- Top Section -->
+        <div class="top-section">
+          <div>
+            <div class="msno-serial">
+              MSNO.-{{ exam_year|default:"NA" }}-{{ student.roll_no }}
+            </div>
+            <div class="logo-section">
+              {% if university_logo %}
+              <img
+                src="data:image/png;base64,{{ university_logo }}"
+                class="university-logo-img"
+                alt="University Logo"
+              />
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Header -->
+        <div class="header">
+          <div class="marksheet-title">MARKSHEET</div>
+          <div class="exam-details">
+            <strong
+              >{{ exam_name }} {{exam_year}}, Session({{ batch_year}}),</strong
+            ><br />
+            <strong>held in the month of {{ exam_month_year|upper }}</strong>
+          </div>
+        </div>
+
+        <!-- Student Details Table -->
+        <table class="student-details">
+          <tr>
+            <td class="label">ROLL NO.</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.roll_no }}</td>
+            <td class="label">Name of Candidate</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.student_name }}</td>
+          </tr>
+          <tr>
+            <td class="label">REG. NO.</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.registration_no }}</td>
+            <td class="label">Father's Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.fathers_name|default:"-" }}</td>
+          </tr>
+          <tr>
+            <td class="label">Hons Subject</td>
+            <td class="colon">:</td>
+            <td class="value">{{ hons_subject }}</td>
+            <td class="label">Mother's Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.mothers_name|default:"-" }}</td>
+          </tr>
+          <tr>
+            <td class="label">College Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ student.college.name }}</td>
+            <td class="label">Centre Name</td>
+            <td class="colon">:</td>
+            <td class="value">{{ center_name|default:"-" }}</td>
+          </tr>
+        </table>
+
+        <!-- Marks Table -->
+        <!-- prettier-ignore -->
+        <table class="marks-table">
+          <thead>
+            <tr>
+              <th class="sl-col">Sl.<br />No.</th>
+              <th class="subject-col">Subjects</th>
+              <th class="papers-col">Papers</th>
+              <th class="full-marks-col">Full<br />Marks</th>
+              <th class="pass-marks-col" colspan="2">Pass Marks</th>
+              <th class="obtained-col" colspan="2">Marks Obtained</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Honours Subject -->
+            {% if is_honours_with_practical %}
+              <!-- Case: Honours with Practical -->
+              {% if subjects.honours.papers|length == 2 and 'MUSIC' in hons_subject.upper %}
+                <!-- Special case for Music: Paper-I + Practical (2 rows, no Paper-II) -->
+                <tr>
+                  <td rowspan="2">1</td>
+                  <td rowspan="2" class="subject-name">Honours: <span>{% if subjects.honours.has_back %}{{ hons_subject }}{% endif %}</span></td>
+                  <td>{% if exam_part == '2' %}Paper-II{% else %}Paper-I{% endif %}</td>
+                  <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
+                  <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"80" }}</td>
+                  <td>{% if subjects.honours.papers.0.exam_type == 'BACK' %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td rowspan="2" style="vertical-align: middle">
+                    <strong>{% if subjects.honours.has_back %}{{ subjects.honours.total_obtained|default:"0" }}{% endif %}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Practical</td>
+                  <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
+                  <td>{% if subjects.honours.papers.1.exam_type == 'BACK' %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
+                </tr>
+              {% else %}
+                <!-- Regular case: Paper-I, Paper-II, Practical separate (3 rows) -->
+                <tr>
+                  <td rowspan="3">1</td>
+                  <td rowspan="3" class="subject-name">Honours: <span>{% if subjects.honours.has_back %}{{ hons_subject }}{% endif %}</span></td>
+                  <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
+                  <td>{{ subjects.honours.papers.0.max_marks|default:"75" }}</td>
+                  <td rowspan="2" colspan="2" style="vertical-align: middle">67</td>
+                  <td>{% if subjects.honours.papers.0.exam_type == 'BACK' %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td rowspan="2" style="vertical-align: middle">
+                    <strong>{% if subjects.honours.has_back %}{{ subjects.honours.theory_total|default:subjects.honours.total_obtained }}{% endif %}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
+                  <td>{{ subjects.honours.papers.1.max_marks|default:"75" }}</td>
+                  <td>{% if subjects.honours.papers.1.exam_type == 'BACK' %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
+                </tr>
+                <tr>
+                  <td>Practical</td>
+                  <td>{{ subjects.honours.papers.2.max_marks|default:"50" }}</td>
+                  <td colspan="2">23</td>
+                  <td>{% if subjects.honours.papers.2.exam_type == 'BACK' %}{{ subjects.honours.papers.2.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td><strong>{% if subjects.honours.has_back %}{{ subjects.honours.papers.2.obtained|default:"0" }}{% endif %}</strong></td>
+                </tr>
+              {% endif %}
+            {% else %}
+              <!-- Case: Honours without Practical (e.g. Political Science) -->
+              <tr>
+                <td rowspan="2">1</td>
+                <td rowspan="2" class="subject-name">Honours: <span>{{ hons_subject }}</span></td>
+                <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
+                <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
+                <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"90" }}</td>
+                <td>{% if subjects.honours.papers.0.exam_type == 'BACK' %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
+                <td rowspan="2" style="vertical-align: middle">
+                  <strong>
+                    {% if subjects.honours.has_back %}
+                      {{ subjects.honours.total_obtained|default:"0" }}
+                    {% endif %}
+                  </strong>
+                </td>
+              </tr>
+              <tr>
+                <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
+                <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
+                <td>{% if subjects.honours.papers.1.exam_type == 'BACK' %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
+              </tr>
+            {% endif %}
+
+            <tr class="total-row">
+              <td colspan="3" style="text-align: center;"><strong>Total of Honours</strong></td>
+              <td><strong>{{ subjects.honours.total_max|default:"200" }}</strong></td>
+              <td colspan="2"><strong>{{ subjects.honours.total_pass|default:"90" }}</strong></td>
+              <td colspan="2"><strong>{% if subjects.honours.has_back %}{{ subjects.honours.total_obtained|default:"0" }}{% endif %}</strong></td>
+            </tr>
+
+            <!-- Subsidiary Subject 1 -->
+            {% if subjects.subsidiary_1.name %}
+            {% with sub=subjects.subsidiary_1 %}
+            {% if sub.papers|length > 1 %}
+              {# With Practical: Theory (pass 23) + Practical (pass 10), combined 33 #}
+              {% for paper in sub.papers %}
+              <tr>
+                {% if forloop.first %}
+                <td rowspan="{{ sub.papers|length }}">2</td>
+                <td rowspan="{{ sub.papers|length }}" class="subject-name">
+                  Subsidiary Subject-I: <span>{% if sub.has_back %}{{ sub.name }}{% endif %}</span>
+                </td>
+                {% endif %}
+                <td>{% if "LAB" in paper.status or "PRAC" in paper.status %}Practical{% else %}Theory{% endif %}</td>
+                <td>{{ paper.max_marks }}</td>
+                {% if forloop.first %}
+                <td>23</td>
+                <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle">{{ sub.total_pass|default:33 }}</td>
+                {% else %}
+                <td>10</td>
+                {% endif %}
+                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                {% if forloop.first %}
+                <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle"><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            {% else %}
+              {# Theory only: pass 33 in a single colspan=2 cell #}
+              {% for paper in sub.papers %}
+              <tr>
+                <td>2</td>
+                <td class="subject-name">Subsidiary Subject-I: <span>{% if sub.has_back %}{{ sub.name }}{% endif %}</span></td>
+                <td>Theory</td>
+                <td>{{ paper.max_marks }}</td>
+                <td colspan="2">{{ sub.total_pass|default:33 }}</td>
+                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                <td><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
+              </tr>
+              {% endfor %}
+            {% endif %}
+            {% endwith %}
+            {% endif %}
+
+            <!-- Subsidiary Subject 2 -->
+            {% if subjects.subsidiary_2.name %}
+            {% with sub=subjects.subsidiary_2 %}
+            {% if sub.papers|length > 1 %}
+              {# With Practical: Theory (pass 23) + Practical (pass 10), combined 33 #}
+              {% for paper in sub.papers %}
+              <tr>
+                {% if forloop.first %}
+                <td rowspan="{{ sub.papers|length }}">3</td>
+                <td rowspan="{{ sub.papers|length }}" class="subject-name">
+                  Subsidiary Subject-II: <span>{% if sub.has_back %}{{ sub.name }}{% endif %}</span>
+                </td>
+                {% endif %}
+                <td>{% if "LAB" in paper.status or "PRAC" in paper.status %}Practical{% else %}Theory{% endif %}</td>
+                <td>{{ paper.max_marks }}</td>
+                {% if forloop.first %}
+                <td>23</td>
+                <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle">{{ sub.total_pass|default:33 }}</td>
+                {% else %}
+                <td>10</td>
+                {% endif %}
+                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                {% if forloop.first %}
+                <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle"><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            {% else %}
+              {# Theory only: pass 33 in a single colspan=2 cell #}
+              {% for paper in sub.papers %}
+              <tr>
+                <td>3</td>
+                <td class="subject-name">Subsidiary Subject-II: <span>{% if sub.has_back %}{{ sub.name }}{% endif %}</span></td>
+                <td>Theory</td>
+                <td>{{ paper.max_marks }}</td>
+                <td colspan="2">{{ sub.total_pass|default:33 }}</td>
+                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                <td><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
+              </tr>
+              {% endfor %}
+            {% endif %}
+            {% endwith %}
+            {% endif %}
+
+            <!-- Composition -->
+            {% if subjects.composition %}
+            {% with comp=subjects.composition %}
+            <!-- Paper 1: Rastrabhasha hindi -->
+            <tr>
+              <td rowspan="3">4</td>
+              <td rowspan="3" class="subject-name">Composition</td>
+              <td>{% if comp.papers|length == 1 %}{{ comp.papers.0.display_name }}{% else %}Rastrabhasha hindi{% endif %}</td>
+              <td>100</td>
+              {% if comp.papers|length == 1 %}
+              <td colspan="2">{{ comp.total_pass|default:33 }}</td>
+              <td>{% if composition_has_back %}{{ comp.papers.0.obtained|default:"" }}{% endif %}</td>
+              <td><strong>{% if composition_has_back %}{{ comp.total_obtained }}{% endif %}</strong></td>
+              {% else %}
+              <td colspan="2">&nbsp;</td>
+              <td colspan="2">&nbsp;</td>
+              {% endif %}
+            </tr>
+            <!-- Paper 2: Non-Hindi -->
+            <tr>
+              <td>{% if comp.papers|length > 1 %}{{ comp.papers.0.display_name }}{% else %}Non-Hindi{% endif %}</td>
+              <td>50</td>
+              {% if comp.papers|length > 1 %}
+              <td>15</td>
+              <td rowspan="2" style="vertical-align: middle"> 33</td>
+              <td>{% if composition_has_back %}{{ comp.papers.0.obtained|default:"" }}{% endif %}</td>
+              <td rowspan="2" style="vertical-align: middle"><strong>{% if composition_has_back %}{{ comp.total_obtained }}{% endif %}</strong></td>
+              {% else %}
+              <td>&nbsp;</td>
+              <td rowspan="2">&nbsp;</td>
+              <td>&nbsp;</td>
+              <td rowspan="2">&nbsp;</td>
+              {% endif %}
+            </tr>
+            <!-- Paper 3: MB: -->
+            <tr>
+              <td>{% if comp.papers|length > 1 %}{{ comp.papers.1.display_name }}{% else %}MB:{% endif %}</td>
+              <td>50</td>
+              {% if comp.papers|length > 1 %}
+              <td>15</td>
+              <td>{% if composition_has_back %}{{ comp.papers.1.obtained|default:"" }}{% endif %}</td>
+              {% else %}
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              {% endif %}
+            </tr>
+            {% endwith %}
+            {% endif %}
+
+            <!-- Grand Total -->
+            <tr class="grand-total-row">
+              <td colspan="3" style="text-align: left; padding-left: 20px">
+                <strong>Grand Total</strong>
+              </td>
+              <td><strong>{{ grand_total_max|default:"500" }}</strong></td>
+              <td colspan="2">&nbsp;</td>
+              <td colspan="2"><strong>
+                {% if show_back_totals %}
+                  {% if back_total_marks_obtained %}
+                    {{ back_total_marks_obtained }}
+                  {% else %}
+                    {{ grand_total }}
+                  {% endif %}
+                {% endif %}
+              </strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Result Section -->
+        <table style="width: 100%; border-collapse: collapse; margin-top: 5px">
+          <tr>
+            <td style="width: 40%; font-size: 10pt">
+              <strong>Result</strong
+              >&nbsp;&nbsp;&nbsp;:&nbsp;&nbsp;&nbsp;<strong
+                >{{ back_result|default:result_status|upper }}</strong
+              >
+            </td>
+            <td style="width: 60%; font-size: 10pt; text-align: right">
+              Honours Marks in Word :&nbsp;&nbsp;<strong
+                >{% if hons_has_back %}{{ hons_total_words }}{% endif %}</strong
+              >
+            </td>
+          </tr>
+        </table>
+
+        <table style="margin-top: 20px">
+          <tr>
+            <td style="width: 470px; text-align: left; font-size: 8pt">
+              Date of Publication :&nbsp;&nbsp;{{ publication_date }}
+            </td>
+            <td style="text-align: center">
+              {% if qr_code %}
+              <div class="qr-wrapper">
+                <img
+                  src="data:image/png;base64,{{ qr_code }}"
+                  class="qr-code"
+                  alt="QR Code"
+                />
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+
+        <!-- Bottom Section -->
+        <div class="bottom-section">
+          <table class="bottom-grid">
+            <tr>
+              <td class="remarks">
+                <table>
+                  <tr>
+                    <td>Pass Marks in Hons. Sub</td>
+                    <td>:&nbsp;45%</td>
+                  </tr>
+                  <tr>
+                    <td>Pass Marks in Subsidiary Sub</td>
+                    <td>:&nbsp;33%</td>
+                  </tr>
+                  <tr>
+                    <td>Pass Marks in Composition Sub</td>
+                    <td>:&nbsp;33%</td>
+                  </tr>
+                </table>
+              </td>
+              <td class="remarks">
+                Pass with Hons&nbsp;: A student passes in all subjects<br />
+                Promoted&nbsp;: A student fails in maximum two subjects<br />
+                Fail&nbsp;: A student fails in three or more subjects
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+          <table class="signature-grid">
+            <tr>
+              <td style="width: 23%; text-align: left">Assistant</td>
+              <td style="width: 23%">S.O</td>
+              <td style="width: 23%">Tabulator</td>
+              <td class="controller-cell" style="width: 31%">
+                {% if controller_signature %}
+                <img
+                  src="data:image/png;base64,{{ controller_signature }}"
+                  style="
+                    height: 48px;
+                    display: inline-block;
+                    margin-bottom: 5px;
+                    margin-right: 20px;
+                    position: fixed;
+                    bottom: 30px;
+                    right: 20px;
+                  "
+                  alt="Signature"
+                />
+                {% endif %} Controller of Examinations
+              </td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    PGDispatchMemoView,
     PGCIAMarksEntryView, 
     PGCollegeStudentsView, 
     PGDepartmentDropdownView,
@@ -18,6 +19,9 @@ from .views import (
     PGCenterAttachedCollegesView,
     PGStudentAttendanceListView,
     PGAttendanceMarkView,
+    PGAttendanceCountView,
+    PGExamDropDownloadView,
+    PGCenterDropdown
 
 )
 
@@ -47,4 +51,9 @@ urlpatterns = [
     path('center/attached-colleges/', PGCenterAttachedCollegesView.as_view(), name='pg-center-attached-colleges'),
     path('student-attendance/list/', PGStudentAttendanceListView.as_view(), name='pg-student-attendance-list'),
     path('student-attendance/mark/', PGAttendanceMarkView.as_view(), name='pg-student-attendance-mark'),
+    path('center/dispatch-memo/', PGDispatchMemoView.as_view(), name='pg-center-dispatch-memo'),
+    # Subject-wise attendance count for a particular exam
+    path('center/dropdown/', PGCenterDropdown.as_view(), name='pg-center-dropdown'),
+    path('attendance/count/', PGAttendanceCountView.as_view(), name='pg-attendance-count'),
+    path('exam-drop/', PGExamDropDownloadView.as_view(), name='pg-exam-drop'),
 ]

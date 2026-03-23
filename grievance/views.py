@@ -1,15 +1,19 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from datetime import timedelta, datetime
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from decouple import config
+import uuid
 
-from .models import Grievance, GrievanceComment
+from .models import Grievance, GrievanceCategory, GrievanceComment, GrievancePayment, GrievanceSubCategory
 from .serializers import (
     GrievanceListSerializer,
     GrievanceDetailSerializer,
@@ -114,6 +118,12 @@ class GrievanceListCreateView(APIView):
                 description="Filter by end date (YYYY-MM-DD)",
                 type=openapi.TYPE_STRING
             ),
+            openapi.Parameter(
+                'is_payment_completed',
+                openapi.IN_QUERY,
+                description="Filter by payment completion status (true/false)",
+                type=openapi.TYPE_BOOLEAN
+            ),
         ],
         responses={200: GrievanceListSerializer(many=True)},
         tags=['Grievances'],
@@ -125,11 +135,11 @@ class GrievanceListCreateView(APIView):
         
         # Filter based on user type
         if user.user_type == 'student':
-            # Students see only their own grievances
-            queryset = Grievance.objects.filter(user=user, is_deleted=False)
+            # Students see only their own grievances with completed payment
+            queryset = Grievance.objects.filter(user=user, is_deleted=False, is_payment_completed=True)
         
         elif user.user_type == 'college_user':
-            # College staff see grievances assigned to their college AND currently at college level
+            # College staff see grievances assigned to their college AND currently at college level with completed payment
             college = user.get_college()
             if not college:
                 return Response(
@@ -139,12 +149,17 @@ class GrievanceListCreateView(APIView):
             queryset = Grievance.objects.filter(
                 assigned_to_college=college, 
                 is_assigned_to_college=True,
-                is_deleted=False
+                is_deleted=False,
+                is_payment_completed=True
             )
         
         elif user.user_type == 'university_admin':
-            # University admin sees all (excluding deleted)
-            queryset = Grievance.objects.filter(is_deleted=False)
+            # University admin sees all grievances with completed payment (excluding deleted) assigned to university
+            queryset = Grievance.objects.filter(
+                is_deleted=False,
+                is_payment_completed=True,
+                is_assigned_to_university=True
+            )
             
             # Allow University to filter by scope
             scope = request.query_params.get('scope')
@@ -184,6 +199,11 @@ class GrievanceListCreateView(APIView):
         if is_assigned_to_college_filter is not None:
             val = is_assigned_to_college_filter.lower() in ['true', '1', 'yes']
             queryset = queryset.filter(is_assigned_to_college=val)
+
+        is_payment_completed_filter = request.query_params.get('is_payment_completed')
+        if is_payment_completed_filter is not None:
+            val = is_payment_completed_filter.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(is_payment_completed=val)
 
         # University Admin can filter by specific college
         college_filter = request.query_params.get('college')
@@ -605,3 +625,440 @@ class GrievanceAttachmentUploadView(APIView):
         # Use utility to format errors to {error: "message"}
         error_msg = get_first_serializer_error(serializer.errors)
         return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GrievancePaymentInitiateView(APIView):
+    """
+    POST: Initiate payment for grievance submission
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Initiate payment for grievance submission.
+        
+        **Payment Flow:**
+        1. Student creates a grievance draft (without payment)
+        2. Student initiates payment using grievance UID
+        3. Payment gateway processes payment
+        4. On success, grievance number is generated and grievance is activated
+        
+        **Fixed Amount:** ₹100.00
+        """,
+        responses={
+            200: openapi.Response(
+                description="Payment initiated successfully",
+                examples={
+                    'application/json': {
+                        'order_id': 'GRV_ABC123456789',
+                        'enc_request': 'encrypted_data_string',
+                        'access_code': 'AVXXX',
+                        'production_url': 'https://test.ccavenue.com/transaction/transaction.do?command=initiateTransaction'
+                    }
+                }
+            ),
+            400: 'Bad request',
+            404: 'Grievance not found'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def post(self, request, grievance_uid):
+        """Initiate payment for grievance"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            grievance = Grievance.objects.select_related('category', 'assigned_to_college').get(
+                uid=grievance_uid, 
+                is_deleted=False
+            )
+        except Grievance.DoesNotExist:
+            return Response({"error": "Grievance not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if user owns this grievance
+        if grievance.user != request.user:
+            return Response({"error": "Unauthorized access"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Check if payment already completed
+        if grievance.is_payment_completed:
+            return Response({"error": "Payment already completed for this grievance"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Fixed amount
+        amount = str(grievance.payment_amount)
+
+        # Configuration
+        merchant_id = config('CCAVENUE_MERCHANT_ID', default='')
+        access_code = config('CCAVENUE_ACCESS_CODE', default='')
+        working_key = config('CCAVENUE_WORKING_KEY', default='')
+        redirect_url = config('CCAVENUE_REDIRECT_URL', default=f"{request.scheme}://{request.get_host()}/api/grievances/payment-response/")
+        cancel_url = redirect_url
+        
+        order_id = f"GRV_{uuid.uuid4().hex[:12].upper()}"
+        
+        # Create payment record
+        GrievancePayment.objects.create(
+            grievance=grievance,
+            order_id=order_id,
+            amount=amount,
+            payment_status='PENDING'
+        )
+
+        # Prepare payload for CC Avenue
+        merchant_data = (
+            f"merchant_id={merchant_id}&order_id={order_id}&"
+            f"amount={amount}&currency=INR&"
+            f"redirect_url={redirect_url}&cancel_url={cancel_url}&"
+            f"language=EN&billing_name={grievance.contact_person_name or request.user.get_full_name()}&"
+            f"billing_tel={grievance.contact_person_phone_number or ''}&"
+            f"billing_email={request.user.email or ''}"
+        )
+
+        # Import encryption utility from voc_new_registration
+        from voc_new_registration.utils.ccavenue_utils import encrypt
+        encrypted_data = encrypt(merchant_data, working_key)
+        
+        ccavenue_url = config('CCAVENUE_URL', default='https://secure.ccavenue.com/transaction/transaction.do?command=initiateTransaction')
+        
+        logger.info(f"Payment initiated for grievance {grievance_uid}, order_id: {order_id}")
+        
+        return Response({
+            "order_id": order_id,
+            "enc_request": encrypted_data,
+            "access_code": access_code,
+            "production_url": ccavenue_url,
+            "payment_details": {
+                "amount": amount,
+                "currency": "INR",
+                "description": f"Grievance Payment - {grievance.subject}",
+                "grievance_uid": str(grievance.uid),
+                "grievance_subject": grievance.subject,
+                "contact_person": grievance.contact_person_name
+            }
+        }, status=status.HTTP_200_OK)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class GrievancePaymentResponseView(APIView):
+    """
+    POST: Handle CC Avenue payment response for grievance
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"Grievance payment response received. Data: {request.data}")
+        logger.info(f"Request headers: {request.headers}")
+        
+        # Check if this is a form submission or direct POST
+        if request.content_type == 'application/x-www-form-urlencoded':
+            enc_response = request.POST.get('encResp')
+        else:
+            enc_response = request.data.get('encResp')
+            
+        logger.info(f"Encrypted response: {enc_response}")
+            
+        if not enc_response:
+            logger.error("No encResp parameter found in request")
+            return Response(
+                {"error": "Invalid response: Missing encResp parameter"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            working_key = config('CCAVENUE_WORKING_KEY')
+            if not working_key:
+                raise ValueError("CCAVENUE_WORKING_KEY not configured")
+                
+            logger.info(f"Decrypting response with working key")
+            
+            # Import decryption utilities from voc_new_registration
+            from voc_new_registration.utils.ccavenue_utils import decrypt, parse_response
+            decrypted_response = decrypt(enc_response, working_key)
+            response_data = parse_response(decrypted_response)
+            logger.info(f"Decrypted response data: {response_data}")
+            
+            order_id = response_data.get('order_id')
+            auth_status = response_data.get('order_status', '').lower()
+            
+            if not order_id:
+                raise ValueError("No order_id in decrypted response")
+                
+            logger.info(f"Processing payment for order_id: {order_id}, status: {auth_status}")
+            
+            try:
+                payment = GrievancePayment.objects.select_related(
+                    'grievance',
+                    'grievance__category',
+                    'grievance__assigned_to_college'
+                ).get(order_id=order_id)
+            except GrievancePayment.DoesNotExist:
+                logger.error(f"Payment record not found for order_id: {order_id}")
+                return Response(
+                    {"error": "Payment record not found"}, 
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Update payment details
+            payment.tracking_id = response_data.get('tracking_id')
+            payment.bank_ref_no = response_data.get('bank_ref_no')
+            payment.payment_mode = response_data.get('payment_mode')
+            payment.raw_response = response_data
+            
+            # Handle different payment statuses
+            if auth_status == 'success':
+                payment.payment_status = 'SUCCESS'
+                grievance = payment.grievance
+                
+                try:
+                    # Mark payment as completed and generate grievance number
+                    grievance.is_payment_completed = True
+                    grievance.save()  # This will trigger grievance_number generation in model's save method
+                    
+                    logger.info(f"Successfully generated grievance number: {grievance.grievance_number} for UID: {grievance.uid}")
+                    
+                except Exception as e:
+                    logger.error(f"Error updating grievance: {str(e)}")
+                    payment.payment_status = 'PENDING'
+                    payment.save()
+                    raise
+                    
+            elif auth_status == 'aborted':
+                payment.payment_status = 'ABORTED'
+                logger.info(f"Payment aborted for order_id: {order_id}")
+            else:
+                payment.payment_status = 'FAILED'
+                logger.warning(f"Payment failed for order_id: {order_id}. Status: {auth_status}")
+            
+            payment.save()
+            logger.info(f"Payment {payment.payment_status} for order_id: {order_id}")
+
+            # Redirect to Frontend with all necessary parameters
+            frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+            
+            if hasattr(payment, 'grievance') and hasattr(payment.grievance, 'uid'):
+                uid = str(payment.grievance.uid)
+                
+                redirect_url = (
+                    f"{frontend_url}/grievance/status"
+                    f"?uid={uid}"
+                    f"&payment_status={payment.payment_status.lower()}"
+                    f"&order_id={order_id}"
+                )
+                if payment.payment_status == 'SUCCESS' and payment.grievance.grievance_number:
+                    redirect_url += f"&grievance_number={payment.grievance.grievance_number}"
+            else:
+                logger.error(f"Grievance or UID not found for payment {payment.id}")
+                redirect_url = f"{frontend_url}/grievances/payment-status?error=grievance_not_found"
+
+            logger.info(f"Redirecting to: {redirect_url}")
+            return redirect(redirect_url)
+            
+        except Exception as e:
+            logger.exception("Error processing grievance payment response")
+            # Still redirect to frontend but with error status
+            frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+            error_redirect = f"{frontend_url}/grievances/payment-status?error={str(e)[:100]}"
+            return redirect(error_redirect)
+
+
+class GrievanceStatusByUIDView(APIView):
+    """
+    GET: Retrieve grievance details by UID for payment status page
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="""Get grievance details by UID for payment status page.
+        
+        Returns complete grievance information including:
+        - Grievance number (if payment completed)
+        - Payment status and amount
+        - Category, subject, description
+        - Submission details
+        
+        **Use Case:** After payment redirect, frontend calls this endpoint with UID to display status.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'uid',
+                openapi.IN_QUERY,
+                description="Grievance UID (UUID)",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Grievance details retrieved successfully",
+                examples={
+                    'application/json': {
+                        'uid': 'abc-123-def-456',
+                        'grievance_number': 'GRV000001',
+                        'is_payment_completed': True,
+                        'payment_amount': '100.00',
+                        'payment_status': 'SUCCESS',
+                        'category': 'Fee & Payment Issues',
+                        'subject': 'My Issue',
+                        'description': 'Details...',
+                        'contact_person_name': 'John Doe',
+                        'contact_person_phone_number': '9876543210',
+                        'status': 'open',
+                        'submitted_at': '2026-03-13T09:45:00Z',
+                        'college_name': 'ABC College'
+                    }
+                }
+            ),
+            400: 'UID parameter required',
+            404: 'Grievance not found'
+        },
+        tags=['Grievances']
+    )
+    def get(self, request):
+        """Get grievance details by UID"""
+        uid = request.query_params.get('uid')
+        
+        if not uid:
+            return Response(
+                {'error': 'UID parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            grievance = Grievance.objects.select_related(
+                'category',
+                'assigned_to_college',
+                'user'
+            ).prefetch_related('payments').get(uid=uid, is_deleted=False)
+        except Grievance.DoesNotExist:
+            return Response(
+                {'error': 'Grievance not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get latest payment info
+        latest_payment = grievance.payments.order_by('-created_at').first()
+        
+        response_data = {
+            'uid': str(grievance.uid),
+            'grievance_number': grievance.grievance_number,
+            'is_payment_completed': grievance.is_payment_completed,
+            'payment_amount': str(grievance.payment_amount),
+            'category': grievance.category.name if grievance.category else None,
+            'category_code': grievance.category.code if grievance.category else None,
+            'subject': grievance.subject,
+            'description': grievance.description,
+            'contact_person_name': grievance.contact_person_name,
+            'contact_person_phone_number': grievance.contact_person_phone_number,
+            'status': grievance.status,
+            'status_display': grievance.get_status_display(),
+            'is_grievance_resolved': grievance.is_grievance_resolved,
+            'submitted_at': grievance.submitted_at,
+            'college_name': grievance.assigned_to_college.name if grievance.assigned_to_college else None,
+            'college_code': grievance.assigned_to_college.college_code if grievance.assigned_to_college else None,
+        }
+        
+        # Add payment details if exists
+        if latest_payment:
+            response_data['payment'] = {
+                'order_id': latest_payment.order_id,
+                'payment_status': latest_payment.payment_status,
+                'tracking_id': latest_payment.tracking_id,
+                'payment_mode': latest_payment.payment_mode,
+                'amount': str(latest_payment.amount),
+                'created_at': latest_payment.created_at,
+            }
+        else:
+            response_data['payment'] = None
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+class GrievanceSubCategoriesByCategoryView(APIView):
+    """
+    GET: Retrieve subcategories for a specific category
+    """
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="""Get all active subcategories for a specific category.
+        
+        Returns list of subcategories with UID, name, code, and description.
+        
+        **Use Case:** Frontend calls this after user selects a category to show subcategory options.
+        """,
+        manual_parameters=[
+            openapi.Parameter(
+                'category_uid',
+                openapi.IN_QUERY,
+                description="Category UID (UUID)",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="Subcategories retrieved successfully",
+                examples={
+                    'application/json': {
+                        'subcategories': [
+                            {
+                                'uid': 'abc-123-def-456',
+                                'name': 'Marksheet Correction',
+                                'code': 'marksheet_correction',
+                                'description': 'Name spelling errors, incorrect subject marks...',
+                                'display_order': 1
+                            }
+                        ]
+                    }
+                }
+            ),
+            400: 'Category UID parameter required',
+            404: 'Category not found'
+        },
+        tags=['Grievances'],
+        security=[{'Bearer': []}]
+    )
+    def get(self, request):
+        """Get subcategories by category UID"""
+        category_uid = request.query_params.get('category_uid')
+        
+        if not category_uid:
+            return Response(
+                {'error': 'Category UID parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            category = GrievanceCategory.objects.get(uid=category_uid, is_active=True)
+        except GrievanceCategory.DoesNotExist:
+            return Response(
+                {'error': 'Category not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        subcategories = GrievanceSubCategory.objects.filter(
+            category=category,
+            is_active=True
+        ).order_by('display_order', 'name')
+        
+        subcategory_data = []
+        for subcat in subcategories:
+            subcategory_data.append({
+                'uid': str(subcat.uid),
+                'name': subcat.name,
+                'code': subcat.code,
+                'description': subcat.description,
+                'price': float(subcat.price),
+                'display_order': subcat.display_order
+            })
+        
+        return Response({
+            'category': {
+                'uid': str(category.uid),
+                'name': category.name,
+                'code': category.code
+            },
+            'subcategories': subcategory_data
+        }, status=status.HTTP_200_OK)

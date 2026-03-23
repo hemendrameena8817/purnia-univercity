@@ -38,7 +38,7 @@ python pg/services/run_check_and_create_exam_result.py \
 
 # Full batch - Dry run
 python pg/services/run_check_and_create_exam_result.py \
-    --batch 2024-26 --semester 3RD --session 2024-25 --dry-run
+   --semester 3RD --session 2025-26 --dry-run
 
 # All batches - Dry run
 python pg/services/run_check_and_create_exam_result.py \

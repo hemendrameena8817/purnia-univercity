@@ -179,9 +179,7 @@ class StudentCourseAssessmentResource(resources.ModelResource):
             'uid', 'student', 'semester', 'session', 'course_name', 'course_code', 
             'department', 'course_type', 'label', 'ind_pass_marks', 
             'ind_marks_obtained', 'ind_max_marks', 'ind_is_pass', 'ind_is_absent',
-            'batch', 'college_code', 'exam_type',
-            'student_registration_no', 'student_roll_no', 'student_name', 
-            'student_batch', 'paper_department', 'semester_result'
+            'batch', 'college_code', 'exam_type'
         )
         export_order = (
             'uid', 'student_registration_no', 'student_roll_no', 'student_name', 'student_batch', 
@@ -218,8 +216,7 @@ class UGExamResultResource(resources.ModelResource):
         fields = (
             'uid', 'student', 'semester', 'session', 
             'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 
-            'cia_pass', 'ese_pass', 'next_sem_status', 'is_legacy',
-            'registration_no', 'student_name', 'student_batch', 'failed_ese_papers'
+            'cia_pass', 'ese_pass', 'next_sem_status', 'is_legacy'
         )
         export_order = (
             'uid', 'registration_no', 'student_name', 'student_batch', 'semester', 'session', 

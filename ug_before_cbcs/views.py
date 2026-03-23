@@ -9,11 +9,12 @@ from accounts.permissions import IsUniversityAdmin
 from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.template.loader import get_template
+from weasyprint import HTML
 import os
 
 from .models import (
     UGBeforeCBCSStudentProfile,
-
     UGBeforeCBCSExam,
     UGBeforeCBCSStudentResult,
     UGBeforeCBCSStatistics,
@@ -22,12 +23,12 @@ from django.db import models
 from django.db.models import Count, F
 from .serializers import (
     UGBeforeCBCSStudentProfileSerializer,
-
     UGBeforeCBCSExamSerializer,
     UGBeforeCBCSStudentResultSerializer,
-
     MarksheetDataSerializer
 )
+from .utils.pdf_generator import get_ug_old_ba_hons_part1_latest_context, get_bsc_chemistry_part1_context, has_back_papers
+from .utils.validation import validate_marksheet_context
 
 class BaseUGLV(APIView):
     model = None
@@ -136,12 +137,13 @@ class UGOldMarksheetPDFView(View):
         registration_no = request.GET.get("registration_no")
         roll_no = request.GET.get("roll_no")
         part = request.GET.get("part")
-        exam_type = request.GET.get("exam_type")
         course_code = request.GET.get("course_code")
         batch_code = request.GET.get("batch_code")
+        session_code = request.GET.get("session_code")
 
-        if not (registration_no or roll_no) or not part or not exam_type or not course_code:
-            return HttpResponse("registration_no/roll_no, part, exam_type, and course_code are required", status=400)
+        # Validation
+        if not (registration_no or roll_no) or not part or not course_code:
+            return HttpResponse("registration_no/roll_no, part, and course_code are required", status=400)
  
         if registration_no:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
@@ -170,17 +172,88 @@ class UGOldMarksheetPDFView(View):
         if not is_ug_old_hons_part_1_or_2:
              return HttpResponse("Invalid course_code or part", status=400)
 
-        # Call the PDF generator utility
-        from .utils.pdf_generator import generate_ug_old_ba_hons_part1_pdf
-        pdf_content, error_message = generate_ug_old_ba_hons_part1_pdf(
-            student, exam_part=part, exam_type=exam_type, course_code=course_code, batch_code=batch_code
-        )
+        # Call the appropriate PDF generator
+        # Check if there are BACK papers and use appropriate template
         
-        if not pdf_content:
-             error_msg = error_message or f"Marksheet data not found for {student.student_name} ({part})."
-             
-             status_code = 422 if error_message else 404
-             return HttpResponse(error_msg, status=status_code, content_type='text/plain')
+        # Determine if we should check for BACK papers (only when session_code is provided)
+        has_back = False
+        part_code = f"PART{part}"
+        if session_code:
+            results_query = UGBeforeCBCSStudentResult.objects.filter(
+                student=student,
+                exam__part=part_code,
+                exam__session_code__iexact=session_code
+            ).select_related('exam').order_by('-exam__exam_year')
+
+            results = list(results_query)
+            has_back = has_back_papers(results)
+        
+        # Check if this is BSC Chemistry Part-I - use special context
+        if course_code and 'BSC' in course_code.upper() and str(part) == '1':
+            # Check if student has Chemistry honours
+            student_discipline = student.discipline_code.upper() if student.discipline_code else ""
+            if 'CHEM' in student_discipline or 'CHEMISTRY' in student_discipline:
+                if has_back:
+                    # Use BACK template for BSC Chemistry
+                    context = get_bsc_chemistry_part1_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+                    # Override template to use BACK version
+                    context['template_name'] = 'ug_before_cbcs/back_bsc_chemistry_part1_marksheet.html'
+                else:
+                    # Use regular BSC Chemistry context
+                    context = get_bsc_chemistry_part1_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+            else:
+                if has_back:
+                    # Use BACK template for other BSC subjects
+                    context = get_ug_old_ba_hons_part1_latest_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+                    # Override template to use BACK version
+                    context['template_name'] = 'ug_before_cbcs/back_ba_hons_marksheet_part1.html'
+                else:
+                    # Use regular context for other BSC subjects
+                    context = get_ug_old_ba_hons_part1_latest_context(
+                        student, exam_part=part, course_code=course_code, session_code=session_code
+                    )
+        else:
+            if has_back:
+                # Use BACK template for non-BSC or other parts
+                context = get_ug_old_ba_hons_part1_latest_context(
+                    student, exam_part=part, course_code=course_code, session_code=session_code
+                )
+                # Override template to use BACK version
+                context['template_name'] = 'ug_before_cbcs/back_ba_hons_marksheet_part1.html'
+            else:
+                # Use regular context for non-BSC or other parts
+                context = get_ug_old_ba_hons_part1_latest_context(
+                    student, exam_part=part, course_code=course_code, session_code=session_code
+                )
+        
+        if not context:
+            return HttpResponse(f"Marksheet data not found for {student.student_name} ({part}).", status=404, content_type='text/plain')
+
+        # Propagate BACK detection info into context so templates can decide what to display
+        context['has_back_in_requested_session'] = has_back
+        if session_code:
+            context['show_back_totals'] = has_back
+
+        # Validate before generating PDF
+        is_valid, error_messages = validate_marksheet_context(student, part, context, course_code, batch_code, session_code)
+        if not is_valid:
+            error_detail = "; ".join(error_messages)
+            return HttpResponse(error_detail, status=422, content_type='text/plain')
+        
+        # Generate PDF
+        template_name = context.get('template_name', 'ug_before_cbcs/ba_hons_marksheet_part1.html')
+        html_string = get_template(template_name).render(context)
+        
+        try:
+            pdf_content = HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf()
+        except Exception as e:
+            return HttpResponse(f"PDF generation error: {str(e)}", status=500, content_type='text/plain')
 
         response = HttpResponse(pdf_content, content_type="application/pdf")
         filename = f"Marksheet_{student.registration_no}_{part}.pdf"
@@ -193,16 +266,17 @@ class UGOldMarksheetJSONView(APIView):
     """
     Returns the Marksheet data in JSON format for Part I, II, or III.
     """
-    permission_classes = [AllowAny]
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         registration_no = request.query_params.get("registration_no")
         roll_no = request.query_params.get("roll_no")
         part = request.query_params.get("part")
-        exam_type = request.query_params.get("exam_type")
         course_code = request.query_params.get("course_code")
         batch_code = request.query_params.get("batch_code")
+        session_code = request.query_params.get("session_code")
 
+        # Validation
         if not (registration_no or roll_no) or not part or not course_code:
             return Response(
                 {"error": "registration_no/roll_no, part, and course_code are required"},
@@ -214,11 +288,6 @@ class UGOldMarksheetJSONView(APIView):
         else:
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
-        # Get marksheet context data based on Course and Part
-        from .utils.pdf_generator import (
-            get_ug_old_ba_hons_part1_context,
-        )
-        
         # Check if it's BA Hons Part 1 or 2 by looking at their results
         # (BA students with HON/HONS papers)
         from .models import UGBeforeCBCSStudentResult
@@ -229,15 +298,17 @@ class UGOldMarksheetJSONView(APIView):
             paper_type_code__iexact='HON'
         ).exists()
 
-        if has_honours_papers:
-            context_data = get_ug_old_ba_hons_part1_context(
-                student, exam_type=exam_type, course_code=course_code, batch_code=batch_code, exam_part=part
-            )
-        else:
+        if not has_honours_papers:
             return Response(
                 {"error": "Invalid course_code or part"},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # Get marksheet context data
+        # Always use the latest context with session_code support
+        context_data = get_ug_old_ba_hons_part1_latest_context(
+            student, exam_part=part, course_code=course_code, session_code=session_code
+        )
         
         if not context_data:
             return Response(
@@ -265,7 +336,7 @@ class UGOldMarksheetJSONView(APIView):
         
         # Add metadata fields
         context_data['part'] = part
-        context_data['exam_type'] = exam_type
+        context_data['session_code'] = session_code
         
         # Remove non-serializable items (base64 images, QR codes)
         context_data.pop('university_logo', None)
@@ -281,6 +352,63 @@ class UGOldMarksheetJSONView(APIView):
             # If serializer validation fails, return raw data (fallback)
             return Response(context_data, status=status.HTTP_200_OK)
 
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldMarksheetProgressiveView(APIView):
+    """
+    Returns year-by-year progressive marksheet data for BACK papers.
+    Shows how BACK papers progressively override REGULAR papers over the years.
+    """
+    permission_classes = [IsUniversityAdmin]
+    
+    def get(self, request):
+        registration_no = request.query_params.get("registration_no")
+        roll_no = request.query_params.get("roll_no")
+        part = request.query_params.get("part")
+        course_code = request.query_params.get("course_code")
+        batch_code = request.query_params.get("batch_code")
+
+        if not (registration_no or roll_no) or not part or not course_code:
+            return Response(
+                {"error": "registration_no/roll_no, part, and course_code are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
+        
+        from .utils.pdf_generator import get_ug_old_ba_hons_part1_progressive_contexts
+        
+        # Get progressive contexts
+        progressive_data = get_ug_old_ba_hons_part1_progressive_contexts(
+            student, exam_part=part, course_code=course_code, batch_code=batch_code
+        )
+        
+        if not progressive_data or not progressive_data.get('results'):
+            return Response(
+                {"error": f"No marksheet data found for {student.student_name} (Part {part})."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Add student info
+        response_data = {
+            'student': {
+                'uid': str(student.uid),
+                'registration_no': student.registration_no,
+                'roll_no': student.roll_no,
+                'student_name': student.student_name,
+                'fathers_name': student.fathers_name,
+                'mothers_name': student.mothers_name,
+                'college_name': student.college.name if student.college else None,
+                'course_code': course_code,
+            },
+            'part': part,
+            'available_sessions': progressive_data.get('available_sessions', []),
+            'results': progressive_data.get('results', [])
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class UGOldMarksheetUpdateView(APIView):
@@ -314,12 +442,12 @@ class UGOldMarksheetUpdateView(APIView):
         )
         
         exam_type = request.data.get("exam_type")
-        batch_code = request.data.get("batch_code")
+        session_code = request.data.get("session_code")
         
         if exam_type:
             results = results.filter(exam_type__iexact=exam_type)
-        if batch_code:
-            results = results.filter(exam__batch_code=batch_code)
+        if session_code:
+            results = results.filter(exam__session_code=session_code)
             
         first_result = results.select_related('exam').first()
         if not first_result:
@@ -396,13 +524,18 @@ class UGOldMarksheetUpdateView(APIView):
         for mark_item in marks_data:
             res_uid = mark_item.get("uid")
             paper_code = mark_item.get("paper_code")
+            status_field = mark_item.get("status")
             obtained = mark_item.get("obtained")
             
             res_obj = None
             if res_uid:
                 res_obj = results.filter(uid=res_uid).first()
             elif paper_code:
-                res_obj = results.filter(paper_code=paper_code).first()
+                # Match by both paper_code and status to get the correct paper
+                if status_field:
+                    res_obj = results.filter(paper_code=paper_code, status=status_field).first()
+                else:
+                    res_obj = results.filter(paper_code=paper_code).first()
 
             if res_obj:
                 if obtained is not None:
@@ -428,7 +561,10 @@ class UGOldMarksheetUpdateView(APIView):
                     
                     res_obj.mark_secured = obtained
                     
-                if "status" in mark_item: res_obj.status = mark_item["status"]
+                if "status" in mark_item: 
+                    res_obj.status = mark_item["status"]
+                if "subject_name" in mark_item: 
+                    res_obj.subject_name = mark_item["subject_name"]
                 res_obj.save()
                 
         # Update Summary fields (final_result, total_secured_mark)
@@ -452,7 +588,7 @@ class UGBeforeCBCSOverviewView(APIView):
     Returns pre-calculated statistical overview of UG Before CBCS data.
     This is very lightweight as it reads from a cache model.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsUniversityAdmin]
 
     def get(self, request):
         stats_obj = UGBeforeCBCSStatistics.objects.order_by('-last_updated').first()
@@ -476,3 +612,166 @@ class UGBeforeCBCSOverviewRefreshView(APIView):
     def post(self, request):
         stats_obj = calculate_and_save_ug_before_cbcs_stats()
         return Response(stats_obj.data, status=status.HTTP_201_CREATED)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldResultCreateView(APIView):
+    """
+    Create individual paper/result entry for a student.
+    Allows adding subject-wise entries one at a time.
+    """
+    permission_classes = [IsUniversityAdmin]
+    
+    def post(self, request):
+        # Required fields
+        registration_no = request.data.get("registration_no")
+        roll_no = request.data.get("roll_no")
+        exam_code = request.data.get("exam_code")
+        paper_code = request.data.get("paper_code")
+        subject_name = request.data.get("subject_name")
+        
+        # Validate required fields
+        if not (registration_no or roll_no):
+            return Response(
+                {"error": "registration_no or roll_no is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not exam_code:
+            return Response(
+                {"error": "exam_code is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not paper_code:
+            return Response(
+                {"error": "paper_code is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get student
+        if registration_no:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, registration_no=registration_no)
+        else:
+            student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
+        
+        # Get exam
+        exam = get_object_or_404(UGBeforeCBCSExam, exam_code=exam_code)
+        
+        # Optional fields
+        status_field = request.data.get("status", "END_TERM")
+        exam_type = request.data.get("exam_type", "REGULAR")
+        paper_type_code = request.data.get("paper_type_code")
+        
+        # Marks fields
+        theory = request.data.get("theory")
+        practical = request.data.get("practical")
+        sessional = request.data.get("sessional")
+        mark_secured = request.data.get("mark_secured")
+        maximum_mark = request.data.get("maximum_mark", "100")
+        pass_mark = request.data.get("pass_mark", "33")
+        
+        # Check for duplicate entry
+        existing = UGBeforeCBCSStudentResult.objects.filter(
+            student=student,
+            exam=exam,
+            paper_code=paper_code,
+            status=status_field
+        ).first()
+        
+        if existing:
+            return Response(
+                {
+                    "error": "Result entry already exists for this student, exam, paper_code, and status",
+                    "existing_uid": str(existing.uid)
+                },
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        # Create new result entry
+        result = UGBeforeCBCSStudentResult.objects.create(
+            student=student,
+            exam=exam,
+            paper_code=paper_code,
+            subject_name=subject_name,
+            status=status_field,
+            exam_type=exam_type,
+            paper_type_code=paper_type_code,
+            theory=theory,
+            practical=practical,
+            sessional=sessional,
+            mark_secured=mark_secured,
+            maximum_mark=maximum_mark,
+            pass_mark=pass_mark,
+            subject_code=request.data.get("subject_code"),
+            temp_paper_code=request.data.get("temp_paper_code"),
+            paper_code_correction=request.data.get("paper_code_correction"),
+            subject_code_correction=request.data.get("subject_code_correction"),
+            exam_type_his=request.data.get("exam_type_his"),
+            is_ex_regular=request.data.get("is_ex_regular", False),
+            mark_secured_history=request.data.get("mark_secured_history"),
+            subject_total_mark=request.data.get("subject_total_mark"),
+            subject_result=request.data.get("subject_result"),
+        )
+        
+        return Response(
+            {
+                "message": "Result entry created successfully",
+                "uid": str(result.uid),
+                "student": {
+                    "registration_no": student.registration_no,
+                    "roll_no": student.roll_no,
+                    "student_name": student.student_name
+                },
+                "exam": {
+                    "exam_code": exam.exam_code,
+                    "name": exam.name,
+                    "session_code": exam.session_code
+                },
+                "result": {
+                    "paper_code": result.paper_code,
+                    "subject_name": result.subject_name,
+                    "status": result.status,
+                    "exam_type": result.exam_type,
+                    "mark_secured": result.mark_secured,
+                    "maximum_mark": result.maximum_mark
+                }
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UGOldResultDeleteView(APIView):
+    """
+    Delete individual paper/result entry for a student.
+    Allows deleting subject-wise entries one at a time.
+    """
+    permission_classes = [IsUniversityAdmin]
+    
+    def delete(self, request, uid):
+        """
+        Delete a result entry by UID
+        """
+        try:
+            result = UGBeforeCBCSStudentResult.objects.get(uid=uid)
+            result.delete()
+            return Response(
+                {
+                    "message": "Result entry deleted successfully",
+                    "deleted_entry": {
+                        "uid": str(result.uid),
+                        "paper_code": result.paper_code,
+                        "subject_name": result.subject_name,
+                        "status": result.status,
+                        "exam_type": result.exam_type,
+                        "mark_secured": result.mark_secured
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+        except UGBeforeCBCSStudentResult.DoesNotExist:
+            return Response(
+                {"error": "Result entry not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
