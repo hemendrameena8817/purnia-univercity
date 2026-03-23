@@ -22,13 +22,14 @@
         position: relative;
         min-height: 70%;
         padding-bottom: 80px; /* Space for the absolute footer */
+        padding-top: 40px;
     }
 
     /* Top MSNO Number */
     .msno-line {
-        font-weight: bold;
-        font-size: 12px;
-        margin-bottom: 5px;
+        font-weight:800;
+        font-size: 14px;
+        {% comment %} margin-bottom: 5px; {% endcomment %}
     }
 
     /* Header Block with Logo and centered Text */
@@ -36,8 +37,7 @@
         width: 100%;
         border: none;
         margin-bottom: 20px;
-        margin-top: 20px;
-    }
+ margin-top: 50px;     }
 
     .header-logo {
         width: 100px;
@@ -46,13 +46,12 @@
 
     .header-logo img {
         width: 100px;
+        margin-top: -45px; /* Pulls logo significantly higher */
     }
 
     .header-content {
         text-align: center;
-        vertical-align: top;
         padding-top: 100px; /* Offset to keep text at original 120px position */
-        padding-right: 100px; /* offset to center against logo */
     }
 
     .uni-name {
@@ -73,6 +72,7 @@
         font-size: 12px;
         font-weight: bold;
         margin-bottom: 20px;
+        margin-left: -100px;
     }
 
     /* Student Info Grid */
@@ -91,6 +91,8 @@
     .label-cell {
         width: 180px;
         text-align: left;
+        font-weight:normal;
+
     }
 
     .value-cell {
@@ -109,11 +111,11 @@
     .marks-table {
         width: 100%;
         border-collapse: collapse;
-        border: 1.5px solid #000;
+        border: 0.5px solid #000;
     }
 
     .marks-table th, .marks-table td {
-        border: 1px solid #000;
+        border: 0.5px solid #000;
         padding: 4px;
         text-align: center;
         vertical-align: middle;
@@ -151,7 +153,7 @@
     .legend-box {
         font-size: 11px;
         line-height: 1.5;
-        font-weight: bold;
+        font-weight: normal;
     }
 
     .qr-container {
@@ -173,7 +175,7 @@
 
     .signature-row {
         position: absolute;
-        bottom: 0;
+        bottom: 40px; /* Moved up from 0 */
         width: 100%;
         display: table;
         table-layout: fixed;
@@ -205,7 +207,7 @@
 
     <!-- MSNO Header -->
     <div class="msno-line">
-        MSNO.-{{ session|default:"2022-6776" }}
+        MSNO.-{{exam_info.year}}-{{student_info.roll_no}}
     </div>
 
     <!-- Top Header Layout -->
@@ -215,20 +217,20 @@
                 {% if university_logo %}
                 <img src="data:image/png;base64,{{ university_logo }}">
                 {% else %}
-                <div style="width:80px;height:80px;border:1px solid #000; line-height:80px; text-align:center;">LOGO</div>
+                <div style="width:80px;height:80px;border:0.5px solid #000; line-height:80px; text-align:center;">LOGO</div>
                 {% endif %}
             </td>
             <td class="header-content">
                 <div class="statement-title">STATEMENT OF MARK SHEET</div>
                 <div class="sub-heading">
-                    {{ student_info.program|default:"Master of Arts" }} Semester - {{ student_info.semester|default:"1" }}<sup>{{ student_info.semester|default:"ST"|slice:"-2:" }}</sup> Examination {{ session|default:"DECEMBER.-2022" }} held in the month of {{ result_date|default:"August.-2023" }}
+                    {{ student_info.degree }} Semester - {{ student_info.semester|slice:":-2" }}<sup>{{ student_info.semester|slice:"-2:" }}</sup> Examination {{ exam_info.actual_exam_month }}-{{ exam_info.year }} held in the month of {{exam_info.exam_month}}-{{exam_info.exam_year}}
                 </div>
             </td>
         </tr>
     </table>
 
     <!-- Student Details Structure -->
-    <table class="info-table">
+    <table class="info-table">  
         <tr>
             <td class="label-cell">ROLL. NO.</td>
             <td class="value-cell">: {{ student_info.roll_no|default:"6776" }}</td>
@@ -261,7 +263,7 @@
         </tr>
     </table>
 
-    <div class="sem-title">SEMESTER - {{ semester|default:"1" }}</div>
+    <div class="sem-title">SEMESTER - {{ semester|slice:":-2" }}<sup>{{ semester|slice:"-2:"|upper }}</sup></div>
 
     <!-- Primary Marks Table -->
     <table class="marks-table">
@@ -270,7 +272,7 @@
                 <th rowspan="4">Paper<br>Code</th>
                 <th rowspan="4">Papers</th>
                 <th colspan="6">Marks Obtained</th>
-                <th rowspan="4">Full<br>Marks</th>
+                <th rowspan="2">Full Marks</th>
                 <th rowspan="4">Marks<br>Obtained</th>
                 <th rowspan="4">Grade</th>
                 <th rowspan="4">Numerical<br>Letter<br>Grade</th>
@@ -279,24 +281,26 @@
                 <th rowspan="4">GPA</th>
             </tr>
             <tr>
-                <th colspan="3">ESE</th>
-                <th colspan="3">CIA</th>
+                <th colspan="3" style="font-weight: normal;">ESE</th>
+                <th colspan="3" style="font-weight: normal;">CIA</th>
             </tr>
-            <tr>
-                <th>F.M</th>
-                <th>70</th>
-                <th>50</th>
-                <th>F.M</th>
-                <th>30</th>
-                <th>50</th>
+            <tr style="font-weight: normal;">
+                <th style="font-weight: normal;">F.M</th>
+                <th style="font-weight: normal;">70</th>
+                <th style="font-weight: normal;">50</th>
+                <th style="font-weight: normal;">F.M</th>
+                <th style="font-weight: normal;">30</th>
+                <th style="font-weight: normal;">50</th>
+                <th  style="font-weight: normal;">100</th>
             </tr>
-            <tr>
-                <th>P.M</th>
-                <th>31.5</th>
-                <th>22.5</th>
-                <th>P.M</th>
-                <th>13.5</th>
-                <th>22.5</th>
+            <tr style="font-weight: normal;">
+                <th style="font-weight: normal;">P.M</th>
+                <th style="font-weight: normal;">31.5</th>
+                <th style="font-weight: normal;">22.5</th>
+                <th style="font-weight: normal;">P.M</th>
+                <th style="font-weight: normal;">13.5</th>
+                <th style="font-weight: normal;">22.5</th>
+                <th style="font-weight: normal;"></th>
             </tr>
         </thead>
         <tbody>
@@ -315,11 +319,11 @@
                 <td>{% if subject.cia.max_marks != 50 %}{{ subject.cia.marks_obtained }}{% else %}--{% endif %}</td>
                 <td>{% if subject.cia.max_marks == 50 %}{{ subject.cia.marks_obtained }}{% else %}--{% endif %}</td>
                 
-                <td>{{ subject.total_max_marks|floatformat:0 }}</td>
-                <td>{{ subject.total_marks_obtained|floatformat:0 }}</td>
+                <td>100</td>
+                <td>{{ subject.subject_total_mark|floatformat:0 }}</td>
                 <td>{{ subject.final_grade }}</td>
                 <td>{{ subject.grade_point|floatformat:0 }}</td>
-                <td>{{ subject.credits|floatformat:0 }}</td>
+                <td>{{ subject.credits|floatformat:0 }}</td> 
                 <td>{{ subject.total_gp|floatformat:0 }}</td>
                 
                 {% if forloop.first %}
@@ -329,17 +333,18 @@
                 {% endif %}
             </tr>
             {% endfor %}
-
+             <tr><td colspan="15" style="height: 10px; border: 0.5px solid #000;"></td></tr>
+                
             <!-- Table Summary Row exactly as per reference -->
             <tr class="summary-row">
                 <td colspan="7" class="text-left" style="padding-left: 20px;">
-                    REMARKS : {{ semester_result.status|default:"PASS"|upper }}
+                    REMARKS : {{ semester_result.status|upper }}
                 </td>
                 <td colspan="6" style="text-align: center;">
-                    CREDIT EARNED :- {{ sgpa_data.total_credits|floatformat:0|default:"20" }}
+                    CREDIT EARNED :- {{ sgpa_data.total_credits|floatformat:0}}
                 </td>
                 <td colspan="2" class="text-right" style="padding-right: 20px;">
-                    GPA :- {{ sgpa_data.sgpa|default:"7.50" }}
+                    GPA :- {{ sgpa_data.sgpa }}
                 </td>
             </tr>
         </tbody>
@@ -352,14 +357,17 @@
                     FM = Full Marks<br>
                     PM = Pass Marks
                 </div>
-                <div style="margin-top: 25px; font-weight: bold;">
-                    Date of Publication: {{ result_date|default:"05-11-2023" }}
+                <div style="margin-top: 25px; font-weight: normal;">
+                    Date of Publication: {{exam_info.publish_status}}
                 </div>
             </div>
             <div style="display: table-cell; width: 30%; text-align: center; vertical-align: top;">
                 <div style="margin-top: 10px;">
-                   <img src="/static/images/qr-code.png" style="width: 80px; height: 80px; border: 1px solid #ccc;" onerror="this.style.display='none';">
+                   {% if qr_code_image %}
+                   <img src="{{ qr_code_image }}" style="width: 80px; height: 80px; border: 0.5px solid #000;padding: 2.5px;">
+                   {% else %}
                    <div style="border: 1px solid #000; width: 80px; height: 80px; margin: 0 auto; line-height: 80px; font-size: 10px;" id="qr-placeholder">QR Code</div>
+                   {% endif %}
                 </div>
             </div>
             <div style="display: table-cell; width: 35%;"></div>

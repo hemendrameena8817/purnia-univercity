@@ -1471,7 +1471,7 @@ class PGStudentAttendanceListView(APIView):
 
         # ── Step 3: If any exam is scheduled today, attendance is open for
         #           BOTH shifts until 8:00 PM (regardless of exact exam_time) ──
-        CUTOFF_HOUR = 20  # 8 PM
+        CUTOFF_HOUR = 23  # 8 PM
 
         if current_time.hour >= CUTOFF_HOUR:
             slot_info = list(

@@ -334,6 +334,9 @@ def generate_pg_tsi_excel(exam, college, department=None, registration_no=None):
     wb.remove(ws_base)
 
     ey = str(exam.year) if exam.year else ""
+    sem_map_int_inv = {1: '1ST', 2: '2ND', 3: '3RD', 4: '4TH'}
+    ey_for_str = sem_map_int_inv.get(exam.year, ey)
+    
     sem_variants_int = set()
     if ey.isdigit(): sem_variants_int.add(int(ey))
     if exam.name:

@@ -474,6 +474,74 @@ class UGBeforeCBCSStudentResult(models.Model):
     )
     
     # For tracking which student profile this belongs to (denormalized for faster queries)
+    
+    # Center Institute Mapping fields from center_institute_map_purnea (filtered by course_code=PG)
+    center_code = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Center code from center_institute_map_purnea'
+    )
+    center_name = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Center name from center_institute_map_purnea'
+    )
+    center_institute_batch_code = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Batch code from center_institute_map_purnea'
+    )
+    center_institute_course_code = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Course code from center_institute_map_purnea (e.g., PG)'
+    )
+    center_institute_semester_code = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Semester code from center_institute_map_purnea'
+    )
+    center_institute_institute_code = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Institute code from center_institute_map_purnea'
+    )
+    center_institute_institute_name = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Institute name from center_institute_map_purnea'
+    )
+    center_institute_record_status = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Record status from center_institute_map_purnea'
+    )
+    center_institute_exam_type = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Exam type from center_institute_map_purnea'
+    )
+    center_institute_session_code = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Session code from center_institute_map_purnea'
+    )
+    center_institute_is_sem = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        help_text='Is semester flag from center_institute_map_purnea'
+    )
     registration_no = models.CharField(
         max_length=100,
         db_index=True,
