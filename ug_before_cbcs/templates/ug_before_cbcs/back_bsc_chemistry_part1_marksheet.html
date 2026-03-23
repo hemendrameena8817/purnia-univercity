@@ -577,7 +577,7 @@
             </td>
             <td style="width: 60%; font-size: 10pt; text-align: right">
               Honours Marks in Word :&nbsp;&nbsp;<strong
-                >{{ hons_total_words }}</strong
+                >{% if hons_has_back %}{{ hons_total_words }}{% endif %}</strong
               >
             </td>
           </tr>
