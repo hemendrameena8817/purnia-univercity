@@ -3,7 +3,7 @@ import os
 import sys
 import django
 from pathlib import Path
-
+# python scripts/pg/bulk_sync_profiles.py
 # Setup Project
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(BASE_DIR))

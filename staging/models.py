@@ -855,3 +855,105 @@ class StagingLLBResultCurrent(models.Model):
         return f"{self.college_roll_no} - {self.student_name} - {self.subject_name}"
 
 
+"""# Import all data
+python manage.py import_center_institute_map --settings=pup_umis_backend.settings.development
+
+# Import with PG filter
+python manage.py import_center_institute_map --course-code=PG --settings=pup_umis_backend.settings.development
+
+# Clear and import
+python manage.py import_center_institute_map --clear --settings=pup_umis_backend.settings.development"""
+
+class CenterInstituteMapPurnea(models.Model):
+    """
+    Staging table for center_institute_map_purnea from purnea_exm_new database.
+    Contains center to institute mapping data.
+    All fields are CharField to match dump data exactly.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    # Original table columns (all as CharField to match dump exactly)
+    source_id = models.CharField(max_length=50, null=True, blank=True, help_text='Original id from dump')
+    center_code = models.CharField(max_length=255, null=True, blank=True)
+    center_name = models.CharField(max_length=255, null=True, blank=True)
+    batch_code = models.CharField(max_length=255, null=True, blank=True)
+    course_code = models.CharField(max_length=255, null=True, blank=True)
+    semester_code = models.CharField(max_length=255, null=True, blank=True)
+    institute_code = models.CharField(max_length=255, null=True, blank=True)
+    institute_name = models.CharField(max_length=255, null=True, blank=True)
+    record_status = models.CharField(max_length=255, null=True, blank=True)
+    exam_type = models.CharField(max_length=255, null=True, blank=True)
+    session_code = models.CharField(max_length=255, null=True, blank=True)
+    is_sem = models.CharField(max_length=255, null=True, blank=True)
+
+    # Meta fields
+    is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Center Institute Map Purnea'
+        verbose_name_plural = 'Center Institute Map Purnea'
+        indexes = [
+            models.Index(fields=['center_code']),
+            models.Index(fields=['institute_code']),
+            models.Index(fields=['course_code']),
+            models.Index(fields=['batch_code']),
+            models.Index(fields=['session_code']),
+        ]
+        
+    def __str__(self):
+        return f"{self.center_code} - {self.institute_code}"
+
+
+class ExamMasterDump(models.Model):
+    """
+    Staging table for exam_master from purnea_exm_new database.
+    All fields are CharField to match dump data exactly as requested.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    source_id = models.CharField(max_length=255, null=True, blank=True, help_text='Original id from dump')
+    exam_type = models.CharField(max_length=255, null=True, blank=True)
+    exam_code = models.CharField(max_length=255, null=True, blank=True)
+    exam_name = models.CharField(max_length=500, null=True, blank=True)
+    batch_code = models.CharField(max_length=255, null=True, blank=True)
+    session_code = models.CharField(max_length=255, null=True, blank=True)
+    course_code = models.CharField(max_length=255, null=True, blank=True)
+    discipline_code = models.CharField(max_length=255, null=True, blank=True)
+    semester_code = models.CharField(max_length=255, null=True, blank=True)
+    publish_all = models.CharField(max_length=255, null=True, blank=True)
+    actual_exam_month = models.CharField(max_length=255, null=True, blank=True)
+    year = models.CharField(max_length=255, null=True, blank=True)
+    sl_no = models.CharField(max_length=255, null=True, blank=True)
+    exam_month = models.CharField(max_length=255, null=True, blank=True)
+    exam_year = models.CharField(max_length=255, null=True, blank=True)
+    exam_start_date = models.CharField(max_length=255, null=True, blank=True)
+    exam_end_date = models.CharField(max_length=255, null=True, blank=True)
+    apply_start_date = models.CharField(max_length=255, null=True, blank=True)
+    apply_end_date = models.CharField(max_length=255, null=True, blank=True)
+    exam_mark_entry_date = models.CharField(max_length=255, null=True, blank=True)
+    online_payment_transaction_no = models.CharField(max_length=255, null=True, blank=True)
+    omr_no = models.CharField(max_length=255, null=True, blank=True)
+    template_code = models.CharField(max_length=255, null=True, blank=True)
+    publish_status = models.CharField(max_length=255, null=True, blank=True)
+    institute_code = models.CharField(max_length=255, null=True, blank=True)
+    created_by = models.CharField(max_length=255, null=True, blank=True)
+    created_on = models.CharField(max_length=255, null=True, blank=True)
+    updated_by = models.CharField(max_length=255, null=True, blank=True)
+    updated_on = models.CharField(max_length=255, null=True, blank=True)
+    record_status = models.CharField(max_length=255, null=True, blank=True)
+    last_updated = models.CharField(max_length=255, null=True, blank=True)
+
+    # Meta fields for tracking
+    is_sem = models.CharField(max_length=255, null=True, blank=True)
+    is_migrated = models.BooleanField(default=False, help_text="Has this record been migrated?")
+    migration_notes = models.TextField(null=True, blank=True)
+    imported_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = 'Exam Master Dump'
+        verbose_name_plural = 'Exam Master Dump'
+        
+    def __str__(self):
+        return f"{self.exam_code} - {self.exam_name}"

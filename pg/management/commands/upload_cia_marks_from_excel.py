@@ -21,7 +21,7 @@ class Command(BaseCommand):
 
     # Execute (save to DB):
     python manage.py upload_cia_marks_from_excel \
-        --file courses_data/cia_pg_1_mark.xlsx \
+        --file courses_data/dscia1.xlsx\
         --session 2025-26 --semester 1ST \
         --exam-type BACK --no-header --execute
     """

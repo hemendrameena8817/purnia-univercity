@@ -3,7 +3,8 @@ from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
     RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent,
-    UGResultCurrent, PGResultCurrent, DisciplineMasterDump, VocationalResultCurrent, StagingLLBResultCurrent
+    UGResultCurrent, PGResultCurrent, DisciplineMasterDump, StagingLLBResultCurrent, \
+    CenterInstituteMapPurnea,ExamMasterDump
 )
 
 
@@ -487,3 +488,98 @@ class DisciplineMasterDumpAdmin(admin.ModelAdmin):
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
     list_per_page = 50
+
+
+@admin.register(CenterInstituteMapPurnea)
+class CenterInstituteMapPurneaAdmin(admin.ModelAdmin):
+    list_display = (
+        'source_id', 'center_code', 'center_name', 'batch_code', 'course_code',
+        'semester_code', 'institute_code', 'institute_name', 'record_status',
+        'exam_type', 'session_code', 'is_sem', 'is_migrated'
+    )
+    list_filter = (
+        'is_migrated', 'course_code', 'batch_code', 'session_code', 'exam_type', 'is_sem'
+    )
+    search_fields = (
+        'center_code', 'center_name', 'batch_code', 'course_code', 'semester_code',
+        'institute_code', 'institute_name', 'record_status', 'exam_type', 'session_code', 'source_id'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50
+    
+    fieldsets = (
+        ('Center Information', {
+            'fields': (
+                ('center_code', 'center_name'),
+                ('batch_code', 'course_code'),
+                ('semester_code', 'institute_code'),
+                ('institute_name', 'record_status'),
+                ('exam_type', 'session_code'),
+                ('is_sem', 'source_id'),
+            )
+        }),
+        ('Migration Status', {
+            'fields': (
+                ('uid', 'imported_at'),
+                'is_migrated',
+                'migration_notes',
+            )
+        }),
+    )
+
+
+@admin.register(ExamMasterDump)
+class ExamMasterDumpAdmin(admin.ModelAdmin):
+    list_display = (
+        'source_id', 'exam_type', 'exam_code', 'exam_name', 'batch_code', 'session_code', 
+        'course_code', 'discipline_code', 'semester_code', 'publish_all', 'actual_exam_month', 
+        'year', 'sl_no', 'exam_month', 'exam_year', 'exam_start_date', 'exam_end_date', 
+        'apply_start_date', 'apply_end_date', 'exam_mark_entry_date', 'online_payment_transaction_no', 
+        'omr_no', 'template_code', 'publish_status', 'institute_code', 'created_by', 'created_on', 
+        'updated_by', 'updated_on', 'record_status', 'last_updated', 'imported_at', 'is_migrated'
+    )
+    list_filter = (
+        'is_migrated', 'course_code', 'batch_code', 'session_code', 'exam_type', 'is_sem'
+    )
+    search_fields = (
+        'source_id', 'exam_type', 'exam_code', 'exam_name', 'batch_code', 'session_code', 
+        'course_code', 'discipline_code', 'semester_code', 'publish_all', 'actual_exam_month', 
+        'year', 'sl_no', 'exam_month', 'exam_year', 'exam_start_date', 'exam_end_date', 
+        'apply_start_date', 'apply_end_date', 'exam_mark_entry_date', 'online_payment_transaction_no', 
+        'omr_no', 'template_code', 'publish_status', 'institute_code', 'created_by', 'created_on', 
+        'updated_by', 'updated_on', 'record_status', 'last_updated', 'imported_at'
+    )
+    readonly_fields = ('uid', 'imported_at')
+    list_editable = ('is_migrated',)
+    list_per_page = 50
+    
+    fieldsets = (
+        ('Exam Information', {
+            'fields': (
+                ('exam_type', 'exam_code'),
+                ('exam_name', 'batch_code'),
+                ('session_code', 'course_code'),
+                ('discipline_code', 'semester_code'),
+                ('publish_all', 'actual_exam_month'),
+                ('year', 'sl_no'),
+                ('exam_month', 'exam_year'),
+                ('exam_start_date', 'exam_end_date'),
+                ('apply_start_date', 'apply_end_date'),
+                ('exam_mark_entry_date', 'online_payment_transaction_no'),
+                ('omr_no', 'template_code'),
+                ('publish_status', 'institute_code'),
+                ('created_by', 'created_on'),
+                ('updated_by', 'updated_on'),
+                ('record_status', 'last_updated'),
+                ('source_id',),
+            )
+        }),
+        ('Migration Status', {
+            'fields': (
+                ('uid', 'imported_at'),
+                'is_migrated',
+                'migration_notes',
+            )
+        }),
+    )
