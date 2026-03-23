@@ -3,7 +3,7 @@ from .models import (
     StagingInstituteMaster, StagingApplicantMaster, ApplicantRegMaster,
     SubjectMaster, PaperSubjectMapping, DisciplineMaster, CourseDisciplineSemPaperMapping,
     RegisteredApplicantMaster, StagingApplicantQualificationDetail, UGSemResultCurrent,
-    UGResultCurrent, PGResultCurrent, DisciplineMasterDump, StagingLLBResultCurrent
+    UGResultCurrent, PGResultCurrent, DisciplineMasterDump, VocationalResultCurrent, StagingLLBResultCurrent
 )
 
 
@@ -487,62 +487,3 @@ class DisciplineMasterDumpAdmin(admin.ModelAdmin):
     readonly_fields = ('uid', 'imported_at')
     list_editable = ('is_migrated',)
     list_per_page = 50
-
-
-@admin.register(StagingLLBResultCurrent)
-class StagingLLBResultCurrentAdmin(admin.ModelAdmin):
-    show_full_result_count = False
-    list_display = (
-        'source_id', 'college_roll_no', 'college_reg_no', 'student_name', 
-        'semester_code', 'session_code', 'batch_code', 'course_code',
-        'paper_code', 'subject_name', 'exam_type', 'subject_result',
-        'institute_code', 'is_migrated'
-    )
-    list_filter = (
-        'is_migrated', 'semester_code', 'session_code', 'batch_code',
-        'course_code', 'exam_type', 'subject_result', 'institute_code'
-    )
-    search_fields = (
-        'college_roll_no', 'college_reg_no', 'student_name', 
-        'fathers_name', 'mothers_name', 'paper_code', 'subject_name', 'source_id'
-    )
-    readonly_fields = ('uid', 'imported_at')
-    list_editable = ('is_migrated',)
-    list_per_page = 50
-    
-    fieldsets = (
-        ('Student Information', {
-            'fields': (
-                ('student_name', 'fathers_name', 'mothers_name'),
-                ('college_roll_no', 'college_reg_no'),
-                ('source_id',),
-            )
-        }),
-        ('Course Information', {
-            'fields': (
-                ('course_code', 'semester_code'),
-                ('session_code', 'batch_code'),
-                ('paper_code', 'subject_name'),
-                'institute_code',
-            )
-        }),
-        ('Exam Details', {
-            'fields': (
-                ('exam_type', 'status'),
-            )
-        }),
-        ('Marks & Result', {
-            'fields': (
-                ('maximum_mark', 'pass_mark', 'mark_secured'),
-                ('total_secured_mark', 'total_per'),
-                ('subject_result', 'grade'),
-            )
-        }),
-        ('Migration Status', {
-            'fields': (
-                ('uid', 'imported_at'),
-                'is_migrated',
-                'migration_notes',
-            )
-        }),
-    )

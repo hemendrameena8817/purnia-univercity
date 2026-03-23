@@ -21,6 +21,7 @@ import bca_hons_year.models as bca_models
 
 # Configuration
 COURSE_CODES = ['BBA', 'BCA_HONS', 'BCA_SC', 'BCA_ART', 'BCA_COMM']
+CLEAN_START = True
 
 # Mappings
 YEAR_MAPPING = {
@@ -36,8 +37,42 @@ LABEL_MAPPING = {
     'MID_TERM': 'CIA',
 }
 
+def normalize_subject(name):
+    if not name: return "Unknown Subject"
+    s = str(name).strip().upper()
+    # Remove fragments
+    for frag in ['-T1', '-P1', '-P2', '-P3', '-P4', '-T2', '-T3', '-T4', '-S1', 'ARTS - ', 'SCIENCE - ', '-T', '-P']:
+        s = s.replace(frag, '')
+    
+    s = s.strip()
+    
+    # Normalize naming
+    mapping = {
+        'BUSSINESS ORGANIZATION': 'BUSINESS ORGANISATION',
+        'BUSINESS ORGANIZATION': 'BUSINESS ORGANISATION',
+        'BUSSINESS ORGANISATION': 'BUSINESS ORGANISATION',
+        'PRINCIPLE OF ECONOMICS': 'ECONOMICS',
+        'PRINCILPAL OF ECONOMICS': 'ECONOMICS',
+        'PRINCIPLES OF ECONOMICS': 'ECONOMICS',
+        'ECONOMICS-T1': 'ECONOMICS',
+        'MATH': 'MATHEMATICS',
+        'MATHS': 'MATHEMATICS',
+        'ENGLISH-T1': 'ENGLISH',
+        ' FINANCIAL ACCOUNTING': 'FINANCIAL ACCOUNTING',
+        'GENRAL ENVIRONMENTAL STUDIES': 'ENVIRONMENTAL STUDIES',
+        'ENVIRONMENTAL STUDIES-T1': 'ENVIRONMENTAL STUDIES',
+    }
+    return mapping.get(s, s)
+
 def migrate_to_production():
     print("Starting prioritized migration from staging to production models...")
+    
+    if CLEAN_START:
+        print("Cleaning old structures for a fresh start...")
+        bca_models.BCAHonsCourseStructure.objects.all().delete()
+        bca_models.BCAHonsCommonCourseStructure.objects.all().delete()
+        bba_models.BBACourseStructure.objects.all().delete()
+        bba_models.BBACommonCourseStructure.objects.all().delete()
     
     # Filter staging data
     staging_records = VocationalResultCurrent.objects.filter(course_code__in=COURSE_CODES).order_by('id')
@@ -139,12 +174,13 @@ def migrate_to_production():
                     )
 
                 # 5. Course Structure Logic
-                paper_code = record.paper_code or "P-UNKNOWN"
-                subject_name = record.subject_name or "Unknown Subject"
-                raw_status = record.status # e.g. MID_TERM, END_TERM
-                label = LABEL_MAPPING.get(raw_status, 'ESE') # Fallback to ESE
+                raw_subject_name = record.subject_name or "Unknown Subject"
+                normalized_subject = normalize_subject(raw_subject_name)
                 
-                # Paper Type Logic: _SUB suffix means SUBSIDIARY
+                paper_code = record.paper_code or "P-UNKNOWN"
+                raw_status = record.status 
+                label = LABEL_MAPPING.get(raw_status, 'ESE') 
+                
                 subj_code = record.subject_code or ""
                 paper_type_val = 'SUBSIDIARY' if subj_code.endswith('_SUB') else 'HONOURS'
                 
@@ -155,37 +191,44 @@ def migrate_to_production():
                 ExamModel = app.BBAExam if hasattr(app, 'BBAExam') else app.BCAHonsExam
                 AssessmentModel = app.BBAStudentCourseAssessment if hasattr(app, 'BBAStudentCourseAssessment') else app.BCAHonsStudentCourseAssessment
 
-                # Check if CourseStructure entry exists, if not create it
-                struct_obj, struct_created = CourseStructureModel.objects.update_or_create(
+                # Update CourseStructure with Normalized Name
+                struct_obj, _ = CourseStructureModel.objects.update_or_create(
                     course=course_obj,
-                    course_code=paper_code,
+                    course_name=normalized_subject,
                     year=year_val,
                     label=label,
                     defaults={
-                        'course_name': subject_name,
+                        'course_code': paper_code,
                         'max_marks': max_marks_val,
                         'course_type': 'Theory'
                     }
                 )
 
-                # Update CommonCourseStructure total marks
+                # Update CommonCourseStructure logic
+                common_struct, _ = CommonCourseStructureModel.objects.get_or_create(
+                    course=course_obj,
+                    year=year_val,
+                    course_name=normalized_subject
+                )
+                
+                # Update Paper Codes
+                codes = [common_struct.code, common_struct.code_1, common_struct.code_2]
+                if paper_code and paper_code not in codes:
+                    if not common_struct.code: common_struct.code = paper_code
+                    elif not common_struct.code_1: common_struct.code_1 = paper_code
+                    elif not common_struct.code_2: common_struct.code_2 = paper_code
+                
+                # Recalculate Total Marks from ALL labels of this normalized subject
                 total_marks = CourseStructureModel.objects.filter(
                     course=course_obj,
-                    course_code=paper_code,
-                    year=year_val
-                ).aggregate(total=Sum('max_marks'))['total'] or max_marks_val
-
-                CommonCourseStructureModel.objects.update_or_create(
-                    code=paper_code,
                     year=year_val,
-                    course=course_obj,
-                    defaults={
-                        'course_name': subject_name,
-                        'course_type': 'Theory',
-                        'marks': int(total_marks),
-                        'paper_type': paper_type_val
-                    }
-                )
+                    course_name=normalized_subject
+                ).aggregate(total=Sum('max_marks'))['total'] or max_marks_val
+                
+                common_struct.marks = int(total_marks)
+                common_struct.paper_type = paper_type_val
+                common_struct.course_type = 'Theory'
+                common_struct.save()
 
                 # 6. Exam Event Handling
                 exam_name = f"{course_code} {year_val} Year Exam - {session_name}"
@@ -205,7 +248,7 @@ def migrate_to_production():
                              record.status == 'ABSENT')
 
                 assessment_defaults = {
-                    'course_name': subject_name,
+                    'course_name': normalized_subject,
                     'batch': batch_obj,
                     'ind_max_marks': int(max_marks_val),
                     'ind_pass_marks': pass_marks,
