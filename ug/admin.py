@@ -9,7 +9,8 @@ from ug.services.semester_registration_service import SemesterRegistrationServic
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
-    CommonCourseStructure, UGExamResult, ExamRegistrationPayment
+    CommonCourseStructure, UGExamResult, ExamRegistrationPayment,
+    UGExam, UGExamCenterMapping, UGExamSchedule
 )
 
 # Import Resource classes from resources.py
@@ -517,3 +518,40 @@ class ExamRegistrationPaymentAdmin(ImportExportModelAdmin):
     search_fields = ('order_id', 'registration__uid')   
     readonly_fields = ('created_at', 'updated_at')
     raw_id_fields = ('registration',)
+
+#=============Admit Card Genrate Models Registration================
+
+@admin.register(UGExam)
+class UGExamAdmin(admin.ModelAdmin):
+    list_display = ('name', 'session', 'semester', 'exam_month_year', 'is_active', 'created_at')
+    list_filter = ('session', 'semester', 'is_active')
+    search_fields = ('name', 'session', 'exam_month_year')
+    ordering = ('-created_at',)
+
+@admin.register(UGExamCenterMapping)
+class UGExamCenterMappingAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'center', 'created_at')
+    list_filter = ('exam',)
+    search_fields = ('exam__name', 'center__name')
+    raw_id_fields = ('exam', 'center')
+    ordering = ('-created_at',)
+
+@admin.register(UGExamSchedule)
+class UGExamScheduleAdmin(admin.ModelAdmin):
+    list_display = ('exam', 'get_subject_name', 'exam_date', 'exam_time', 'sitting')
+    list_filter = ('exam', 'sitting', 'exam_date', 'department')
+    search_fields = ('exam__name', 'department__name')
+    raw_id_fields = ('exam', )
+    filter_horizontal = ('department','mjc',)
+    ordering = ('exam_date', 'exam_time')
+
+    @admin.display(description='Subject Name')
+    def get_subject_name(self, obj):
+        # M2M logic for department display - sorted alphabetically by name
+        depts = obj.department.all().order_by('name')
+        if depts.exists():
+            codes = [d.code or d.name for d in depts]
+            return f"{', '.join(codes)}"
+        return "N/A"
+
+#=============End Admit Card Genrate Models Registration================
