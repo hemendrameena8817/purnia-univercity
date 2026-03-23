@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     'ug_before_cbcs',
     'bba_year',
     'bca_hons_year',
+    'pgoldresult',
+    'omr',
 ]
 
 
