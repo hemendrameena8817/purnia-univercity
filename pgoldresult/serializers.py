@@ -9,7 +9,7 @@ class PGOldStudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = PGOldStudentProfile
         fields = [
-            'uid', 'registration_no', 'roll_no', 'student_name', 'student_name_hindi',
+            'uid', 'registration_no', 'roll_no', 'first_name', 'hindi_name',
             'fathers_name', 'mothers_name', 'gender', 'dob', 'college',
             'course_code', 'discipline_code', 'pg_faculty', 'pg_department',
             'pg_degree', 'pg_program', 'batch_code', 'current_semester',
