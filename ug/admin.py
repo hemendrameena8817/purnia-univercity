@@ -523,7 +523,7 @@ class ExamRegistrationPaymentAdmin(ImportExportModelAdmin):
 
 @admin.register(UGExam)
 class UGExamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'session', 'semester', 'exam_month_year', 'is_active', 'created_at')
+    list_display = ('uid','name', 'session', 'semester', 'exam_month_year', 'is_active', 'created_at')
     list_filter = ('session', 'semester', 'is_active')
     search_fields = ('name', 'session', 'exam_month_year')
     ordering = ('-created_at',)
@@ -540,15 +540,16 @@ class UGExamCenterMappingAdmin(admin.ModelAdmin):
 class UGExamScheduleAdmin(admin.ModelAdmin):
     list_display = (
         'exam',
-        'subject',
+        'exam_subject',
         'get_department_names',
         'get_mjc_names',
+        'exam_type',
         'exam_date',
         'exam_time',
         'sitting'
     )
 
-    list_editable = ('subject', 'exam_date', 'exam_time', 'sitting')
+    list_editable = ('exam_date', 'exam_time', 'sitting', 'exam_type')
 
     # 🔥 Better filters
     list_filter = (
@@ -556,8 +557,8 @@ class UGExamScheduleAdmin(admin.ModelAdmin):
         'sitting',
         'department',
         'mjc',
-        'subject',
-        ('exam_date', admin.DateFieldListFilter),  # already correct
+        # 'exam_subject',
+        # ('exam_date', admin.DateFieldListFilter),  # already correct
     )
 
     # 🔥 Add date hierarchy (BEST for date filtering UX)
@@ -567,11 +568,11 @@ class UGExamScheduleAdmin(admin.ModelAdmin):
         'exam__name',
         'department__name',
         'mjc__name',
-        'subject',
+        'exam_subject',
         'exam_time'
     )
 
-    raw_id_fields = ('exam',)
+    raw_id_fields = ('exam','exam_subject')
     filter_horizontal = ('department', 'mjc')
 
     # 🔥 CLEAN ORDERING (no hack needed if time is proper)

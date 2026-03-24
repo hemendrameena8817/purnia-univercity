@@ -811,3 +811,21 @@ class PGOldStudentProfileAPIView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class PGoldprofilecount(APIView):
+    permission_classes = []
+    def get(self, request):
+        try:
+            profile_count = PGOldStudentProfile.objects.count()
+            result_count=PGOldResult.objects.count()
+
+            return Response({
+                'profile_count': profile_count,
+                'result_count': result_count
+            })
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
