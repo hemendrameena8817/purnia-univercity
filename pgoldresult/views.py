@@ -20,6 +20,7 @@ from .services.result_calculator import (
     recalculate_pgo_sgpa
 )
 from .services.pdf_generator import generate_marksheet_pdf as generate_pdf, PGMarksheetPDFGenerator
+from django.db.models import Count
 
 
 class PGOldResultAPIView(APIView):
@@ -820,10 +821,25 @@ class PGoldprofilecount(APIView):
         try:
             profile_count = PGOldStudentProfile.objects.count()
             result_count=PGOldResult.objects.count()
+            batch_wise = (
+                PGOldStudentProfile.objects
+                .values('batch_code')
+                .annotate(count=Count('id'))
+                .order_by('batch_code')
+            )
+            result_batch_wise = (
+                PGOldResult.objects
+                .exclude(batch_code__isnull=True)  # field name check karo
+                .values('batch_code')
+                .annotate(count=Count('id'))
+                .order_by('batch_code')
+            )
 
             return Response({
                 'profile_count': profile_count,
-                'result_count': result_count
+                'result_count': result_count,
+                'batch_wise': batch_wise,
+                'result_batch_wise': result_batch_wise,
             })
         except Exception as e:
             return Response({
