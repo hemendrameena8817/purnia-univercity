@@ -137,14 +137,7 @@ class PGOldResult(models.Model):
         help_text='Link to PG Student Profile'
     )
     
-    # Original table columns (all as CharField to match staging data exactly)
-    source_id = models.CharField(max_length=50, null=True, blank=True, help_text='Original id from staging')
-    user_id = models.CharField(max_length=50, null=True, blank=True)
-    college_roll_no = models.CharField(max_length=50, null=True, blank=True)
-    college_reg_no = models.CharField(max_length=50, null=True, blank=True)
-    student_name = models.CharField(max_length=100, null=True, blank=True)
-    fathers_name = models.CharField(max_length=100, null=True, blank=True)
-    mothers_name = models.CharField(max_length=100, null=True, blank=True)
+    # Original table columns (all as CharField to match staging data exactly
     semester_code = models.CharField(max_length=30, null=True, blank=True)
     batch_code = models.CharField(max_length=30, null=True, blank=True)
     session_code = models.CharField(max_length=30, null=True, blank=True)
@@ -186,20 +179,7 @@ class PGOldResult(models.Model):
     student_name_hindi = models.CharField(max_length=100, null=True, blank=True)
     max_total_mark = models.CharField(max_length=20, null=True, blank=True)
     
-    # College relationship with colleges app
-    college = models.ForeignKey(
-        College,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='pg_old_results',
-        help_text='College reference from colleges app'
-    )
-    # PG Reference fields (CharField only)
-    pg_faculty = models.CharField(max_length=255, null=True, blank=True, help_text='PG Faculty name')
-    pg_department = models.CharField(max_length=255, null=True, blank=True, help_text='PG Department name')
-    pg_degree = models.CharField(max_length=255, null=True, blank=True, help_text='PG Degree name')
-    pg_program = models.CharField(max_length=255, null=True, blank=True, help_text='PG Program name')
+    # College relationship with colleges ap
 
     # Meta fields
     copied_from_staging = models.BooleanField(default=True, help_text="Copied from staging.PGResultCurrent")
@@ -209,22 +189,15 @@ class PGOldResult(models.Model):
         verbose_name = 'PG Old Result'
         verbose_name_plural = 'PG Old Results'
         indexes = [
-            models.Index(fields=['user_id']),
-            models.Index(fields=['college_roll_no']),
-            models.Index(fields=['college_reg_no']),
             models.Index(fields=['semester_code']),
             models.Index(fields=['batch_code']),
             models.Index(fields=['session_code']),
             models.Index(fields=['course_code']),
             models.Index(fields=['institute_code']),
-            models.Index(fields=['pg_faculty']),
-            models.Index(fields=['pg_department']),
-            models.Index(fields=['pg_degree']),
-            models.Index(fields=['pg_program']),
         ]
         
     def __str__(self):
-        return f"{self.college_roll_no} - {self.student_name} - Batch {self.batch_code}"
+        return f"{self.uid} - {self.subject_name} - Batch {self.batch_code}"
 
 
 class PGCenterInstituteMap(models.Model):
