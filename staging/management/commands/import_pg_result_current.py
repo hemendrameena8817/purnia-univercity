@@ -6,6 +6,7 @@ Usage:
     python manage.py import_pg_result_current --settings=pup_umis_backend.settings.development
     python manage.py import_pg_result_current --batch-size=5000 --settings=pup_umis_backend.settings.development
 """
+# python manage.py import_pg_result_current --update --batch-size=5000 --settings=pup_umis_backend.settings.development
 
 import MySQLdb
 from django.core.management.base import BaseCommand
@@ -27,6 +28,11 @@ class Command(BaseCommand):
             '--clear',
             action='store_true',
             help='Clear existing data before importing'
+        )
+        parser.add_argument(
+            '--update',
+            action='store_true',
+            help='Update existing records if unchecked (Slows down import)'
         )
 
     def handle(self, *args, **options):
@@ -56,8 +62,10 @@ class Command(BaseCommand):
         self.stdout.write(f"Total records to import: {total_count}")
         
         if clear_existing:
-            self.stdout.write(self.style.WARNING('Clearing existing PGResultCurrent data...'))
-            PGResultCurrent.objects.all().delete()
+            from django.db import connection as django_connection
+            self.stdout.write(self.style.WARNING('Clearing existing PGResultCurrent data (TRUNCATE)...'))
+            with django_connection.cursor() as django_cursor:
+                 django_cursor.execute(f"TRUNCATE TABLE {PGResultCurrent._meta.db_table}")
             self.stdout.write(self.style.SUCCESS('Existing data cleared.'))
         
         # Column mapping from dump table to Django model
@@ -83,8 +91,14 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.WARNING('Starting import...'))
         
+        # Get list of all fields except ID and imported_at for update
+        update_fields = [f.name for f in PGResultCurrent._meta.fields 
+                        if f.name != 'id' and f.name != 'imported_at']
+
         for row in cursor:
+            # ... (Object creation remains same - lines 87-135)
             obj = PGResultCurrent(
+                id=row[0], # Explicitly set ID for check
                 source_id=str(row[0]) if row[0] is not None else None,
                 user_id=str(row[1]) if row[1] is not None else None,
                 college_roll_no=str(row[2]) if row[2] is not None else None,
@@ -136,14 +150,40 @@ class Command(BaseCommand):
             batch.append(obj)
             
             if len(batch) >= batch_size:
-                PGResultCurrent.objects.bulk_create(batch, ignore_conflicts=True)
+                if options.get('update'):
+                    # Split into create and update (Fallback for DBs without native upsert)
+                    batch_ids = [o.id for o in batch]
+                    existing_ids = set(PGResultCurrent.objects.filter(id__in=batch_ids).values_list('id', flat=True))
+                    
+                    to_create = [o for o in batch if o.id not in existing_ids]
+                    to_update = [o for o in batch if o.id in existing_ids]
+                    
+                    if to_create:
+                        PGResultCurrent.objects.bulk_create(to_create)
+                    if to_update:
+                        PGResultCurrent.objects.bulk_update(to_update, update_fields, batch_size=1000)
+                else:
+                    PGResultCurrent.objects.bulk_create(batch, ignore_conflicts=True)
+
                 imported_count += len(batch)
                 self.stdout.write(f"Imported {imported_count}/{total_count} records...")
                 batch = []
         
         # Import remaining records
         if batch:
-            PGResultCurrent.objects.bulk_create(batch, ignore_conflicts=True)
+            if options.get('update'):
+                batch_ids = [o.id for o in batch]
+                existing_ids = set(PGResultCurrent.objects.filter(id__in=batch_ids).values_list('id', flat=True))
+                
+                to_create = [o for o in batch if o.id not in existing_ids]
+                to_update = [o for o in batch if o.id in existing_ids]
+                
+                if to_create:
+                    PGResultCurrent.objects.bulk_create(to_create)
+                if to_update:
+                    PGResultCurrent.objects.bulk_update(to_update, update_fields, batch_size=1000)
+            else:
+                PGResultCurrent.objects.bulk_create(batch, ignore_conflicts=True)
             imported_count += len(batch)
         
         cursor.close()
