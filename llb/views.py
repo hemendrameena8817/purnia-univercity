@@ -17,7 +17,7 @@ from accounts.permissions import IsUniversityAdmin
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
     LLBCourseStructure, LLBExam, LLBStudentCourseAssessment,
-    LLBExamCenterMapping
+    LLBExamCenterMapping, LLBStatistics
 )
 from .serializers import (
     LLBCourseSerializer, LLBSessionSerializer, LLBBatchSerializer,
@@ -943,3 +943,35 @@ class LLBMarksheetUpdateView(APIView):
                 assessment_obj.save()
         
         return Response({"message": "Marksheet updated successfully"}, status=http_status.HTTP_200_OK)
+
+
+class LLBOverviewView(APIView):
+    """
+    Returns pre-calculated statistical overview of LLB data.
+    This is very lightweight as it reads from a cache model.
+    """
+    permission_classes = [IsUniversityAdmin]
+
+    def get(self, request):
+        stats_obj = LLBStatistics.objects.order_by('-last_updated').first()
+        if not stats_obj:
+            return Response(
+                {"error": "Statistics not yet calculated. Please hit the refresh endpoint."},
+                status=http_status.HTTP_404_NOT_FOUND
+            )
+        
+        return Response(stats_obj.data)
+
+
+from .utils.stats import calculate_and_save_llb_stats
+
+class LLBOverviewRefreshView(APIView):
+    """
+    Heavy API that recalculates all statistics and saves them to the cache model.
+    Restricted to University Admins.
+    """
+    permission_classes = [IsUniversityAdmin]
+
+    def post(self, request):
+        stats_obj = calculate_and_save_llb_stats()
+        return Response(stats_obj.data, status=http_status.HTTP_201_CREATED)

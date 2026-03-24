@@ -379,7 +379,7 @@
                   <td>{% if exam_part == '2' %}Paper-II{% else %}Paper-I{% endif %}</td>
                   <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
                   <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"80" }}</td>
-                  <td>{% if subjects.honours.papers.0.exam_type == 'BACK' %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
                   <td rowspan="2" style="vertical-align: middle">
                     <strong>{% if subjects.honours.has_back %}{{ subjects.honours.total_obtained|default:"0" }}{% endif %}</strong>
                   </td>
@@ -387,7 +387,7 @@
                 <tr>
                   <td>Practical</td>
                   <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
-                  <td>{% if subjects.honours.papers.1.exam_type == 'BACK' %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
                 </tr>
               {% else %}
                 <!-- Regular case: Paper-I, Paper-II, Practical separate (3 rows) -->
@@ -397,7 +397,7 @@
                   <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
                   <td>{{ subjects.honours.papers.0.max_marks|default:"75" }}</td>
                   <td rowspan="2" colspan="2" style="vertical-align: middle">67</td>
-                  <td>{% if subjects.honours.papers.0.exam_type == 'BACK' %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
                   <td rowspan="2" style="vertical-align: middle">
                     <strong>{% if subjects.honours.has_back %}{{ subjects.honours.theory_total|default:subjects.honours.total_obtained }}{% endif %}</strong>
                   </td>
@@ -405,13 +405,13 @@
                 <tr>
                   <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
                   <td>{{ subjects.honours.papers.1.max_marks|default:"75" }}</td>
-                  <td>{% if subjects.honours.papers.1.exam_type == 'BACK' %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
                 </tr>
                 <tr>
                   <td>Practical</td>
                   <td>{{ subjects.honours.papers.2.max_marks|default:"50" }}</td>
                   <td colspan="2">23</td>
-                  <td>{% if subjects.honours.papers.2.exam_type == 'BACK' %}{{ subjects.honours.papers.2.obtained|default:"0" }}{% else %}{% endif %}</td>
+                  <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.2.obtained|default:"0" }}{% else %}{% endif %}</td>
                   <td><strong>{% if subjects.honours.has_back %}{{ subjects.honours.papers.2.obtained|default:"0" }}{% endif %}</strong></td>
                 </tr>
               {% endif %}
@@ -423,7 +423,7 @@
                 <td>{% if exam_part == '2' %}Paper-III{% else %}Paper-I{% endif %}</td>
                 <td>{{ subjects.honours.papers.0.max_marks|default:"100" }}</td>
                 <td rowspan="2" colspan="2" style="vertical-align: middle">{{ subjects.honours.total_pass|default:"90" }}</td>
-                <td>{% if subjects.honours.papers.0.exam_type == 'BACK' %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
+                <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.0.obtained|default:"0" }}{% else %}{% endif %}</td>
                 <td rowspan="2" style="vertical-align: middle">
                   <strong>
                     {% if subjects.honours.has_back %}
@@ -435,7 +435,7 @@
               <tr>
                 <td>{% if exam_part == '2' %}Paper-IV{% else %}Paper-II{% endif %}</td>
                 <td>{{ subjects.honours.papers.1.max_marks|default:"100" }}</td>
-                <td>{% if subjects.honours.papers.1.exam_type == 'BACK' %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
+                <td>{% if subjects.honours.has_back %}{{ subjects.honours.papers.1.obtained|default:"0" }}{% else %}{% endif %}</td>
               </tr>
             {% endif %}
 
@@ -467,7 +467,7 @@
                 {% else %}
                 <td>10</td>
                 {% endif %}
-                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                <td>{% if sub.has_back %}{{ paper.obtained }}{% else %}{% endif %}</td>
                 {% if forloop.first %}
                 <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle"><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
                 {% endif %}
@@ -482,7 +482,7 @@
                 <td>Theory</td>
                 <td>{{ paper.max_marks }}</td>
                 <td colspan="2">{{ sub.total_pass|default:33 }}</td>
-                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                <td>{% if sub.has_back %}{{ paper.obtained }}{% else %}{% endif %}</td>
                 <td><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
               </tr>
               {% endfor %}
@@ -511,7 +511,7 @@
                 {% else %}
                 <td>10</td>
                 {% endif %}
-                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                <td>{% if sub.has_back %}{{ paper.obtained }}{% else %}{% endif %}</td>
                 {% if forloop.first %}
                 <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle"><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
                 {% endif %}
@@ -526,7 +526,7 @@
                 <td>Theory</td>
                 <td>{{ paper.max_marks }}</td>
                 <td colspan="2">{{ sub.total_pass|default:33 }}</td>
-                <td>{% if paper.exam_type == 'BACK' %}{{ paper.obtained }}{% else %}{% endif %}</td>
+                <td>{% if sub.has_back %}{{ paper.obtained }}{% else %}{% endif %}</td>
                 <td><strong>{% if sub.has_back %}{{ sub.total_obtained }}{% endif %}</strong></td>
               </tr>
               {% endfor %}
@@ -612,11 +612,13 @@
                 >{{ back_result|default:result_status|upper }}</strong
               >
             </td>
-            <td style="width: 60%; font-size: 10pt; text-align: right">
-              Honours Marks in Word :&nbsp;&nbsp;<strong
-                >{% if hons_has_back %}{{ hons_total_words }}{% endif %}</strong
-              >
-            </td>
+            {% if honours_has_back %}
+              <td style="width: 60%; font-size: 10pt; text-align: right">
+                Honours Marks in Word :&nbsp;&nbsp;<strong
+                  >{{ hons_total_words }}</strong
+                >
+              </td>
+            {% endif %}
           </tr>
         </table>
 
