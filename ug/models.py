@@ -774,8 +774,9 @@ class UGExamSchedule(models.Model):
         blank=True,
         related_name='exam_schedules'
     )
+    exam_type = models.CharField(max_length=50, null=True, blank=True)
+    exam_subject = models.ForeignKey("ug.CourseStructure", on_delete=models.CASCADE, null=True, blank=True)
 
-    subject = models.CharField(max_length=250, null=True, blank=True)
     mjc = models.ManyToManyField(
         'ug.UGDepartment',
         blank=True,
