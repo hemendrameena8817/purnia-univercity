@@ -672,7 +672,7 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
     student_info = {
         'registration_no': profile.registration_no,
         'roll_no': profile.roll_no,
-        'name': profile.student_name or '',
+        'name': profile.first_name or '',
         'fathers_name': profile.fathers_name or '',
         'mothers_name': profile.mothers_name or '',
         'batch': profile.batch_code or '',
