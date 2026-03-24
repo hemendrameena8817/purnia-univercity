@@ -862,7 +862,18 @@ def get_ug_old_ba_hons_part1_context(
     context.update(subject_flags)
     context['composition_has_back'] = subject_flags.get('composition_has_back', False)
     context['show_back_totals'] = back_summary.get('total', 0) > 0
-    context['back_total_marks_obtained'] = calculate_back_total_marks(subjects_context, requested_session_code)
+    back_total_marks = calculate_back_total_marks(subjects_context, requested_session_code)
+    context['back_total_marks_obtained'] = back_total_marks
+
+    # Regenerate QR code with back total if back papers exist
+    if context['show_back_totals'] and back_total_marks > 0:
+        context['qr_code'] = generate_qr_code_base64(
+            generate_ug_marksheet_qr_text(
+                student, 
+                exam, 
+                back_total_marks
+            )
+        )
 
     return context
 
