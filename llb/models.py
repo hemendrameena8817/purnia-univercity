@@ -298,3 +298,20 @@ class LLBExamRegistration(models.Model):
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class LLBStatistics(models.Model):
+    """
+    Stores pre-calculated statistical overview data to avoid
+    heavy database queries on every dashboard load.
+    """
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    data = models.JSONField(help_text='The statistics JSON structure', null=True, blank=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'LLB Statistics'
+        verbose_name_plural = 'LLB Statistics'
+
+    def __str__(self):
+        return f"LLB Stats - {self.last_updated.strftime('%Y-%m-%d %H:%M')}"
