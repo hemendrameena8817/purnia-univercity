@@ -387,27 +387,28 @@
         <thead>
           <tr>
             <th class="sl-col">Sl. No.</th>
+            <th class="code-col" style="width: 80px;">Category</th>
             <th class="code-col">Subject Code</th>
             <th class="subject-col">Subject Name</th>
             <th class="time-col">Time</th>
-            <th class="date-col">Date & Sitting</th>
+            <th class="date-col">Date</th>
           </tr>
         </thead>
         <tbody>
           {% for s in schedules %}
           <tr>
             <td>{{ forloop.counter }}</td>
+            <td>{{ s.category|upper }}</td>
             <td>{{ s.code|default:"-" }}</td>
             <td class="subject-col">{{ s.name }}</td>
-            <td>{{ s.exam_time|default:"-" }}</td>
+            <td>{{ s.exam_time|default:"-" }} to {{ s.sitting|default:"" }}</td>
             <td>
                 {{ s.exam_date }}<br/>
-                <span style="font-size: 8pt;">{{ s.sitting|default:"" }}</span>
             </td>
           </tr>
           {% empty %}
           <tr>
-            <td colspan="5">No Schedule Found</td>
+            <td colspan="6">No Schedule Found</td>
           </tr>
           {% endfor %}
         </tbody>
