@@ -1,10 +1,13 @@
 from django.contrib import admin
+from django.contrib import messages
 from .models import (
     LLBCourse, LLBSession, LLBBatch, LLBStudentProfile, 
     LLBCourseStructure, CommonCourseStructure, LLBExam, 
     LLBStudentCourseAssessment, LLBExamCenterMapping, 
-    LLBExamSchedule, LLBYearRegistration, LLBExamRegistration
+    LLBExamSchedule, LLBYearRegistration, LLBExamRegistration,
+    LLBStatistics
 )
+from .utils.stats import calculate_and_save_llb_stats
 
 @admin.register(LLBCourse)
 class LLBCourseAdmin(admin.ModelAdmin):
@@ -250,3 +253,36 @@ class LLBExamRegistrationAdmin(admin.ModelAdmin):
         }),
     )
     readonly_fields = ('uid', 'created_at', 'updated_at')
+
+
+@admin.register(LLBStatistics)
+class LLBStatisticsAdmin(admin.ModelAdmin):
+    list_display = ('last_updated', 'total_students', 'total_assessments', 'pass_percentage')
+    readonly_fields = ('uid', 'last_updated', 'data')
+    change_list_template = "admin/llb/stats_changelist.html"
+
+    def total_students(self, obj):
+        if not obj.data: return 0
+        return obj.data.get('global', {}).get('total_students', 0)
+    
+    def total_assessments(self, obj):
+        if not obj.data: return 0
+        return obj.data.get('global', {}).get('total_assessments', 0)
+    
+    def pass_percentage(self, obj):
+        if not obj.data: return 0
+        return obj.data.get('global', {}).get('pass_percentage', 0)
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path('refresh-stats/', self.admin_site.admin_view(self.refresh_stats_view), name='llb-refresh-stats'),
+        ]
+        return custom_urls + urls
+
+    def refresh_stats_view(self, request):
+        from django.shortcuts import redirect
+        calculate_and_save_llb_stats()
+        self.message_user(request, "LLB Statistics refreshed successfully.", messages.SUCCESS)
+        return redirect("..")

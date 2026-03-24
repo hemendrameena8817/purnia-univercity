@@ -27,4 +27,8 @@ urlpatterns = [
     # PDF generation endpoints (existing - kept untouched)
     path('results/generate-bulk-pdf/', views.LLBBulkMarksheetGenerateView.as_view(), name='llb-result-bulk-pdf'),
     path('results/<str:registration_no>/pdf/', views.LLBResultPDFView.as_view(), name='llb-result-pdf'),
+    
+    # Overview endpoints
+    path('overview/', views.LLBOverviewView.as_view(), name='llb-overview'),
+    path('overview/refresh/', views.LLBOverviewRefreshView.as_view(), name='llb-overview-refresh'),
 ]
