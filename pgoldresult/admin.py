@@ -193,8 +193,8 @@ class PGOldResultAdmin(ImportExportModelAdmin):
                 'college',
                 'college_roll_no',
                 'college_reg_no',
-                'first_name',
-                'hindi_name',
+                'student_name',
+                'student_name_hindi',
                 'fathers_name',
                 'mothers_name'
             )
