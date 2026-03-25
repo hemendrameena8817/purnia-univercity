@@ -803,8 +803,7 @@ class UGExamSchedule(models.Model):
         ordering = ['exam_date', 'exam_time']
 
     def __str__(self):
-        depts = self.department.all()
-        dept_info = ", ".join([d.code or d.name for d in depts]) if depts.exists() else "N/A"
-        return f"{self.exam.name} - {dept_info} ({self.exam_date})"
+        exam_name = self.exam.name if self.exam else "No Exam"
+        return f"{exam_name} - {self.exam_type} ({self.exam_date or 'No Date'})"
 
 
