@@ -3,11 +3,57 @@ from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
-    CommonCourseStructure, UGExamResult, ExamRegistrationPayment
+    CommonCourseStructure, UGExamResult, ExamRegistrationPayment,
+    UGExam, UGExamCenterMapping, UGExamSchedule
 )
 from university.models import University
 from colleges.models import College
 from accounts.models import UserAccount
+
+class CourseStructureWidget(ForeignKeyWidget):
+    """
+    Custom widget for CourseStructure lookup in UGExamScheduleResource.
+    Filters by paper_code, course_name, course_type, course_code, and max_marks.
+    """
+    def clean(self, value, row=None, **kwargs):
+        if not value:
+            return None
+        
+        # Normalize the primary lookup value (paper_code)
+        value = str(value).strip()
+        from django.db.models import Q
+        filters = Q(paper_code__iexact=value)
+        
+        # Add additional filters from row data with robust key matching
+        if row:
+            def get_val(keys):
+                for k in keys:
+                    if k in row: return str(row[k]).strip()
+                return None
+
+            # Attempt to get values using various possible header formats
+            c_name = get_val(['Course name', 'course_name', 'Course Name'])
+            c_type = get_val(['Course type', 'course_type', 'Course Type'])
+            c_code = get_val(['Course code', 'course_code', 'Course Code'])
+            m_marks = get_val(['Max marks', 'max_marks', 'Max Marks', 'Marks'])
+
+            if c_name: filters &= Q(course_name__iexact=c_name)
+            if c_type: filters &= Q(course_type__iexact=c_type)
+            if c_code: filters &= Q(course_code__iexact=c_code)
+            if m_marks: 
+                try:
+                    filters &= Q(max_marks=float(m_marks))
+                except ValueError:
+                    pass
+            
+        try:
+            res = self.model.objects.filter(filters).last()
+            if not res:
+                # Fallback: ignore other filters if no match found with strict matching
+                return self.model.objects.filter(paper_code__iexact=value).last()
+            return res
+        except Exception:
+            return None
 
 class UGFacultyResource(resources.ModelResource):
     university = fields.Field(
@@ -24,19 +70,19 @@ class UGFacultyResource(resources.ModelResource):
     class Meta:
         model = UGFaculty
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'short_name', 'description', 'university', 'departments', 'is_publish')
+        fields = ('uid', 'name', 'short_name', 'description', 'university', 'departments', 'is_publish', 'json_data')
 
 class UGDepartmentResource(resources.ModelResource):
     class Meta:
         model = UGDepartment
-        import_id_fields = ('code',) # Use code as unique identifier for import if possible
-        fields = ('uid', 'name', 'code', 'head_of_department', 'is_publish')
+        import_id_fields = ('code',)
+        fields = ('uid', 'name', 'code', 'head_of_department', 'is_publish', 'json_data')
 
 class UGDegreeResource(resources.ModelResource):
     class Meta:
         model = UGDegree
         import_id_fields = ('name',)
-        fields = ('uid', 'name', 'short_name', 'total_semesters', 'total_years')
+        fields = ('uid', 'name', 'short_name', 'total_semesters', 'total_years', 'json_data')
 
 class UGProgramResource(resources.ModelResource):
     degree = fields.Field(
@@ -53,7 +99,7 @@ class UGProgramResource(resources.ModelResource):
     class Meta:
         model = UGProgram
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'short_name', 'degree', 'department')
+        fields = ('uid', 'name', 'short_name', 'degree', 'department', 'json_data')
 
 class UGBatchResource(resources.ModelResource):
     program = fields.Field(
@@ -65,7 +111,7 @@ class UGBatchResource(resources.ModelResource):
     class Meta:
         model = UGBatch
         import_id_fields = ('uid',)
-        fields = ('uid', 'name', 'program')
+        fields = ('uid', 'name', 'program', 'json_data')
 
 class UGStudentProfileResource(resources.ModelResource):
     user = fields.Field(
@@ -119,11 +165,13 @@ class UGStudentProfileResource(resources.ModelResource):
         import_id_fields = ('registration_no',)
         fields = (
             'uid', 'user', 'first_name', 'last_name', 'hindi_name', 'registration_no',
-            'address', 'admission_date', 'date_of_birth', 'aadhar_no', 'mobile_no',
-            'gender', 'caste', 'religion', 'nationality', 'roll_no', 'batch',
-            'father_name', 'mother_name', 'current_semester', 'session', 'status',
-            'college', 'department', 'program', 'degree', 'major_course',
-            'minor_course', 'mdc_course', 'is_active'
+            'address', 'admission_date', 'date_of_birth', 'aadhar_no', 'apaar_id',
+            'mobile_no', 'migration_submitted', 'last_university', 'gender', 'caste',
+            'religion', 'nationality', 'medium_of_student', 'enrollment_date',
+            'roll_no', 'batch', 'father_name', 'mother_name', 'current_semester',
+            'session', 'status', 'college', 'department', 'program', 'degree',
+            'major_course', 'minor_course', 'mdc_course', 'profile_image',
+            'signature', 'is_active', 'json_data'
         )
 
 class CourseStructureResource(resources.ModelResource):
@@ -144,7 +192,7 @@ class CourseStructureResource(resources.ModelResource):
         fields = (
             'uid', 'course_name', 'course_short_name', 'department', 'course_type',
             'course_code', 'paper_code', 'max_credit', 'max_marks', 'min_marks',
-            'label', 'semester', 'batch'
+            'description', 'label', 'semester', 'batch', 'json_data'
         )
 
 class StudentCourseAssessmentResource(resources.ModelResource):
@@ -176,10 +224,20 @@ class StudentCourseAssessmentResource(resources.ModelResource):
         model = StudentCourseAssessment
         import_id_fields = ('uid',)
         fields = (
-            'uid', 'student', 'semester', 'session', 'course_name', 'course_code', 
-            'department', 'course_type', 'label', 'ind_pass_marks', 
-            'ind_marks_obtained', 'ind_max_marks', 'ind_is_pass', 'ind_is_absent',
-            'batch', 'college_code', 'exam_type',
+            'uid', 'course_name', 'course_short_name', 'student', 'course_type',
+            'course_code', 'paper_code', 'semester', 'label', 'department',
+            'degree', 'session', 'batch', 'college_code', 'exam_type',
+            'attendance', 'ind_max_marks', 'ind_pass_marks', 'ind_is_absent',
+            'ind_marks_obtained', 'ind_grace_obtained', 'ind_final_marks_obtained',
+            'ind_is_pass', 'comb_max_marks', 'comb_max_credits', 'comb_pass_marks',
+            'comb_marks_obtained', 'comb_grace_obtained', 'comb_final_marks_obtained',
+            'comb_credit_obtained', 'comb_numeric_grade', 'comb_letter_grade',
+            'comb_grade_point', 'course_max_marks', 'course_max_credits',
+            'course_pass_marks', 'course_marks_obtained', 'course_grace_obtained',
+            'course_final_marks_obtained', 'course_credit_obtained', 'course_grade_point',
+            'sem_max_credit', 'sem_credit_obtained', 'sgpa', 'sem_result',
+            'next_sem_status', 'sem_grace_obtained', 'temp_total_gp', 'is_cia_filled',
+            'cia_filled_on', 'is_migrated', 'json_data',
             'student_registration_no', 'student_roll_no', 'student_name', 
             'student_batch', 'paper_department', 'semester_result'
         )
@@ -216,9 +274,9 @@ class UGExamResultResource(resources.ModelResource):
         model = UGExamResult
         import_id_fields = ('uid',)
         fields = (
-            'uid', 'student', 'semester', 'session', 
-            'sgpa', 'semester_result', 'semester_credit_earned', 'semester_max_credit', 
-            'cia_pass', 'ese_pass', 'next_sem_status', 'is_legacy',
+            'uid', 'student', 'semester', 'session', 'cia_pass', 'ese_pass',
+            'semester_result', 'semester_max_credit', 'semester_credit_earned',
+            'sgpa', 'next_semester', 'next_sem_status', 'is_legacy', 'published_at',
             'registration_no', 'student_name', 'student_batch', 'failed_ese_papers'
         )
         export_order = (
@@ -247,13 +305,18 @@ class SemesterRegistrationResource(resources.ModelResource):
         attribute='batch',
         widget=ForeignKeyWidget(UGBatch, 'name')
     )
+    assessment = fields.Field(
+        column_name='assessment_uids',
+        attribute='assessment',
+        widget=ManyToManyWidget(StudentCourseAssessment, field='uid')
+    )
     
     class Meta:
         model = SemesterRegistration
         import_id_fields = ('uid',)
         fields = (
             'uid', 'student', 'batch', 'start_date', 'end_date', 'is_open', 
-            'sem', 'status', 'exam_eligible', 'remarks', 'session'
+            'sem', 'status', 'exam_eligible', 'remarks', 'assessment', 'session', 'json_data'
         )
 
 class ExamRegistrationResource(resources.ModelResource):
@@ -262,13 +325,18 @@ class ExamRegistrationResource(resources.ModelResource):
         attribute='student',
         widget=ForeignKeyWidget(UGStudentProfile, 'registration_no')
     )
+    assessment = fields.Field(
+        column_name='assessment_uids',
+        attribute='assessment',
+        widget=ManyToManyWidget(StudentCourseAssessment, field='uid')
+    )
     
     class Meta:
         model = ExamRegistration
         import_id_fields = ('uid',)
         fields = (
             'uid', 'student', 'admission_receipt', 'start_date', 'end_date', 
-            'is_open', 'fees', 'sem', 'status', 'session', 'exam_type'
+            'is_open', 'fees', 'sem', 'status', 'session', 'exam_type', 'assessment', 'json_data'
         )
 
 class ExamRegistrationPaymentResource(resources.ModelResource):
@@ -283,11 +351,81 @@ class ExamRegistrationPaymentResource(resources.ModelResource):
         import_id_fields = ('uid',)
         fields = (
             'uid', 'registration', 'order_id', 'tracking_id', 'bank_ref_no', 
-            'amount', 'payment_status', 'payment_mode', 'card_name'
+            'amount', 'payment_status', 'payment_mode', 'card_name', 'raw_response'
         )
 
 class CommonCourseStructureResource(resources.ModelResource):
     class Meta:
         model = CommonCourseStructure
         import_id_fields = ('uid',)
-        fields = ('uid', 'semester', 'course_name', 'course_type', 'ltp', 'credit', 'marks', 'code')
+        fields = ('uid', 'semester', 'course_name', 'course_type', 'ltp', 'credit', 'marks', 'code', 'json_data')
+
+class UGExamResource(resources.ModelResource):
+    class Meta:
+        model = UGExam
+        import_id_fields = ('uid',)
+        fields = ('uid', 'name', 'semester', 'session', 'exam_month_year', 'publication_date', 'is_active', 'json_data')
+
+class UGExamCenterMappingResource(resources.ModelResource):
+    exam = fields.Field(
+        column_name='exam_uid',
+        attribute='exam',
+        widget=ForeignKeyWidget(UGExam, 'uid')
+    )
+    center = fields.Field(
+        column_name='center_college_code',
+        attribute='center',
+        widget=ForeignKeyWidget(College, 'college_code')
+    )
+    attached_colleges = fields.Field(
+        column_name='attached_college_codes',
+        attribute='attached_colleges',
+        widget=ManyToManyWidget(College, field='college_code')
+    )
+    
+    class Meta:
+        model = UGExamCenterMapping
+        import_id_fields = ('uid',)
+        fields = ('uid', 'exam', 'center', 'attached_colleges', 'json_data')
+
+class UGExamScheduleResource(resources.ModelResource):
+    exam = fields.Field(
+        column_name='exam_uid',
+        attribute='exam',
+        widget=ForeignKeyWidget(UGExam, 'uid')
+    )
+    department = fields.Field(
+        column_name='department_codes',
+        attribute='department',
+        widget=ManyToManyWidget(UGDepartment, field='code')
+    )
+    exam_subject = fields.Field(
+        column_name='paper_code',
+        attribute='exam_subject',
+        widget=CourseStructureWidget(CourseStructure, 'paper_code')
+    )
+    mjc = fields.Field(
+        column_name='mjc_department_codes',
+        attribute='mjc',
+        widget=ManyToManyWidget(UGDepartment, field='code')
+    )
+    
+    # Export-only fields from CourseStructure for accurate re-import matching
+    course_name = fields.Field(attribute='exam_subject__course_name', column_name='course_name', readonly=True)
+    course_type = fields.Field(attribute='exam_subject__course_type', column_name='course_type', readonly=True)
+    course_code = fields.Field(attribute='exam_subject__course_code', column_name='course_code', readonly=True)
+    max_marks = fields.Field(attribute='exam_subject__max_marks', column_name='max_marks', readonly=True)
+
+    class Meta:
+        model = UGExamSchedule
+        import_id_fields = ('uid',)
+        fields = (
+            'uid', 'exam', 'department', 'exam_type', 'exam_subject', 
+            'mjc', 'exam_date', 'exam_time', 'sitting', 'json_data',
+            'course_name', 'course_type', 'course_code', 'max_marks'
+        )
+        export_order = (
+            'uid', 'exam', 'department', 'mjc', 'paper_code', 
+            'course_name', 'course_type', 'course_code', 'max_marks',
+            'exam_type', 'exam_date', 'exam_time', 'sitting'
+        )

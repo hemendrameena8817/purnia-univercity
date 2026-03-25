@@ -296,6 +296,7 @@ class CourseStructure(models.Model):
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
     course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    new_course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Updated Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
     max_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course Marks")
@@ -342,6 +343,7 @@ class StudentCourseAssessment(models.Model):
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Course Type")
     course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    new_course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Updated Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Paper Code")
 
     semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester")
@@ -738,7 +740,9 @@ class UGExamCenterMapping(models.Model):
     center = models.ForeignKey(
         'colleges.College',
         on_delete=models.CASCADE,
-        related_name='ug_as_center_mappings'
+        related_name='ug_as_center_mappings',
+        null=True,
+        blank=True
     )
     # Colleges whose students will go to this center
     attached_colleges = models.ManyToManyField(
@@ -755,7 +759,9 @@ class UGExamCenterMapping(models.Model):
         unique_together = ('exam', 'center')
 
     def __str__(self):
-        return f"{self.exam.name} @ {self.center.name}"
+        center_name = self.center.name if self.center else "N/A"
+        exam_name = self.exam.name if self.exam else "N/A"
+        return f"{exam_name} @ {center_name}"
 
 class UGExamSchedule(models.Model):
     """
