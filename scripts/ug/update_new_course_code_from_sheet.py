@@ -132,6 +132,7 @@ def load_sheet_mapping(file_path):
 
     mapping = {}
     conflicts = []
+    sheet_course_names = set()
     stats = {
         'rows_read': 0,
         'rows_skipped_missing_course_name': 0,
@@ -176,6 +177,7 @@ def load_sheet_mapping(file_path):
             continue
 
         course_name_key = normalize_course_name(course_name)
+        sheet_course_names.add(course_name_key)
         for component in components:
             key = (course_name_key, db_course_code, component)
             candidate = {
@@ -215,7 +217,7 @@ def load_sheet_mapping(file_path):
 
     stats['mapping_keys'] = len(mapping)
     stats['conflicts'] = len(conflicts)
-    return mapping, conflicts, stats
+    return mapping, conflicts, stats, sheet_course_names
 
 
 def build_name_index(mapping):
@@ -384,6 +386,7 @@ def update_course_structures(name_index, dry_run=False):
 
     to_update = []
     unmatched_course_names = []
+    detail_failed_rows = []
     stats = {
         'processed': 0,
         'matched': 0,
@@ -402,6 +405,10 @@ def update_course_structures(name_index, dry_run=False):
                 unmatched_course_names.append(
                     f"CourseStructure#{row.id} | course_name={clean_text(row.course_name) or '-'} | course_code={clean_text(row.course_code) or '-'} | department={clean_text(getattr(row.department, 'name', '')) or '-'} | label={clean_text(row.label) or '-'} | component={get_component_from_label(row.label) or '-'}"
                 )
+            elif failure_reason == 'course_name_matched_but_details_failed':
+                detail_failed_rows.append(
+                    f"CourseStructure#{row.id} | course_name={clean_text(row.course_name) or '-'} | course_code={clean_text(row.course_code) or '-'} | department={clean_text(getattr(row.department, 'name', '')) or '-'} | label={clean_text(row.label) or '-'} | component={get_component_from_label(row.label) or '-'}"
+                )
             continue
 
         stats['matched'] += 1
@@ -416,7 +423,7 @@ def update_course_structures(name_index, dry_run=False):
     if to_update and not dry_run:
         CourseStructure.objects.bulk_update(to_update, ['new_course_code'], batch_size=500)
 
-    return stats, unmatched_course_names
+    return stats, unmatched_course_names, detail_failed_rows
 
 
 def update_student_assessments(name_index, dry_run=False):
@@ -446,6 +453,10 @@ def update_student_assessments(name_index, dry_run=False):
                 unmatched_course_names.append(
                     f"StudentCourseAssessment#{row.id} | course_name={clean_text(row.course_name) or '-'} | course_code={clean_text(row.course_code) or '-'} | department={clean_text(getattr(row.department, 'name', '')) or '-'} | degree={clean_text(row.degree) or '-'} | label={clean_text(row.label) or '-'} | component={get_component_from_label(row.label) or '-'}"
                 )
+            elif failure_reason == 'course_name_matched_but_details_failed':
+                detail_failed_rows.append(
+                    f"StudentCourseAssessment#{row.id} | course_name={clean_text(row.course_name) or '-'} | course_code={clean_text(row.course_code) or '-'} | department={clean_text(getattr(row.department, 'name', '')) or '-'} | degree={clean_text(row.degree) or '-'} | label={clean_text(row.label) or '-'} | component={get_component_from_label(row.label) or '-'}"
+                )
             continue
 
         stats['matched'] += 1
@@ -460,7 +471,7 @@ def update_student_assessments(name_index, dry_run=False):
     if to_update and not dry_run:
         StudentCourseAssessment.objects.bulk_update(to_update, ['new_course_code'], batch_size=500)
 
-    return stats, unmatched_course_names
+    return stats, unmatched_course_names, detail_failed_rows
 
 
 def print_stats(title, stats):
@@ -482,9 +493,44 @@ def print_unmatched_course_names(title, rows):
         print(row)
 
 
+def get_db_course_name_sets():
+    course_structure_names = {
+        normalize_course_name(name)
+        for name in CourseStructure.objects.filter(
+            semester=TARGET_SEMESTER,
+            label__in=ALL_LABELS,
+        ).values_list('course_name', flat=True)
+        if clean_text(name)
+    }
+
+    assessment_names = {
+        normalize_course_name(name)
+        for name in StudentCourseAssessment.objects.filter(
+            semester=TARGET_SEMESTER,
+            session=TARGET_SESSION,
+            label__in=ALL_LABELS,
+        ).values_list('course_name', flat=True)
+        if clean_text(name)
+    }
+
+    return course_structure_names, assessment_names
+
+
+def print_name_set_difference(title, names):
+    if not names:
+        return
+
+    print('\n' + '=' * 100)
+    print(title)
+    print('=' * 100)
+    for name in sorted(names):
+        print(name)
+
+
 def run(file_path, dry_run=False):
-    mapping, conflicts, sheet_stats = load_sheet_mapping(file_path)
+    mapping, conflicts, sheet_stats, sheet_course_names = load_sheet_mapping(file_path)
     name_index = build_name_index(mapping)
+    course_structure_db_names, assessment_db_names = get_db_course_name_sets()
     print_stats('SHEET SUMMARY', sheet_stats)
 
     if conflicts:
@@ -494,23 +540,35 @@ def run(file_path, dry_run=False):
         raise SystemExit('Resolve sheet conflicts before updating.')
 
     if dry_run:
-        course_structure_stats, course_structure_unmatched = update_course_structures(name_index, dry_run=True)
-        assessment_stats, assessment_unmatched = update_student_assessments(name_index, dry_run=True)
+        course_structure_stats, course_structure_unmatched, course_structure_detail_failed = update_course_structures(name_index, dry_run=True)
+        assessment_stats, assessment_unmatched, assessment_detail_failed = update_student_assessments(name_index, dry_run=True)
         print_stats('COURSE STRUCTURE DRY RUN', course_structure_stats)
         print_stats('STUDENT ASSESSMENT DRY RUN', assessment_stats)
-        print_unmatched_course_names('COURSE STRUCTURE COURSE NAME NOT MATCHED', course_structure_unmatched)
-        print_unmatched_course_names('STUDENT ASSESSMENT COURSE NAME NOT MATCHED', assessment_unmatched)
+        print_name_set_difference('COURSE NAMES IN SHEET BUT NOT FOUND IN COURSE STRUCTURE DB', sheet_course_names - course_structure_db_names)
+        print_name_set_difference('COURSE NAMES IN SHEET BUT NOT FOUND IN STUDENT ASSESSMENT DB', sheet_course_names - assessment_db_names)
+        print_name_set_difference('COURSE NAMES IN COURSE STRUCTURE DB BUT NOT FOUND IN SHEET', course_structure_db_names - sheet_course_names)
+        print_name_set_difference('COURSE NAMES IN STUDENT ASSESSMENT DB BUT NOT FOUND IN SHEET', assessment_db_names - sheet_course_names)
+        print_unmatched_course_names('COURSE STRUCTURE COURSE NAME NOT FOUND IN THE SHEET', course_structure_unmatched)
+        print_unmatched_course_names('COURSE STRUCTURE COURSE NAME MATCHED BUT DETAILS FAILED', course_structure_detail_failed)
+        print_unmatched_course_names('STUDENT ASSESSMENT COURSE NAME NOT FOUND IN THE SHEET', assessment_unmatched)
+        print_unmatched_course_names('STUDENT ASSESSMENT COURSE NAME MATCHED BUT DETAILS FAILED', assessment_detail_failed)
         print('\nDRY RUN: no changes saved')
         return
 
     with transaction.atomic():
-        course_structure_stats, course_structure_unmatched = update_course_structures(name_index, dry_run=False)
-        assessment_stats, assessment_unmatched = update_student_assessments(name_index, dry_run=False)
+        course_structure_stats, course_structure_unmatched, course_structure_detail_failed = update_course_structures(name_index, dry_run=False)
+        assessment_stats, assessment_unmatched, assessment_detail_failed = update_student_assessments(name_index, dry_run=False)
 
     print_stats('COURSE STRUCTURE UPDATE', course_structure_stats)
     print_stats('STUDENT ASSESSMENT UPDATE', assessment_stats)
-    print_unmatched_course_names('COURSE STRUCTURE COURSE NAME NOT MATCHED', course_structure_unmatched)
-    print_unmatched_course_names('STUDENT ASSESSMENT COURSE NAME NOT MATCHED', assessment_unmatched)
+    print_name_set_difference('COURSE NAMES IN SHEET BUT NOT FOUND IN COURSE STRUCTURE DB', sheet_course_names - course_structure_db_names)
+    print_name_set_difference('COURSE NAMES IN SHEET BUT NOT FOUND IN STUDENT ASSESSMENT DB', sheet_course_names - assessment_db_names)
+    print_name_set_difference('COURSE NAMES IN COURSE STRUCTURE DB BUT NOT FOUND IN SHEET', course_structure_db_names - sheet_course_names)
+    print_name_set_difference('COURSE NAMES IN STUDENT ASSESSMENT DB BUT NOT FOUND IN SHEET', assessment_db_names - sheet_course_names)
+    print_unmatched_course_names('COURSE STRUCTURE COURSE NAME NOT FOUND IN THE SHEET', course_structure_unmatched)
+    print_unmatched_course_names('COURSE STRUCTURE COURSE NAME MATCHED BUT DETAILS FAILED', course_structure_detail_failed)
+    print_unmatched_course_names('STUDENT ASSESSMENT COURSE NAME NOT FOUND IN THE SHEET', assessment_unmatched)
+    print_unmatched_course_names('STUDENT ASSESSMENT COURSE NAME MATCHED BUT DETAILS FAILED', assessment_detail_failed)
 
 
 def main():
