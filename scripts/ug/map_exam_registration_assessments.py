@@ -51,7 +51,7 @@ def get_semester_variants(sem_value):
     return variants
 
 
-def map_exam_registration_assessments(session=None, sem=None, exam_type=None, only_empty=False, batch_size=500, dry_run=False):
+def map_exam_registration_assessments(session=None, sem=None, exam_type=None, only_empty=False, batch_size=500, dry_run=False, show_no_matches=False):
     queryset = ExamRegistration.objects.select_related('student').prefetch_related('assessment').all().order_by('id')
 
     if session:
@@ -74,6 +74,7 @@ def map_exam_registration_assessments(session=None, sem=None, exam_type=None, on
         'unchanged': 0,
         'linked_assessments': 0,
     }
+    no_match_rows = []
 
     print('=' * 100)
     print('MAP EXAM REGISTRATION ASSESSMENTS')
@@ -119,6 +120,17 @@ def map_exam_registration_assessments(session=None, sem=None, exam_type=None, on
 
         if not match_ids:
             stats['skipped_no_matches'] += 1
+            if show_no_matches:
+                no_match_rows.append({
+                    'registration_id': registration.id,
+                    'student_id': registration.student_id,
+                    'registration_no': getattr(registration.student, 'registration_no', None),
+                    'student_name': f"{getattr(registration.student, 'first_name', '')} {getattr(registration.student, 'last_name', '')}".strip(),
+                    'session': registration.session,
+                    'sem': registration.sem,
+                    'semester_variants': sorted(semester_variants),
+                    'exam_type': registration.exam_type,
+                })
             continue
 
         existing_ids = set(registration.assessment.values_list('id', flat=True))
@@ -149,6 +161,22 @@ def map_exam_registration_assessments(session=None, sem=None, exam_type=None, on
     print(f"Skipped (no matches):      {stats['skipped_no_matches']:,}")
     print('=' * 100)
 
+    if show_no_matches and no_match_rows:
+        print('\nNO MATCH REGISTRATIONS')
+        print('=' * 100)
+        for row in no_match_rows:
+            print(
+                f"ExamRegistration#{row['registration_id']} | "
+                f"student_id={row['student_id']} | "
+                f"reg_no={row['registration_no'] or '-'} | "
+                f"name={row['student_name'] or '-'} | "
+                f"session={row['session']} | "
+                f"sem={row['sem']} | "
+                f"semester_variants={','.join(row['semester_variants'])} | "
+                f"exam_type={row['exam_type'] or '-'}"
+            )
+        print('=' * 100)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Map StudentCourseAssessment rows to ExamRegistration.assessment')
@@ -156,6 +184,7 @@ if __name__ == '__main__':
     parser.add_argument('--sem', type=int, help='Filter exam registrations by semester integer')
     parser.add_argument('--exam-type', type=str, help='Optional exam type filter for both registrations and assessments')
     parser.add_argument('--only-empty', action='store_true', help='Only process exam registrations with no assessment links yet')
+    parser.add_argument('--show-no-matches', action='store_true', help='Print registrations that could not find matching assessments')
     parser.add_argument('--batch-size', type=int, default=500, help='Iterator batch size')
     parser.add_argument('--dry-run', action='store_true', help='Preview only, do not save')
     args = parser.parse_args()
@@ -169,6 +198,7 @@ if __name__ == '__main__':
                 only_empty=args.only_empty,
                 batch_size=args.batch_size,
                 dry_run=False,
+                show_no_matches=args.show_no_matches,
             )
     else:
         map_exam_registration_assessments(
@@ -178,4 +208,5 @@ if __name__ == '__main__':
             only_empty=args.only_empty,
             batch_size=args.batch_size,
             dry_run=True,
+            show_no_matches=args.show_no_matches,
         )

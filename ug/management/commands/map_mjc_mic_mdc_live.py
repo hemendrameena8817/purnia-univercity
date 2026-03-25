@@ -16,6 +16,7 @@ Usage:
 """
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Q
 
 MJC_COURSE_MAP = {
     "Inorganic and Organic Chemistry": "CHEM",
@@ -26,7 +27,7 @@ MJC_COURSE_MAP = {
     "Algebra": "MATH",
     "Descriptive Statistics": "STAT",
     "Introductory Microeconomics": "ECO",
-    "Principles of Economics": "ECO",
+    "Principles of Economics": "RECO",
     "Introduction to Sociology - I": "SOC",
     "The Idea of Bharat": "HIST",
     "Understanding Political Theory": "POL",
@@ -139,6 +140,8 @@ class Command(BaseCommand):
         group = parser.add_mutually_exclusive_group(required=True)
         group.add_argument('--reg-nos', nargs='+', type=str)
         group.add_argument('--file', type=str)
+        group.add_argument('--batch-name', type=str)
+        parser.add_argument('--only-missing', action='store_true', default=False)
         parser.add_argument('--dry-run', action='store_true', default=False)
 
     def handle(self, *args, **options):
@@ -147,11 +150,28 @@ class Command(BaseCommand):
         if options['reg_nos']:
             reg_nos = [r.strip().upper() for r in options['reg_nos'] if r.strip()]
         else:
-            try:
-                with open(options['file'], 'r') as f:
-                    reg_nos = [line.strip().upper() for line in f if line.strip()]
-            except FileNotFoundError:
-                raise CommandError(f"File not found: {options['file']}")
+            if options['file']:
+                try:
+                    with open(options['file'], 'r') as f:
+                        reg_nos = [line.strip().upper() for line in f if line.strip()]
+                except FileNotFoundError:
+                    raise CommandError(f"File not found: {options['file']}")
+            else:
+                from ug.models import UGStudentProfile
+
+                profile_qs = UGStudentProfile.objects.filter(batch__name=options['batch_name'])
+                if options['only_missing']:
+                    profile_qs = profile_qs.filter(
+                        Q(major_course__isnull=True) |
+                        Q(minor_course__isnull=True) |
+                        Q(mdc_course__isnull=True)
+                    )
+                reg_nos = list(
+                    profile_qs.exclude(registration_no__isnull=True)
+                    .exclude(registration_no='')
+                    .values_list('registration_no', flat=True)
+                    .distinct()
+                )
 
         if not reg_nos:
             raise CommandError("No registration numbers provided.")
