@@ -18,7 +18,8 @@ from .resources import (
     UGFacultyResource, UGDepartmentResource, UGDegreeResource, UGProgramResource,
     UGBatchResource, UGStudentProfileResource, CourseStructureResource,
     StudentCourseAssessmentResource, UGExamResultResource, SemesterRegistrationResource,
-    ExamRegistrationResource, ExamRegistrationPaymentResource, CommonCourseStructureResource
+    ExamRegistrationResource, ExamRegistrationPaymentResource, CommonCourseStructureResource,
+    UGExamResource, UGExamCenterMappingResource, UGExamScheduleResource
 )
 
 
@@ -522,14 +523,16 @@ class ExamRegistrationPaymentAdmin(ImportExportModelAdmin):
 #=============Admit Card Genrate Models Registration================
 
 @admin.register(UGExam)
-class UGExamAdmin(admin.ModelAdmin):
+class UGExamAdmin(ImportExportModelAdmin):
+    resource_class = UGExamResource
     list_display = ('uid','name', 'session', 'semester', 'exam_month_year', 'is_active', 'created_at')
     list_filter = ('session', 'semester', 'is_active')
     search_fields = ('name', 'session', 'exam_month_year')
     ordering = ('-created_at',)
 
 @admin.register(UGExamCenterMapping)
-class UGExamCenterMappingAdmin(admin.ModelAdmin):
+class UGExamCenterMappingAdmin(ImportExportModelAdmin):
+    resource_class = UGExamCenterMappingResource
     list_display = ('exam', 'center', 'get_attached_colleges', 'created_at')
     list_filter = ('exam', 'center')
     filter_horizontal = ('attached_colleges',)
@@ -558,7 +561,8 @@ class ExamDateFilter(admin.SimpleListFilter):
         return queryset
 
 @admin.register(UGExamSchedule)
-class UGExamScheduleAdmin(admin.ModelAdmin):
+class UGExamScheduleAdmin(ImportExportModelAdmin):
+    resource_class = UGExamScheduleResource
     list_display = (
         'exam',
         'exam_subject',
