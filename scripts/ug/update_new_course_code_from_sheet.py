@@ -435,6 +435,7 @@ def update_student_assessments(name_index, dry_run=False):
 
     to_update = []
     unmatched_course_names = []
+    detail_failed_rows = []
     stats = {
         'processed': 0,
         'matched': 0,
