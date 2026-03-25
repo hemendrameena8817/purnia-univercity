@@ -120,10 +120,6 @@ class PGOldStudentProfileAdmin(ImportExportModelAdmin):
 class PGOldResultAdmin(ImportExportModelAdmin):
     list_display = (
         'student_profile',
-        'college',
-        'college_roll_no',
-        'college_reg_no',
-        'student_name',
         'batch_code',
         'semester_code',
         'session_code',
@@ -132,16 +128,11 @@ class PGOldResultAdmin(ImportExportModelAdmin):
         'subject_result',
         'gpa',
         'imported_at',
-        'pg_faculty',
-        'pg_department',
-        'pg_degree',
-        'pg_program',
         'total_ce'
 
     )
     
     list_filter = (
-        'college',
         'batch_code',
         'semester_code',
         'session_code',
@@ -150,34 +141,22 @@ class PGOldResultAdmin(ImportExportModelAdmin):
         'status',
         'subject_result',
         'final_result',
-        'institute_code',
-        'pg_faculty',
-        'pg_department',
-        'pg_degree',
-        'pg_program',
-    )
+        'institute_code',)
     
     search_fields = (
-        'college__name',
-        'college__college_code',
-        'college_roll_no',
-        'college_reg_no',
-        'student_name',
-        'fathers_name',
         'subject_name',
         'paper_code'
     )
     
     readonly_fields = (
         'uid',
-        'source_id',
         'copied_from_staging',
         'imported_at'
     )
     
     raw_id_fields = ('student_profile',)
     
-    ordering = ('-imported_at', 'batch_code', 'college_roll_no', 'semester_code')
+    ordering = ('-imported_at', 'batch_code', 'semester_code')
     
     list_per_page = 50
     
@@ -187,16 +166,7 @@ class PGOldResultAdmin(ImportExportModelAdmin):
         ('Student Information', {
             'fields': (
                 'uid',
-                'source_id',
-                'user_id',
                 'student_profile',
-                'college',
-                'college_roll_no',
-                'college_reg_no',
-                'student_name',
-                'student_name_hindi',
-                'fathers_name',
-                'mothers_name'
             )
         }),
         ('Academic Details', {
@@ -207,10 +177,6 @@ class PGOldResultAdmin(ImportExportModelAdmin):
                 'course_code',
                 'discipline_code',
                 'institute_code',
-                'pg_faculty',
-                'pg_department',
-                'pg_degree',
-                'pg_program',
             )
         }),
         ('Subject Information', {
