@@ -13,7 +13,7 @@ from .serializers import (
     PGOldResultSerializer, StudentInfoSerializer, SubjectDetailSerializer, 
     PGOldStudentProfileSerializer, PGExamMasterDumpSerializer
 )
-
+from accounts.permissions import IsUniversityAdmin
 from .services.result_calculator import (
     calculate_pg_result, 
     get_pg_old_result_for_pdf,
@@ -27,7 +27,7 @@ class PGOldResultAPIView(APIView):
     """
     API view to get and create PG old results by roll number or registration number
     """
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     
     
     def get(self, request):
@@ -55,11 +55,21 @@ class PGOldResultAPIView(APIView):
         
         try:
             if roll_no:
-                all_results = PGOldResult.objects.filter(college_roll_no=roll_no)
+                # Find student profile first, then get results
+                student_profile = PGOldStudentProfile.objects.filter(roll_no=roll_no).first()
+                if student_profile:
+                    all_results = PGOldResult.objects.filter(student_profile=student_profile)
+                else:
+                    all_results = PGOldResult.objects.none()
                 search_type = 'roll_no'
                 search_value = roll_no
             else:
-                all_results = PGOldResult.objects.filter(college_reg_no=reg_no)
+                # Find student profile first, then get results
+                student_profile = PGOldStudentProfile.objects.filter(registration_no=reg_no).first()
+                if student_profile:
+                    all_results = PGOldResult.objects.filter(student_profile=student_profile)
+                else:
+                    all_results = PGOldResult.objects.none()
                 search_type = 'reg_no'
                 search_value = reg_no
             
@@ -246,10 +256,10 @@ class PGOldResultAPIView(APIView):
                 except PGOldStudentProfile.DoesNotExist:
                     return Response({'success': False, 'error': f'Profile {profile_uid} not found'}, status=status.HTTP_404_NOT_FOUND)
             else:
-                reg_no = request.data.get('college_reg_no')
-                roll_no = request.data.get('college_roll_no')
+                reg_no = request.data.get('registration_no') or request.data.get('college_reg_no')
+                roll_no = request.data.get('roll_no')
                 if not (reg_no or roll_no):
-                    return Response({'success': False, 'error': 'Either college_reg_no or college_roll_no is required'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'success': False, 'error': 'Either registration_no or roll_no is required'}, status=status.HTTP_400_BAD_REQUEST)
                 
                 # Update or create profile
                 student_data = {
@@ -258,10 +268,6 @@ class PGOldResultAPIView(APIView):
                     'student_name': request.data.get('student_name'),
                     'fathers_name': request.data.get('fathers_name'),
                     'mothers_name': request.data.get('mothers_name'),
-                    'pg_faculty': request.data.get('pg_faculty'),
-                    'pg_department': request.data.get('pg_department'),
-                    'pg_degree': request.data.get('pg_degree'),
-                    'pg_program': request.data.get('pg_program'),
                     'student_name_hindi': request.data.get('student_name_hindi'),
                 }
                 
@@ -269,8 +275,7 @@ class PGOldResultAPIView(APIView):
                 profile, _ = PGOldStudentProfile.objects.update_or_create(**lookup, defaults={k: v for k, v in student_data.items() if v is not None})
 
             # --- PHASE 2: Update Profile Fields (if provided) ---
-            profile_fields = ['student_name', 'fathers_name', 'mothers_name', 'pg_faculty', 'pg_department', 
-                            'pg_degree', 'pg_program', 'student_name_hindi', 'final_result', 'gpa', 'cgpa', 'total_percentage']
+            profile_fields = ['student_name', 'fathers_name', 'mothers_name', 'student_name_hindi', 'final_result', 'gpa', 'cgpa', 'total_percentage']
             
             profile_updated = False
             for field in profile_fields:
@@ -511,9 +516,19 @@ class PGOldResultAPIView(APIView):
         
         query = PGOldResult.objects.all()
         if roll_no:
-            query = query.filter(college_roll_no=roll_no)
+            # Find student profile first, then get results
+            student_profile = PGOldStudentProfile.objects.filter(roll_no=roll_no).first()
+            if student_profile:
+                query = query.filter(student_profile=student_profile)
+            else:
+                query = query.none()
         else:
-            query = query.filter(college_reg_no=reg_no)
+            # Find student profile first, then get results
+            student_profile = PGOldStudentProfile.objects.filter(registration_no=reg_no).first()
+            if student_profile:
+                query = query.filter(student_profile=student_profile)
+            else:
+                query = query.none()
             
         if semester:
             query = query.filter(semester_code=semester)
@@ -541,7 +556,7 @@ class PGResultCalculatorView(APIView):
     """
     Calculate PG results from ESE and CIA data and generate marksheet
     """
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         """
@@ -751,7 +766,7 @@ class PGOldStudentProfileAPIView(APIView):
     """
     API view to manage PG student profiles
     """
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         """
@@ -816,7 +831,7 @@ class PGOldStudentProfileAPIView(APIView):
 
 
 class PGoldprofilecount(APIView):
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     def get(self, request):
         try:
             profile_count = PGOldStudentProfile.objects.count()
