@@ -13,7 +13,7 @@ from .serializers import (
     PGOldResultSerializer, StudentInfoSerializer, SubjectDetailSerializer, 
     PGOldStudentProfileSerializer, PGExamMasterDumpSerializer
 )
-
+from accounts.permissions import IsUniversityAdmin
 from .services.result_calculator import (
     calculate_pg_result, 
     get_pg_old_result_for_pdf,
@@ -27,7 +27,7 @@ class PGOldResultAPIView(APIView):
     """
     API view to get and create PG old results by roll number or registration number
     """
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     
     
     def get(self, request):
@@ -556,7 +556,7 @@ class PGResultCalculatorView(APIView):
     """
     Calculate PG results from ESE and CIA data and generate marksheet
     """
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         """
@@ -766,7 +766,7 @@ class PGOldStudentProfileAPIView(APIView):
     """
     API view to manage PG student profiles
     """
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     
     def get(self, request):
         """
@@ -831,7 +831,7 @@ class PGOldStudentProfileAPIView(APIView):
 
 
 class PGoldprofilecount(APIView):
-    permission_classes = []
+    permission_classes = [IsUniversityAdmin]
     def get(self, request):
         try:
             profile_count = PGOldStudentProfile.objects.count()
