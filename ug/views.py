@@ -157,3 +157,55 @@ class UGAdmitCardTestView(View):
         response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
         response["Content-Disposition"] = 'inline; filename="test_admit_card.pdf"'
         return response
+
+class UGRollSheetPDFView(View):
+    """
+    Generates and returns Exam Roll Sheet PDF for UG.
+    Query params: exam_uid, college_uid
+    """
+    def get(self, request):
+        from colleges.models import College
+        from .models import UGExam
+        from .utils.roll_sheet_pdf import generate_ug_roll_sheet_pdf
+
+        exam_uid = request.GET.get("exam_uid")
+        college_uid = request.GET.get("college_uid")
+
+        if not all([exam_uid, college_uid]):
+            return HttpResponse(
+                "exam_uid and college_uid are required",
+                status=400,
+                content_type="text/plain"
+            )
+
+        exam = get_object_or_404(UGExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+
+        pdf_content = generate_ug_roll_sheet_pdf(
+            exam=exam,
+            college=college
+        )
+
+        if not pdf_content:
+            return HttpResponse(
+                f"Failed to generate Roll Sheet for {college.name}. "
+                f"Ensure students are registered for this exam.",
+                status=404,
+                content_type="text/plain"
+            )
+
+        # inline / download
+        download = request.GET.get("download", "false").lower() == "true"
+        disposition = "attachment" if download else "inline"
+
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+
+        safe_college_name = "".join(c if c.isalnum() else "_" for c in college.name)
+
+        response["Content-Disposition"] = (
+            f'{disposition}; '
+            f'filename="UG_Roll_Sheet_{safe_college_name}_'
+            f'{exam.semester}_{exam.session}.pdf"'
+        )
+
+        return response

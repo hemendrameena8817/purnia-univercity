@@ -79,7 +79,7 @@ def generate_ug_admit_card_pdf(student, exam):
         paper_name = s.exam_subject.course_name if s.exam_subject else (s.json_data.get('subject_name') if s.json_data else "General Paper")
         print(f"  - MATCHED: {s.exam_subject.paper_code if s.exam_subject else 'No Code'} | {paper_name} | {s.exam_date}")
 
-    # 4. Prepare Context - MIRROR MCA STRUCTURE
+    # 4. Prepare Context
     university_logo_b64 = ""
     base_static_path = os.path.join(settings.BASE_DIR, 'ug', 'static', 'ug', 'images')
     logo_path = os.path.join(base_static_path, 'purnea-logo.png')
