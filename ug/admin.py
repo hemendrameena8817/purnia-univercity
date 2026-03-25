@@ -208,7 +208,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     )
     
     # Filters for easy navigation
-    list_filter = ('session','semester', 'college_code','label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass','is_cia_filled', ExamResultFilter)
+    list_filter = ('session','semester', 'college_code','label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass','is_cia_filled', 'course_name', ExamResultFilter)
     
     # Search by student registration number AND name
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
@@ -530,35 +530,52 @@ class UGExamAdmin(admin.ModelAdmin):
 
 @admin.register(UGExamCenterMapping)
 class UGExamCenterMappingAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'center', 'created_at')
+    list_display = ('exam', 'center', 'get_attached_colleges', 'created_at')
+    list_filter = ('exam', 'center')
+    filter_horizontal = ('attached_colleges',)
+
+    @admin.display(description='Attached Colleges')
+    def get_attached_colleges(self, obj):
+        colleges = obj.attached_colleges.all()
+        return ", ".join([c.name for c in colleges]) if colleges else "-"
     list_filter = ('exam',)
     search_fields = ('exam__name', 'center__name')
     raw_id_fields = ('exam', 'center')
     ordering = ('-created_at',)
     
+class ExamDateFilter(admin.SimpleListFilter):
+    title = 'Exam Date'
+    parameter_name = 'exam_date'
+
+    def lookups(self, request, model_admin):
+        # Get distinct dates from the DB
+        dates = model_admin.model.objects.values_list('exam_date', flat=True).distinct().order_by('exam_date')
+        return [(str(d), d.strftime('%d %b, %Y') if d else 'No Date') for d in dates if d]
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(exam_date=self.value())
+        return queryset
+
 @admin.register(UGExamSchedule)
 class UGExamScheduleAdmin(admin.ModelAdmin):
     list_display = (
         'exam',
         'exam_subject',
         'get_department_names',
-        'get_mjc_names',
         'exam_type',
         'exam_date',
-        'exam_time',
         'sitting'
     )
 
-    list_editable = ('exam_date', 'exam_time', 'sitting', 'exam_type')
+    list_editable = ('exam_date', 'sitting', 'exam_type')
 
     # 🔥 Better filters
     list_filter = (
         'exam',
+        ExamDateFilter,
         'sitting',
         'department',
-        'mjc',
-        # 'exam_subject',
-        # ('exam_date', admin.DateFieldListFilter),  # already correct
     )
 
     # 🔥 Add date hierarchy (BEST for date filtering UX)
@@ -569,14 +586,13 @@ class UGExamScheduleAdmin(admin.ModelAdmin):
         'department__name',
         'mjc__name',
         'exam_subject',
-        'exam_time'
     )
 
     raw_id_fields = ('exam','exam_subject')
     filter_horizontal = ('department', 'mjc')
 
-    # 🔥 CLEAN ORDERING (no hack needed if time is proper)
-    ordering = ('exam_date', 'exam_time')
+    # 🔥 CLEAN ORDERING 
+    ordering = ('exam_date','sitting')
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -587,9 +603,5 @@ class UGExamScheduleAdmin(admin.ModelAdmin):
         depts = obj.department.all().order_by('name')
         return ", ".join([d.code or d.name for d in depts]) if depts else "-"
 
-    @admin.display(description='MJC Subjects')
-    def get_mjc_names(self, obj):
-        mjcs = obj.mjc.all().order_by('name')
-        return ", ".join([m.code or m.name for m in mjcs]) if mjcs else "-"
 
 #=============End Admit Card Genrate Models Registration================

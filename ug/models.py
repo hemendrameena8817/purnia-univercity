@@ -738,7 +738,9 @@ class UGExamCenterMapping(models.Model):
     center = models.ForeignKey(
         'colleges.College',
         on_delete=models.CASCADE,
-        related_name='ug_as_center_mappings'
+        related_name='ug_as_center_mappings',
+        null=True,
+        blank=True
     )
     # Colleges whose students will go to this center
     attached_colleges = models.ManyToManyField(
@@ -755,7 +757,9 @@ class UGExamCenterMapping(models.Model):
         unique_together = ('exam', 'center')
 
     def __str__(self):
-        return f"{self.exam.name} @ {self.center.name}"
+        center_name = self.center.name if self.center else "N/A"
+        exam_name = self.exam.name if self.exam else "N/A"
+        return f"{exam_name} @ {center_name}"
 
 class UGExamSchedule(models.Model):
     """
