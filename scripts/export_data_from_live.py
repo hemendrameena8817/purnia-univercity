@@ -11,17 +11,17 @@ import pandas as pd
 from django.http import HttpResponse
 from django.db.models import Count
 
-# 👉 SemesterRegistration model import करना होगा - यह check करें कि यह किस app में है
-try:
-    from pgoldresult.models import SemesterRegistration
-except ImportError:
-    try:
-        from pg.models import SemesterRegistration
-    except ImportError:
-        from accounts.models import SemesterRegistration
+# # 👉 SemesterRegistration model import करना होगा - यह check करें कि यह किस app में है
+# try:
+#     from pgoldresult.models import SemesterRegistration
+# except ImportError:
+#     try:
+#         from pg.models import SemesterRegistration
+#     except ImportError:
+#         from accounts.models import SemesterRegistration
 
 from openpyxl import Workbook
-from ug.models import ExamRegistration
+from ug.models import ExamRegistration, SemesterRegistration
 from pg.models import PGExamRegistration
 
 
