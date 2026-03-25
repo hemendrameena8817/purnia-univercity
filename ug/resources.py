@@ -11,44 +11,6 @@ from university.models import University
 from colleges.models import College
 from accounts.models import UserAccount
 
-class CourseStructureWidget(ForeignKeyWidget):
-    """
-    Custom widget for CourseStructure lookup in UGExamScheduleResource.
-    Filters by paper_code, course_name, course_type, course_code, and max_marks.
-    """
-    def clean(self, value, row=None, **kwargs):
-        if not value:
-            return None
-        
-        # Normalize the primary lookup value (paper_code)
-        val = str(value).strip()
-        query = Q(paper_code__iexact=val)
-        
-        # Add additional filters from row data if present
-        if row:
-            # Handle both hyphenated/underscore and space variations
-            c_name = row.get('course_name') or row.get('Course name') or row.get('Course Name')
-            c_type = row.get('course_type') or row.get('Course type') or row.get('Course Type')
-            c_code = row.get('course_code') or row.get('Course code') or row.get('Course Code')
-            m_marks = row.get('max_marks') or row.get('Max marks') or row.get('Max Marks')
-
-            if c_name: query &= Q(course_name__iexact=str(c_name).strip())
-            if c_type: query &= Q(course_type__iexact=str(c_type).strip())
-            if c_code: query &= Q(course_code__iexact=str(c_code).strip())
-            if m_marks: 
-                try:
-                    query &= Q(max_marks=float(m_marks))
-                except (ValueError, TypeError):
-                    pass
-            
-        try:
-            res = self.model.objects.filter(query).last()
-            if not res:
-                return self.model.objects.filter(paper_code__iexact=val).last()
-            return res
-        except Exception:
-            return None
-
 class UGFacultyResource(resources.ModelResource):
     university = fields.Field(
         column_name='university',
@@ -393,32 +355,20 @@ class UGExamScheduleResource(resources.ModelResource):
         attribute='department',
         widget=ManyToManyWidget(UGDepartment, field='code')
     )
-    exam_subject = fields.Field(
-        column_name='paper_code',
-        attribute='exam_subject',
-        widget=CourseStructureWidget(CourseStructure, 'paper_code')
-    )
     mjc = fields.Field(
         column_name='mjc_department_codes',
         attribute='mjc',
         widget=ManyToManyWidget(UGDepartment, field='code')
     )
     
-    # Export-only fields from CourseStructure for accurate re-import matching
-    course_name = fields.Field(attribute='exam_subject__course_name', column_name='course_name', readonly=True)
-    course_type = fields.Field(attribute='exam_subject__course_type', column_name='course_type', readonly=True)
-    course_code = fields.Field(attribute='exam_subject__course_code', column_name='course_code', readonly=True)
-    max_marks = fields.Field(attribute='exam_subject__max_marks', column_name='max_marks', readonly=True)
-
     class Meta:
         model = UGExamSchedule
         import_id_fields = ('uid',)
         fields = (
-            'uid', 'exam', 'department', 'exam_type', 'exam_subject', 
+            'uid', 'exam', 'department', 'exam_type', 
             'mjc', 'exam_date', 'exam_time', 'sitting', 'json_data'
         )
         export_order = (
-            'uid', 'exam', 'department', 'mjc', 'exam_subject', 
-            'course_name', 'course_type', 'course_code', 'max_marks',
+            'uid', 'exam', 'department', 'mjc', 
             'exam_type', 'exam_date', 'exam_time', 'sitting'
         )
