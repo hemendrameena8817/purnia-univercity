@@ -1,5 +1,6 @@
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget, ManyToManyWidget
+from django.db.models import Q
 from .models import (
     UGFaculty, UGDepartment, UGDegree, UGProgram, UGBatch, UGStudentProfile,
     CourseStructure, StudentCourseAssessment, SemesterRegistration, ExamRegistration,
@@ -20,37 +21,30 @@ class CourseStructureWidget(ForeignKeyWidget):
             return None
         
         # Normalize the primary lookup value (paper_code)
-        value = str(value).strip()
-        from django.db.models import Q
-        filters = Q(paper_code__iexact=value)
+        val = str(value).strip()
+        query = Q(paper_code__iexact=val)
         
-        # Add additional filters from row data with robust key matching
+        # Add additional filters from row data if present
         if row:
-            def get_val(keys):
-                for k in keys:
-                    if k in row: return str(row[k]).strip()
-                return None
+            # Handle both hyphenated/underscore and space variations
+            c_name = row.get('course_name') or row.get('Course name') or row.get('Course Name')
+            c_type = row.get('course_type') or row.get('Course type') or row.get('Course Type')
+            c_code = row.get('course_code') or row.get('Course code') or row.get('Course Code')
+            m_marks = row.get('max_marks') or row.get('Max marks') or row.get('Max Marks')
 
-            # Attempt to get values using various possible header formats
-            c_name = get_val(['Course name', 'course_name', 'Course Name'])
-            c_type = get_val(['Course type', 'course_type', 'Course Type'])
-            c_code = get_val(['Course code', 'course_code', 'Course Code'])
-            m_marks = get_val(['Max marks', 'max_marks', 'Max Marks', 'Marks'])
-
-            if c_name: filters &= Q(course_name__iexact=c_name)
-            if c_type: filters &= Q(course_type__iexact=c_type)
-            if c_code: filters &= Q(course_code__iexact=c_code)
+            if c_name: query &= Q(course_name__iexact=str(c_name).strip())
+            if c_type: query &= Q(course_type__iexact=str(c_type).strip())
+            if c_code: query &= Q(course_code__iexact=str(c_code).strip())
             if m_marks: 
                 try:
-                    filters &= Q(max_marks=float(m_marks))
-                except ValueError:
+                    query &= Q(max_marks=float(m_marks))
+                except (ValueError, TypeError):
                     pass
             
         try:
-            res = self.model.objects.filter(filters).last()
+            res = self.model.objects.filter(query).last()
             if not res:
-                # Fallback: ignore other filters if no match found with strict matching
-                return self.model.objects.filter(paper_code__iexact=value).last()
+                return self.model.objects.filter(paper_code__iexact=val).last()
             return res
         except Exception:
             return None
@@ -421,11 +415,10 @@ class UGExamScheduleResource(resources.ModelResource):
         import_id_fields = ('uid',)
         fields = (
             'uid', 'exam', 'department', 'exam_type', 'exam_subject', 
-            'mjc', 'exam_date', 'exam_time', 'sitting', 'json_data',
-            'course_name', 'course_type', 'course_code', 'max_marks'
+            'mjc', 'exam_date', 'exam_time', 'sitting', 'json_data'
         )
         export_order = (
-            'uid', 'exam', 'department', 'mjc', 'paper_code', 
+            'uid', 'exam', 'department', 'mjc', 'exam_subject', 
             'course_name', 'course_type', 'course_code', 'max_marks',
             'exam_type', 'exam_date', 'exam_time', 'sitting'
         )
