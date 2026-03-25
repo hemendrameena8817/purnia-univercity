@@ -123,12 +123,13 @@ class UGStudentProfileAdmin(ImportExportModelAdmin):
 @admin.register(CourseStructure)
 class CourseStructureAdmin(ImportExportModelAdmin):
     resource_class = CourseStructureResource
-    list_display = ('id','course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
-    list_editable = ('course_name','label', 'department', 'course_type', 'course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
+    list_display = ('id','course_name','label', 'department', 'course_type', 'course_code', 'new_course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
+    list_editable = ('course_name','label', 'department', 'course_type', 'course_code', 'new_course_code', 'paper_code', 'semester', 'max_marks','min_marks', 'max_credit')
     list_filter = ('course_type','label', 'semester', 'course_code', 'department', )
     search_fields = ('course_name', 'course_short_name', 'course_code', 'department__name')
     ordering = ('department', 'semester', 'course_code')
     raw_id_fields = ('department',)
+    fields = ('course_name', 'course_short_name', 'department', 'course_type', 'course_code', 'new_course_code', 'paper_code', 'max_credit', 'max_marks', 'min_marks', 'description', 'label', 'semester', 'batch', 'json_data')
 
 
 """
@@ -193,7 +194,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Display all marks and calculation fields directly from database
     # Display all marks and calculation fields directly from database
     list_display = (
-        'id', 'student', 'semester', 'paper_code', 'label','course_code','course_type',
+        'id', 'student', 'semester', 'paper_code', 'label','course_code','new_course_code','course_type',
         # Individual
         'ind_max_marks', 'ind_pass_marks', 'ind_is_absent', 'ind_marks_obtained', 
         'ind_grace_obtained', 'ind_final_marks_obtained', 'ind_is_pass',
@@ -252,7 +253,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Organized fieldsets for detail view
     fieldsets = (
         ('Basic Information', {
-            'fields': ('student', 'semester', 'paper_code', 'course_code', 'course_type','course_name', 'label')
+            'fields': ('student', 'semester', 'paper_code', 'course_code', 'new_course_code', 'course_type','course_name', 'label')
         }),
         ('Individual Assessment (CIA/ESE)', {
             'fields': (
