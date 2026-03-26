@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import UGStudentProfile, UGDepartment, UGDegree, UGProgram
+from .models import UGStudentProfile, UGDepartment, UGDegree, UGProgram, UGExam
 from colleges.models import College
 
 
@@ -29,6 +29,18 @@ class UGProgramSerializer(serializers.ModelSerializer):
     class Meta:
         model = UGProgram
         fields = ['uid', 'name', 'short_name']
+
+
+class UGExamSerializer(serializers.ModelSerializer):
+    """Serializer for UGExam model."""
+    class Meta:
+        model = UGExam
+        fields = [
+            'uid', 'name', 'semester', 'session', 
+            'exam_month_year', 'publication_date', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['uid', 'created_at', 'updated_at']
 
 
 class UGStudentProfileSerializer(serializers.ModelSerializer):
