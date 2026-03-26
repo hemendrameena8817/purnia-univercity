@@ -417,10 +417,16 @@
       <!-- SIGNATURES -->
       <table class="signatures-table" style="width: 100%; margin-top: 15px;">
         <tr>
-          <td class="sig-left" style="width: 50%; vertical-align: bottom;">
+          <td class="sig-left" style="width: 33%; vertical-align: bottom;">
             <div class="sig-line" style="padding-bottom: 5px;">Sig. & Seal of the Principal</div>
           </td>
-          <td class="sig-right" style="width: 50%; vertical-align: bottom; text-align: right;">
+          <td style="width: 34%; text-align: center; vertical-align: bottom;">
+            {% if qr_code_image %}
+            <img src="{{ qr_code_image }}" alt="QR Code" 
+                 style="width: 80px; height: 80px; display: block; margin: 0 auto 5px auto;" />
+            {% endif %}
+          </td>
+          <td class="sig-right" style="width: 33%; vertical-align: bottom; text-align: right;">
             {% if controller_signature %}
             <div style="margin-bottom: 5px; text-align: right; margin-right: 30px;">
               <img
@@ -468,7 +474,7 @@
           उत्तरपुस्तिका पहचानी जा सके।
         </p>
         <p>
-          <span class="hindi-text">7.</span> OMR <span class="hindi-text">भरने के लिए</span> HB <span class="hindi-text">पेंसिल का उपयोग अनिवार्य है।</span>
+          <span>7.</span> OMR <span class="hindi-text">भरने के लिए</span> HB <span class="hindi-text">पेंसिल का उपयोग अनिवार्य है।</span>
         </p>
         <p class="hindi-text">
           8. परीक्षा में केवल काले और नीले बॉलपेन का ही उपयोग करें।
