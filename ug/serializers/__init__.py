@@ -7,6 +7,7 @@ from ..base_serializers import (
     UGDegreeSerializer,
     UGProgramSerializer,
     UGStudentProfileSerializer,
+    UGExamSerializer,
 )
 
 # Import registration serializers
@@ -30,6 +31,7 @@ __all__ = [
     'UGDegreeSerializer',
     'UGProgramSerializer',
     'UGStudentProfileSerializer',
+    'UGExamSerializer',
     # Registration serializers
     'CourseOptionSerializer',
     'CourseGroupSerializer',
