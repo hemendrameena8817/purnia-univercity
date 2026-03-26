@@ -98,6 +98,13 @@
       font-size: 8.5pt;
     }
 
+    .roll-sheet-table .dept-col {
+      width: 100px;
+      font-size: 8pt;
+      text-align: left;
+      padding-left: 4px;
+    }
+
     .rotate-text {
       display: block;
       font-size: 8.5pt;
@@ -251,6 +258,7 @@
           <th class="student-name">Name</th>
           <th class="roll-col">Roll No</th>
           <th class="reg-col">Reg No</th>
+          <th class="dept-col">Department</th>
           {% for subject in subjects %}
           <th class="subject-col-header">
             <div class="rotate-text">
@@ -267,6 +275,7 @@
           <td class="student-name">{{ student_row.name|upper }}</td>
           <td class="roll-col">{{ student_row.roll_no }}</td>
           <td class="reg-col">{{ student_row.registration_no }}</td>
+          <td class="dept-col">{{ student_row.department_name|upper }}</td>
           {% for mark in student_row.subjects_marked %}
           <td class="subject-col">
             {% if mark == "-" %}
@@ -279,7 +288,7 @@
         </tr>
         {% empty %}
         <tr>
-          <td colspan="{{ subjects|length|add:4 }}" style="text-align: center; padding: 20px">
+          <td colspan="{{ subjects|length|add:5 }}" style="text-align: center; padding: 20px">
             No students registered for this exam.
           </td>
         </tr>

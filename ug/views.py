@@ -181,9 +181,12 @@ class UGRollSheetPDFView(View):
         exam = get_object_or_404(UGExam, uid=exam_uid)
         college = get_object_or_404(College, uid=college_uid)
 
+        department_uid = request.GET.get("department_uid")
+        
         pdf_content = generate_ug_roll_sheet_pdf(
             exam=exam,
-            college=college
+            college=college,
+            department_uid=department_uid
         )
 
         if not pdf_content:

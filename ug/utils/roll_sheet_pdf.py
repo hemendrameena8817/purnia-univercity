@@ -50,21 +50,29 @@ def get_base64_image(image_field):
     except Exception:
         return ""
 
-def generate_ug_roll_sheet_pdf(exam, college):
+def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
     """
     Generates Exam Roll Sheet PDF for UG.
     Filters students by college and exam (via semester & session).
     Header includes all papers scheduled for this exam.
+    Optional: Filters by department_uid.
     """
     sem_int = get_sem_integer(exam.semester)
     print(f"{sem_int = }")
     session_str = str(exam.session or "").strip()
     print(f"{session_str = }")
+    
     # 1. Fetch Exam Registrations
+    filters = {
+        'student__college': college,
+        'sem': sem_int,
+        'session__iexact': session_str,
+    }
+    if department_uid:
+        filters['student__major_course__uid'] = department_uid
+
     registrations = ExamRegistration.objects.filter(
-        student__college=college,
-        sem=sem_int,
-        session__iexact=session_str,
+        **filters
     ).select_related(
         'student', 'student__batch', 'student__program', 'student__major_course'
     ).prefetch_related('assessment').order_by('student__roll_no', 'student__registration_no')
@@ -90,9 +98,17 @@ def generate_ug_roll_sheet_pdf(exam, college):
     # This list defines which columns appear and in what order
     category_order = ['MJC', 'MIC', 'SEC', 'VAC', 'MDC', 'AEC']
     
-    # Find which categories actually exist in student metadata for this exam
+    # IMPORTANT: To keep the table structure consistent, we find categories 
+    # across ALL students registered for this exam in the college, 
+    # even if we are currently filtering for one department.
+    college_registrations = ExamRegistration.objects.filter(
+        student__college=college,
+        sem=sem_int,
+        session__iexact=session_str,
+    )
+    
     found_types = StudentCourseAssessment.objects.filter(
-        exam_registrations__in=registrations,
+        exam_registrations__in=college_registrations,
         label='ESE-Theory'
     ).values_list('course_type', flat=True).distinct()
     
@@ -123,6 +139,7 @@ def generate_ug_roll_sheet_pdf(exam, college):
             "name": f"{student.first_name} {student.last_name or ''}".strip().upper(),
             "roll_no": student.roll_no or "-",
             "registration_no": student.registration_no or "-",
+            "department_name": student.major_course.name if student.major_course else "-",
             "subjects_marked": row_subjects,
         })
  

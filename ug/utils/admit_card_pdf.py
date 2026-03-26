@@ -179,7 +179,7 @@ def generate_ug_admit_card_pdf(student, exam):
             # Prepare row data
             context['schedules'].append({
                 'category': category or "-",
-                'code': ass.paper_code or (sch.exam_subject.paper_code if sch and sch.exam_subject else "-"),
+                'code': ass.new_course_code or "",
                 'name': course_name or (sch.exam_subject.course_name if sch and sch.exam_subject else (sch.json_data.get('subject_name') if sch and sch.json_data else "-")),
                 'exam_time': sch.exam_time if sch else "-",
                 'exam_date': sch.exam_date if sch else "-",
