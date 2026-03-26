@@ -16,6 +16,7 @@ from ug.models import CourseStructure, StudentCourseAssessment
 
 TARGET_SEMESTER = '1ST'
 TARGET_SESSION = '2025-26'
+TARGET_COURSE_TYPES = {'mjc', 'mic', 'mdc'}
 
 
 
@@ -24,11 +25,22 @@ def normalize_text(value):
 
 
 
+def get_course_structure_semester_values(semester):
+    semester_text = str(semester or '').strip()
+    digits = ''.join(ch for ch in semester_text if ch.isdigit())
+    values = {semester_text}
+    if digits:
+        values.add(digits)
+    return [value for value in values if value]
+
+
+
 def build_course_structure_mapping():
     mapping_candidates = defaultdict(set)
+    semester_values = get_course_structure_semester_values(TARGET_SEMESTER)
 
     queryset = CourseStructure.objects.filter(
-        semester=TARGET_SEMESTER,
+        semester__in=semester_values,
     ).exclude(
         course_name__isnull=True,
     ).exclude(
@@ -45,7 +57,7 @@ def build_course_structure_mapping():
 
     for row in queryset.iterator(chunk_size=500):
         key = (normalize_text(row.course_type), row.department_id)
-        if not key[0]:
+        if not key[0] or key[0] not in TARGET_COURSE_TYPES or row.department_id is None:
             continue
         mapping_candidates[key].add((row.course_name.strip(), row.id, row.label or ''))
 
@@ -77,6 +89,18 @@ def print_ambiguous_mapping(ambiguous_mapping):
 
 
 
+def resolve_ambiguous_candidate_names(current_course_name, candidate_names):
+    current_name_key = normalize_text(current_course_name)
+    if not current_name_key:
+        return None
+
+    matches = [candidate_name for candidate_name in candidate_names if normalize_text(candidate_name) == current_name_key]
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+
 def run(dry_run=False):
     print('\n' + '=' * 100)
     print('UPDATE STUDENT ASSESSMENT COURSE NAMES FROM COURSE STRUCTURE')
@@ -87,6 +111,7 @@ def run(dry_run=False):
         print('MODE: LIVE UPDATE')
     print(f'Semester                               {TARGET_SEMESTER}')
     print(f'Session                                {TARGET_SESSION}')
+    print(f'CourseStructure semester values        {", ".join(get_course_structure_semester_values(TARGET_SEMESTER))}')
 
     resolved_mapping, ambiguous_mapping = build_course_structure_mapping()
     print(f'Unique course structure keys           {len(resolved_mapping):,}')
@@ -96,6 +121,7 @@ def run(dry_run=False):
     queryset = StudentCourseAssessment.objects.filter(
         semester=TARGET_SEMESTER,
         session=TARGET_SESSION,
+        course_type__in=['MJC', 'MIC', 'MDC'],
     ).select_related('department').only(
         'id',
         'course_name',
@@ -115,6 +141,8 @@ def run(dry_run=False):
         'missing_department': 0,
         'mapping_not_found': 0,
         'ambiguous_mapping': 0,
+        'resolved_from_current_name': 0,
+        'skipped_non_target_course_type': 0,
     }
     updates = []
     missing_rows = []
@@ -131,6 +159,10 @@ def run(dry_run=False):
             )
             continue
 
+        if course_type_key not in TARGET_COURSE_TYPES:
+            stats['skipped_non_target_course_type'] += 1
+            continue
+
         if row.department_id is None:
             stats['missing_department'] += 1
             missing_rows.append(
@@ -140,6 +172,18 @@ def run(dry_run=False):
 
         key = (course_type_key, row.department_id)
         if key in ambiguous_mapping:
+            target_course_name = resolve_ambiguous_candidate_names(row.course_name, ambiguous_mapping[key])
+            if target_course_name:
+                stats['resolved_from_current_name'] += 1
+                if (row.course_name or '').strip() == target_course_name:
+                    stats['already_correct'] += 1
+                    continue
+
+                row.course_name = target_course_name
+                updates.append(row)
+                stats['updated'] += 1
+                continue
+
             stats['ambiguous_mapping'] += 1
             ambiguous_rows.append(
                 f'id={row.id} | course_type={row.course_type or "-"} | department={getattr(row.department, "name", "-") or "-"} | label={row.label or "-"} | current_course_name={row.course_name or "-"} | candidate_names={", ".join(ambiguous_mapping[key])}'
@@ -188,16 +232,19 @@ def run(dry_run=False):
 
     if dry_run:
         print('\nDRY RUN: no changes saved')
+        print(f'ROWS THAT WOULD BE UPDATED             {len(updates):,}')
         return
 
     if not updates:
         print('\nNo updates needed')
+        print('ROWS UPDATED                           0')
         return
 
     with transaction.atomic():
         StudentCourseAssessment.objects.bulk_update(updates, ['course_name'], batch_size=500)
 
     print(f'\nUpdated {len(updates):,} StudentCourseAssessment rows')
+    print(f'ROWS UPDATED                           {len(updates):,}')
 
 
 
@@ -205,7 +252,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Update StudentCourseAssessment.course_name from CourseStructure using course_type and department for 1ST sem, 2025-26 session.'
+        description='Update StudentCourseAssessment.course_name from CourseStructure using department and course_type for MJC/MIC/MDC rows in 1ST sem, 2025-26 session.'
     )
     parser.add_argument('--dry-run', action='store_true', help='Preview changes without saving')
     args = parser.parse_args()
