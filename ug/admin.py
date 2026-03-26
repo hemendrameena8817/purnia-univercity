@@ -210,7 +210,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     )
     
     # Filters for easy navigation
-    list_filter = ('session','semester', 'college_code','label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass','is_cia_filled', 'course_name', ExamResultFilter)
+    list_filter = ('session','semester', 'college_code','course_code','label','batch', 'course_type', 'ind_is_absent', 'ind_is_pass','is_cia_filled', 'course_name', ExamResultFilter)
     
     # Search by student registration number AND name
     search_fields = ('student__registration_no', 'student__first_name', 'student__last_name', 
