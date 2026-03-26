@@ -207,7 +207,35 @@ def generate_ug_admit_card_pdf(student, exam):
     else:
         print("DEBUG: No ExamRegistration found for student, schedules list will be empty.")
 
-    # 5. Render & Generate
+    # 5. Generate QR Code
+    qr_code_image = None
+    try:
+        import qrcode
+        qr_data = (
+            f"Candidate Name: {context['student']['full_name']}\n"
+            f"Registration No: {context['student']['registration_no']}\n"
+            f"Roll No: {context['student']['roll_no']}\n"
+            f"Exam: {context['exam']['name']}\n"
+            f"College: {context['student']['college_name']}\n"
+            f"Center: {context['center_name']}\n"
+            f"Exam Type: {context['status']}"
+        )
+
+        qr = qrcode.QRCode(version=1, box_size=4, border=2)
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        qr_img = qr.make_image(fill_color="black", back_color="white")
+
+        buf = BytesIO()
+        qr_img.save(buf, format='PNG')
+        qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+        qr_code_image = f"data:image/png;base64,{qr_b64}"
+    except Exception as e:
+        print(f"DEBUG: QR code generation failed: {e}")
+
+    context['qr_code_image'] = qr_code_image
+
+    # 6. Render & Generate
     html_string = render_to_string('ug/admit_card.html', context)
     buffer = BytesIO()
     HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf(target=buffer)
