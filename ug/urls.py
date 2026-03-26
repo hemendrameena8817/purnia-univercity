@@ -22,7 +22,10 @@ from ug.api.payments import (
     UGRegistrationStatusView,
     UGExamRegistrationCardPDFView,
 )
-from .views import UGAdmitCardPDFView, UGBulkAdmitCardPDFView, UGAdmitCardTestView, UGRollSheetPDFView
+from .views import (
+    UGAdmitCardPDFView, UGBulkAdmitCardPDFView, UGAdmitCardTestView, 
+    UGRollSheetPDFView, UGExamListView
+)
 
 app_name = 'ug'
 
@@ -93,4 +96,6 @@ urlpatterns = [
     path('admit-card/test/', UGAdmitCardTestView.as_view(), name='ug-admit-card-test'),
     # Roll Sheet
     path('roll-sheet/pdf/', UGRollSheetPDFView.as_view(), name='ug-roll-sheet-pdf'),
+    # UG Exams List
+    path('exams/', UGExamListView.as_view(), name='ug-exam-list'),
 ]

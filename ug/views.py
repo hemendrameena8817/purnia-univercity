@@ -209,3 +209,45 @@ class UGRollSheetPDFView(View):
         )
 
         return response
+
+
+class UGExamListView(APIView):
+    """
+    List UG Exams (active only) with optional filters: 
+    - name (string)
+    - semester (string)
+    - session (string)
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        from .base_serializers import UGExamSerializer
+        
+        exam_uid = request.query_params.get('uid')
+        if exam_uid:
+            exam = get_object_or_404(UGExam, uid=exam_uid, is_active=True)
+            serializer = UGExamSerializer(exam)
+            return Response(serializer.data)
+
+        # Only active exams
+        queryset = UGExam.objects.filter(is_active=True)
+
+        # Filters
+        name = request.query_params.get('name')
+        if name:
+            queryset = queryset.filter(name__icontains=name)
+
+        semester = request.query_params.get('semester')
+        if semester:
+            queryset = queryset.filter(semester__icontains=semester)
+
+        session = request.query_params.get('session')
+        if session:
+            queryset = queryset.filter(session__icontains=session)
+
+        # Order by most recent
+        queryset = queryset.order_by('-created_at')
+
+        serializer = UGExamSerializer(queryset, many=True)
+        return Response(serializer.data)
+
