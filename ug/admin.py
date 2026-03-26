@@ -36,7 +36,7 @@ class UGFacultyAdmin(ImportExportModelAdmin):
 @admin.register(UGDepartment)
 class UGDepartmentAdmin(ImportExportModelAdmin):
     resource_class = UGDepartmentResource
-    list_display = ('name', 'code', 'head_of_department', 'is_publish', 'created_at')
+    list_display = ('uid','name', 'code', 'head_of_department', 'is_publish', 'created_at')
     list_editable = ('is_publish',)
     list_filter = ('is_publish',)
     search_fields = ('name', 'code')
