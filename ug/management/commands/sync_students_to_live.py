@@ -9,6 +9,9 @@ Usage:
     # Sync from a text file (one reg no per line)
     python manage.py sync_students_to_live --file reg_nos.txt
 
+    # Sync all local UG student profiles
+    python manage.py sync_students_to_live --all
+
     # Dry run (no changes made)
     python manage.py sync_students_to_live --reg-nos 2024001 --dry-run
 
@@ -43,6 +46,11 @@ class Command(BaseCommand):
             type=str,
             help='Path to a text file with one registration number per line'
         )
+        group.add_argument(
+            '--all',
+            action='store_true',
+            help='Sync all local UG student profiles to live DB'
+        )
         parser.add_argument(
             '--dry-run',
             action='store_true',
@@ -53,9 +61,25 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options['dry_run']
 
+        from ug.models import UGStudentProfile
+
         # ── Collect registration numbers ──────────────────────────────────────
         if options['reg_nos']:
             reg_nos = [r.strip() for r in options['reg_nos'] if r.strip()]
+        elif options['all']:
+            local_reg_nos = list(
+                UGStudentProfile.objects.using('default')
+                .exclude(registration_no__isnull=True)
+                .exclude(registration_no='')
+                .values_list('registration_no', flat=True)
+                .order_by('registration_no')
+            )
+            live_reg_nos = set(
+                UGStudentProfile.objects.using('live')
+                .filter(registration_no__in=local_reg_nos)
+                .values_list('registration_no', flat=True)
+            )
+            reg_nos = [reg_no for reg_no in local_reg_nos if reg_no not in live_reg_nos]
         else:
             try:
                 with open(options['file'], 'r') as f:

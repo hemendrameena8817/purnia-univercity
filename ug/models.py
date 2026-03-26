@@ -296,6 +296,7 @@ class CourseStructure(models.Model):
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, help_text="Course Type")
     course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    new_course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Updated Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, help_text="Paper Code")
     max_credit = models.IntegerField(null=True, blank=True, help_text="Course Credit")
     max_marks = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Course Marks")
@@ -342,6 +343,7 @@ class StudentCourseAssessment(models.Model):
     )
     course_type = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Course Type")
     course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Course Code")
+    new_course_code = models.CharField(max_length=20, null=True, blank=True, help_text="Updated Course Code")
     paper_code = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Paper Code")
 
     semester = models.CharField(max_length=20, null=True, blank=True, db_index=True, help_text="Semester")
