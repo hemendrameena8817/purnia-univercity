@@ -127,8 +127,9 @@ def generate_ug_admit_card_pdf(student, exam):
 
     # Populate schedules from registered assessments
     if registration:
-        registered_assessments = registration.assessment.all()
-        print(f"DEBUG: Populating schedules for {registered_assessments.count()} assessments")
+        # Filter only ESE-Theory subjects as requested
+        registered_assessments = registration.assessment.filter(label__iexact='ESE-Theory')
+        print(f"DEBUG: Populating schedules for {registered_assessments.count()} ESE-Theory assessments")
         
         # 3. Process Assessments Step-by-Step (Unique by Category + Name)
         seen_subjects = set()
@@ -184,6 +185,25 @@ def generate_ug_admit_card_pdf(student, exam):
                 'exam_date': sch.exam_date if sch else "-",
                 'sitting': (sch.sitting if sch else "General") if sch else "-",
             })
+
+        # 4. Sort schedules according to Date (Ascending) and then Category Priority
+        order_priority = {
+            'MJC': 1, 'MIC': 2, 'SEC': 3, 'VAC': 4, 'MDC': 5, 'AEC': 6
+        }
+        
+        def get_sort_key(s):
+            # Primary: Date
+            dt = s['exam_date']
+            # Fallback for empty dates to keep them at the bottom
+            date_val = str(dt) if dt and dt != "-" else "9999-12-31"
+            
+            # Secondary: Category Priority
+            cat_str = str(s['category']).split('-')[0].strip().upper()
+            pri = order_priority.get(cat_str, 99)
+            
+            return (date_val, pri)
+
+        context['schedules'].sort(key=get_sort_key)
     else:
         print("DEBUG: No ExamRegistration found for student, schedules list will be empty.")
 

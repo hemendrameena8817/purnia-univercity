@@ -4,11 +4,21 @@ import base64
 from django.template.loader import render_to_string
 from weasyprint import HTML
 from django.conf import settings
+from django.db.models import Q
 from collections import OrderedDict
 from ..models import (
     UGStudentProfile, ExamRegistration, StudentCourseAssessment, 
-    UGExamCenterMapping, UGExamSchedule
+    UGExamCenterMapping, UGExamSchedule, CourseStructure
 )
+
+def wordwrap_br(text, words_per_line=4):
+    """Split a long string into chunks of N words joined by <br>."""
+    if not text: return ""
+    words = text.split()
+    lines = []
+    for i in range(0, len(words), words_per_line):
+        lines.append(" ".join(words[i:i + words_per_line]))
+    return "<br>".join(lines)
 
 def get_sem_integer(sem_str):
     """Helper to convert 'Semester-I', '1st', or '1' to integer 1."""
@@ -47,8 +57,9 @@ def generate_ug_roll_sheet_pdf(exam, college):
     Header includes all papers scheduled for this exam.
     """
     sem_int = get_sem_integer(exam.semester)
+    print(f"{sem_int = }")
     session_str = str(exam.session or "").strip()
-    
+    print(f"{session_str = }")
     # 1. Fetch Exam Registrations
     registrations = ExamRegistration.objects.filter(
         student__college=college,
@@ -57,22 +68,11 @@ def generate_ug_roll_sheet_pdf(exam, college):
     ).select_related(
         'student', 'student__batch', 'student__program', 'student__major_course'
     ).prefetch_related('assessment').order_by('student__roll_no', 'student__registration_no')
+    print(f"{registrations = }")
 
-    # Status check (prefer REGISTERED, but take others if needed)
-    reg_filtered = registrations.filter(status='REGISTERED')
-    if reg_filtered.exists():
-        registrations = reg_filtered
+    # All statuses (don't exclude pending/open etc. as requested)
+    # the registrations queryset remains unchanged from the initial filter
 
-    if not registrations.exists():
-        # Even more fallback: Try without strict session if session seems potentially different
-        # Sometimes session is stored as '2023-27' but requested as '2023-2027'
-        registrations = ExamRegistration.objects.filter(
-            student__college=college,
-            sem=sem_int
-        ).select_related(
-            'student', 'student__batch'
-        ).prefetch_related('assessment').order_by('student__roll_no')
-        
     if not registrations.exists():
         return None
 
@@ -86,57 +86,46 @@ def generate_ug_roll_sheet_pdf(exam, college):
     if center_mapping and center_mapping.center:
         center_name = center_mapping.center.name
 
-    # 3. Collect ALL scheduled papers for this exam (Header Subjects)
-    # Using UGExamSchedule to get official subjects for this exam
-    subjects_map = OrderedDict()
-    schedules = UGExamSchedule.objects.filter(exam=exam).select_related('exam_subject').order_by('exam_date', 'sitting')
+    # 3. Define Header Categories (Priority Order)
+    # This list defines which columns appear and in what order
+    category_order = ['MJC', 'MIC', 'SEC', 'VAC', 'MDC', 'AEC']
     
-    for sch in schedules:
-        if sch.exam_subject:
-            code = (sch.exam_subject.paper_code or "").strip().upper()
-            if code and code not in subjects_map:
-                subjects_map[code] = {
-                    "code": code,
-                    "course_name": sch.exam_subject.course_name or code,
-                    "course_type": sch.exam_type or ""
-                }
+    # Find which categories actually exist in student metadata for this exam
+    found_types = StudentCourseAssessment.objects.filter(
+        exam_registrations__in=registrations,
+        label='ESE-Theory'
+    ).values_list('course_type', flat=True).distinct()
     
-    # Fallback/Addition: Check if students have subjects NOT in schedule (rare but possible)
-    for reg in registrations:
-        for ass in reg.assessment.all():
-            code = (ass.paper_code or "").strip().upper()
-            if code and code not in subjects_map:
-                subjects_map[code] = {
-                    "code": code,
-                    "course_name": ass.course_name or code,
-                    "course_type": ass.course_type or ""
-                }
-                
-    # Final sorted subject list for header
-    subjects = list(subjects_map.values())
+    # Normalize and filter found types
+    found_types = [t.strip().upper() for t in found_types if t]
+    
+    # Final sorted headers: use ordered list first, then any extra ones alphabetically
+    active_headers = [cat for cat in category_order if cat in found_types]
+    others = sorted([t for t in found_types if t not in category_order])
+    active_headers.extend(others)
 
-    # 4. Prepare Student Row Data
+    # Convert to format expected by template
+    subjects = [{"course_name_html": h, "course_type": h} for h in active_headers]
+
+    # 4. Build Student Row Data
     student_data = []
     for reg in registrations:
         student = reg.student
-        # Get all paper codes this student is registered for in THIS registration
-        student_paper_codes = set(ass.paper_code.strip().upper() for ass in reg.assessment.all() if ass.paper_code)
+        
+        # Create a lookup: Category -> Subject Name (e.g., 'MJC' -> 'History of India')
+        assessments = reg.assessment.filter(label='ESE-Theory')
+        name_lookup = { (ass.course_type or "").strip().upper(): ass.course_name for ass in assessments }
 
-        # Map to header subjects: if student has it, keep code; else "-"
-        marked_subjects = []
-        for header_subj in subjects:
-            if header_subj['code'] in student_paper_codes:
-                marked_subjects.append(header_subj['code'])
-            else:
-                marked_subjects.append("-")
+        # For each column in the header, pick the student's course name or return "-"
+        row_subjects = [name_lookup.get(h, "-") for h in active_headers]
 
         student_data.append({
-            "name": f"{student.first_name} {student.last_name or ''}".strip(),
+            "name": f"{student.first_name} {student.last_name or ''}".strip().upper(),
             "roll_no": student.roll_no or "-",
             "registration_no": student.registration_no or "-",
-            "subjects_marked": marked_subjects,
+            "subjects_marked": row_subjects,
         })
-
+ 
     # 5. Context
     base_static_path = os.path.join(settings.BASE_DIR, 'ug', 'static', 'ug', 'images')
     controller_sig_path = os.path.join(base_static_path, 'controller-of-examination-signature.png')
@@ -154,9 +143,10 @@ def generate_ug_roll_sheet_pdf(exam, college):
         "college_code": college.college_code or college.center_code or "-",
         "center_name": center_name,
         "course_name": display_course,
-        "branch_name": first_student.major_course.name if first_student.major_course else "-",
+        # "branch_name": first_student.major_course.name if first_student.major_course else "-",
         "batch_name": first_student.batch.name if first_student.batch else "-",
         "year": exam.exam_month_year or "-",
+        "session": exam.session or "-",
         "subjects": subjects,
         "student_data": student_data,
         "controller_signature": controller_sig_b64,
