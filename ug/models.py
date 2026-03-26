@@ -631,6 +631,7 @@ class ExamRegistration(models.Model):
     json_data = models.JSONField(null=True, blank=True, help_text="JSON Data")
     created_at = models.DateTimeField(auto_now_add=True, help_text="Created At")
     updated_at = models.DateTimeField(auto_now=True, help_text="Updated At")
+    exam = models.ForeignKey("ug.UGExam", on_delete=models.CASCADE, null=True, blank=True)
 
     class Meta:
         verbose_name = 'Exam Registration'
