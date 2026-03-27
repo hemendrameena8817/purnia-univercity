@@ -92,7 +92,7 @@ urlpatterns = [
 
     # Admit Card APIs
     path('admit-card/pdf/', UGAdmitCardPDFView.as_view(), name='ug-admit-card-pdf'),
-    path('bulk-admit-card/pdf/', UGBulkAdmitCardPDFView.as_view(), name='ug-bulk-admit-card-pdf'),
+    # path('bulk-admit-card/pdf/', UGBulkAdmitCardPDFView.as_view(), name='ug-bulk-admit-card-pdf'),
     path('admit-card/test/', UGAdmitCardTestView.as_view(), name='ug-admit-card-test'),
     # Roll Sheet
     path('roll-sheet/pdf/', UGRollSheetPDFView.as_view(), name='ug-roll-sheet-pdf'),
