@@ -13,33 +13,49 @@ from .utils.admit_card_pdf import generate_ug_admit_card_pdf
 import os
 import base64
 from django.conf import settings
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
-class UGAdmitCardPDFView(View):
+class UGAdmitCardPDFView(APIView):
     """
     Generates and returns admit card PDF for a single UG student.
-    Query params: registration_no, exam_uid
+    Query params: registration_no (Staff only), exam_uid
     """
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
-        registration_no = request.GET.get("registration_no")
+        if not request.user.is_authenticated:
+             return HttpResponse("Access Denied: Please log in.", status=401)
+
         exam_uid = request.GET.get("exam_uid")
+        if not exam_uid:
+            return HttpResponse("Exam UID is required", status=400)
 
-        if not registration_no or not exam_uid:
-            return HttpResponse("Registration number and Exam UID are required", status=400)
+        # 1. ID is the Login Username (Registration Number)
+        registration_no = request.user.username
+        
+        # 2. Staff Override via query param
+        reg_no_param = request.GET.get("registration_no")
+        if reg_no_param:
+            registration_no = reg_no_param
 
+        # 3. Fetch Student
         student = get_object_or_404(UGStudentProfile, registration_no=registration_no)
-        exam = get_object_or_404(UGExam, uid=exam_uid)
 
+        exam = get_object_or_404(UGExam, uid=exam_uid)
         pdf_content = generate_ug_admit_card_pdf(student, exam)
 
         if not pdf_content:
-            return HttpResponse("Failed to generate PDF", status=500)
+            return HttpResponse("Student is NOT REGISTERED for this examination.", status=404)
 
-        # Check if user wants to force download or view inline
+        # 2. Determine Disposition (View inline vs Force Download)
         download = request.GET.get('download', 'false').lower() == 'true'
         disposition = 'attachment' if download else 'inline'
-
+        
+        safe_reg = student.registration_no.replace("/", "_")
         response = HttpResponse(pdf_content, content_type="application/pdf")
-        response["Content-Disposition"] = f'{disposition}; filename="admit_card_{registration_no}.pdf"'
+        response["Content-Disposition"] = f'{disposition}; filename="admit_card_{safe_reg}.pdf"'
         return response
 
 class UGBulkAdmitCardPDFView(APIView):

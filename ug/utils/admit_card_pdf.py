@@ -34,20 +34,18 @@ def generate_ug_admit_card_pdf(student, exam):
     # 1. Get Exam Registration to determine Exam Type
     sem_int = get_sem_integer(exam.semester)
     
+    # 1. Fetch Exam Registration (Strictly for the target Exam and REGISTERED status)
     registration = ExamRegistration.objects.filter(
         student=student,
-        sem=sem_int,
-        session=exam.session,
+        exam=exam,
+        status='REGISTERED'
     ).first()
     
-    # Fallback if specific sem match fails
     if not registration:
-        registration = ExamRegistration.objects.filter(
-            student=student,
-            session=exam.session,
-        ).first()
+        print(f"DEBUG: No REGISTERED ExamRegistration found for student {student.registration_no} and exam {exam.uid}")
+        return None
 
-    exam_type = registration.exam_type if registration else 'REGULAR'
+    exam_type = registration.exam_type
 
     # 2. Get Center Information
     center_mapping = UGExamCenterMapping.objects.filter(
