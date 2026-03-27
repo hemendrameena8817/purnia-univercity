@@ -172,7 +172,16 @@ def generate_ug_admit_card_pdf(student, exam):
 
             # --- SYSTEMATIC 3-STEP LOOKUP (No overrides) ---
             sch = None
+            subject_match = Q(exam_subject__course_name__iexact=course_name) | Q(exam_subject__paper_code=ass.paper_code)
             
+            if not sch and base_cat in ['AEC', 'VAC', 'SEC']:
+                sch = sch_qs.filter(
+                    department__isnull=True,
+                    mjc__isnull=True,
+                    exam_subject__isnull=False,
+                    exam_type__iexact=base_cat
+                ).filter(subject_match).last()
+
             # Rule 1: Dept exists, Subject & MJC are null (Condition: department match)
             if not sch and curr_dept_id:
                 sch = sch_qs.filter(
@@ -189,22 +198,16 @@ def generate_ug_admit_card_pdf(student, exam):
                     department__isnull=True,
                     exam_subject__isnull=False,
                     exam_type__iexact=base_cat
-                ).filter(
-                    Q(exam_subject__course_name__iexact=course_name) | 
-                    Q(exam_subject__paper_code=ass.paper_code)
-                ).last()
+                ).filter(subject_match).last()
 
             # Rule 3: MJC & Department are BOTH null, match strictly by Subject
             if not sch:
-                 sch = sch_qs.filter(
+                sch = sch_qs.filter(
                     department__isnull=True,
                     mjc__isnull=True,
                     exam_subject__isnull=False,
                     exam_type__iexact=base_cat
-                ).filter(
-                    Q(exam_subject__course_name__iexact=course_name) | 
-                    Q(exam_subject__paper_code=ass.paper_code)
-                ).last()
+                ).filter(subject_match).last()
 
             # if sch:
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
