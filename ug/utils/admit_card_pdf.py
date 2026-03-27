@@ -146,7 +146,8 @@ def generate_ug_admit_card_pdf(student, exam):
             
             # Step 2 & 3: Get Department object and ID
             # Use assessment's department if available
-            dept_obj = ass.department or student.department
+            # dept_obj = ass.department or student.department
+            dept_obj = student.department
             dept_id = dept_obj.id if dept_obj else None
 
             print(f"DEBUG: Processing {category} - {course_name} (Dept ID: {dept_id})")
