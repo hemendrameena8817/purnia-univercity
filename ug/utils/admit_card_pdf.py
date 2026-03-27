@@ -299,49 +299,31 @@ def generate_ug_admit_card_pdf(student, exam):
             else:
                 # Standard Subjects (MJC, MIC, MDC)
                 
-                # Rule 1: Specific Subject Match (Highest Priority)
-                if not sch and curr_dept_id:
-                    sch = find_best_subject_schedule(
-                        sch_qs.filter(
-                            mjc__id=curr_dept_id,
-                            department__isnull=True,
-                            exam_subject__isnull=False,
-                            exam_type__iexact=base_cat
-                        ),
-                        course_name,
-                        ass.paper_code,
-                        ass.new_course_code
-                    )
-
-                # Rule 2: Generic Dept-wide Group Slot (Fallback if no subject found)
+                # Check 1: Find EXACT schedule mapped to this specific Course (MJC/MIC/MDC)
                 if not sch and curr_dept_id:
                     sch = sch_qs.filter(
-                        department__id=curr_dept_id,
-                        mjc__isnull=True,
-                        exam_subject__isnull=True,
+                        mjc__id=curr_dept_id,
                         exam_type__iexact=base_cat
                     ).last()
 
-                # Rule 3: Catch-all common match
+                # Check 2: If Course mapping misses, fallback to the Student's real Department
+                if not sch and dept_id:
+                    sch = sch_qs.filter(
+                        department__id=dept_id,
+                        exam_type__iexact=base_cat
+                    ).last()
+
+                # Check 3: Final Resort, any schedule matching the category
                 if not sch:
-                    sch = find_best_subject_schedule(
-                        sch_qs.filter(
-                            department__isnull=True,
-                            mjc__isnull=True,
-                            exam_subject__isnull=False,
-                            exam_type__iexact=base_cat
-                        ),
-                        course_name,
-                        ass.paper_code,
-                        ass.new_course_code
-                    )
+                    sch = sch_qs.filter(
+                        exam_type__iexact=base_cat,
+                        department__isnull=True, 
+                        mjc__isnull=True
+                    ).last()
 
             # FALLBACK - If NO match is found anywhere
-            if not sch:
-                if curr_dept_id:
-                     sch = sch_qs.filter(department__id=curr_dept_id, mjc__isnull=True, exam_subject__isnull=True, exam_type__iexact=base_cat).last()
-                if not sch:
-                     sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_subject__isnull=True, exam_type__iexact=base_cat).last()
+            if not sch and dept_id:
+                sch = sch_qs.filter(department__id=dept_id, exam_type__iexact=base_cat).last()
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
             # else:
                 # print(f"  - NO SCHEDULE found for Category: {category}")
