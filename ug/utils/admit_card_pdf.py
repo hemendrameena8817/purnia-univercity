@@ -34,9 +34,14 @@ def normalize_course_name(value):
     value = re.sub(r'[^a-z0-9]+', ' ', value)
     return re.sub(r'\s+', ' ', value).strip()
 
-def find_best_subject_schedule(queryset, course_name, paper_code, allow_last_fallback=False):
+def find_best_subject_schedule(queryset, course_name, paper_code, new_course_code=None, allow_last_fallback=False):
     if paper_code:
         match = queryset.filter(exam_subject__paper_code=paper_code).last()
+        if match:
+            return match
+
+    if new_course_code:
+        match = queryset.filter(exam_subject__new_course_code=new_course_code).last()
         if match:
             return match
 
@@ -223,7 +228,8 @@ def generate_ug_admit_card_pdf(student, exam):
                         exam_type__iexact=base_cat
                     ),
                     course_name,
-                    ass.paper_code
+                    ass.paper_code,
+                    ass.new_course_code
                 )
 
             if not sch and base_cat in ['AEC', 'VAC', 'SEC']:
@@ -235,7 +241,8 @@ def generate_ug_admit_card_pdf(student, exam):
                         exam_type__iexact=base_cat
                     ),
                     course_name,
-                    ass.paper_code
+                    ass.paper_code,
+                    ass.new_course_code
                 )
 
             if not sch and curr_dept_id:
@@ -245,18 +252,6 @@ def generate_ug_admit_card_pdf(student, exam):
                     exam_subject__isnull=True,
                     exam_type__iexact=base_cat
                 ).last()
-
-            if not sch:
-                sch = find_best_subject_schedule(
-                    sch_qs.filter(
-                        department__isnull=True,
-                        mjc__isnull=True,
-                        exam_subject__isnull=False,
-                        exam_type__iexact=base_cat
-                    ),
-                    course_name,
-                    ass.paper_code
-                )
 
             # if sch:
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
