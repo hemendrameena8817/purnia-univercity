@@ -301,29 +301,34 @@ def generate_ug_admit_card_pdf(student, exam):
                 
                 # Check 1: Find EXACT schedule mapped to this specific Course (MJC/MIC/MDC)
                 if not sch and curr_dept_id:
-                    sch = sch_qs.filter(
-                        mjc__id=curr_dept_id,
-                        exam_type__iexact=base_cat
-                    ).last()
+                    matches = sch_qs.filter(mjc__id=curr_dept_id, exam_type__iexact=base_cat)
+                    if matches.count() == 1:
+                        sch = matches.first()
+                    elif matches.count() > 1:
+                        # Take the first available if multiple exist
+                        sch = matches.first()
 
                 # Check 2: If Course mapping misses, fallback to the Student's real Department
                 if not sch and dept_id:
-                    sch = sch_qs.filter(
-                        department__id=dept_id,
-                        exam_type__iexact=base_cat
-                    ).last()
+                    matches = sch_qs.filter(department__id=dept_id, exam_type__iexact=base_cat)
+                    if matches.count() == 1:
+                        sch = matches.first()
+                    elif matches.count() > 1:
+                        sch = matches.first()
 
                 # Check 3: Final Resort, any schedule matching the category
                 if not sch:
-                    sch = sch_qs.filter(
-                        exam_type__iexact=base_cat,
-                        department__isnull=True, 
-                        mjc__isnull=True
-                    ).last()
+                    matches = sch_qs.filter(exam_type__iexact=base_cat, department__isnull=True, mjc__isnull=True)
+                    if matches.count() == 1:
+                        sch = matches.first()
+                    elif matches.count() > 1:
+                        sch = matches.first()
 
             # FALLBACK - If NO match is found anywhere
             if not sch and dept_id:
-                sch = sch_qs.filter(department__id=dept_id, exam_type__iexact=base_cat).last()
+                matches = sch_qs.filter(department__id=dept_id, exam_type__iexact=base_cat)
+                if matches.count() >= 1:
+                    sch = matches.first()
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
             # else:
                 # print(f"  - NO SCHEDULE found for Category: {category}")
