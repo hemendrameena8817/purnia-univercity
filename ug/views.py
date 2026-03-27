@@ -163,54 +163,80 @@ class UGRollSheetPDFView(View):
     Generates and returns Exam Roll Sheet PDF for UG.
     Query params: exam_uid, college_uid
     """
-    def get(self, request):
+    def get(self, request, exam_uid=None, college_uid=None):
         from colleges.models import College
         from .models import UGExam
         from .utils.roll_sheet_pdf import generate_ug_roll_sheet_pdf
 
-        exam_uid = request.GET.get("exam_uid")
-        college_uid = request.GET.get("college_uid")
+        # Get from slugs (path) or fallback to query params
+        exam_uid = exam_uid or request.GET.get("exam_uid")
+        college_uid = college_uid or request.GET.get("college_uid")
 
         if not all([exam_uid, college_uid]):
             return HttpResponse(
-                "exam_uid and college_uid are required",
+                "exam_uid and college_uid are required (either in URL or as query params)",
                 status=400,
                 content_type="text/plain"
             )
 
         exam = get_object_or_404(UGExam, uid=exam_uid)
         college = get_object_or_404(College, uid=college_uid)
-
         department_uid = request.GET.get("department_uid")
+        format_type = request.GET.get("format", "pdf").lower()
         
-        pdf_content = generate_ug_roll_sheet_pdf(
-            exam=exam,
-            college=college,
-            department_uid=department_uid
-        )
+        from .utils.roll_sheet_pdf import generate_ug_roll_sheet_pdf, generate_ug_roll_sheet_excel
+        
+        if format_type == "zip":
+            # ...zip logic...
+            import zipfile
+            pdf_content = generate_ug_roll_sheet_pdf(exam, college, department_uid)
+            excel_content = generate_ug_roll_sheet_excel(exam, college, department_uid)
+            
+            if not pdf_content and not excel_content:
+                return HttpResponse("No data found for export", status=404)
+            
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w') as zf:
+                safe_name = "".join(c if c.isalnum() else "_" for c in college.name)
+                if pdf_content:
+                    zf.writestr(f"Roll_Sheet_{safe_name}.pdf", pdf_content)
+                if excel_content:
+                    zf.writestr(f"Roll_Sheet_{safe_name}.xlsx", excel_content)
+            
+            response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
+            response["Content-Disposition"] = f'attachment; filename="Roll_Sheet_{safe_name}_Bundle.zip"'
+            return response
 
+        if format_type == "excel":
+            excel_content = generate_ug_roll_sheet_excel(exam, college, department_uid)
+            if not excel_content:
+                return HttpResponse("No data found for Excel export", status=404)
+            
+            response = HttpResponse(excel_content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            safe_name = "".join(c if c.isalnum() else "_" for c in college.name)
+            response["Content-Disposition"] = f'attachment; filename="Roll_Sheet_{safe_name}.xlsx"'
+            return response
+
+        # Default PDF
+        pdf_content = generate_ug_roll_sheet_pdf(exam, college, department_uid)
         if not pdf_content:
-            return HttpResponse(
-                f"Failed to generate Roll Sheet for {college.name}. "
-                f"Ensure students are registered for this exam.",
-                status=404,
-                content_type="text/plain"
-            )
+            return HttpResponse("No data found", status=404)
 
-        # inline / download
         download = request.GET.get("download", "false").lower() == "true"
         disposition = "attachment" if download else "inline"
-
         response = HttpResponse(pdf_content, content_type="application/pdf")
-
         safe_college_name = "".join(c if c.isalnum() else "_" for c in college.name)
-
-        response["Content-Disposition"] = (
-            f'{disposition}; '
-            f'filename="UG_Roll_Sheet_{safe_college_name}_'
-            f'{exam.semester}_{exam.session}.pdf"'
-        )
-
+        filename_part = f'; filename="Roll_Sheet_{safe_college_name}.pdf"' if download else ""
+        response["Content-Disposition"] = f'{disposition}{filename_part}'
+        
+        # Dual-download trick: only if not already an excel request
+        if format_type == "pdf":
+            # Strip format=pdf and append format=excel to trigger the sibling download
+            excel_url = f"{request.path}?exam_uid={exam_uid}&college_uid={college_uid}&format=excel"
+            if department_uid:
+                excel_url += f"&department_uid={department_uid}"
+            response["Refresh"] = f"2; url={excel_url}"
+            
         return response
 
 

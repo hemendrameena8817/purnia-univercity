@@ -223,27 +223,24 @@
 
         <!-- Row 1 -->
         <tr>
-          <td style="width: 33%; padding: 4px 8px; vertical-align: top;">
-            <strong>COURSE:</strong> {{ course_name|upper }}
+          <td colspan="2" style="padding: 4px 8px; vertical-align: top;">
+            <strong>COLLEGE:</strong> {{ college_name|upper }} ({{ college_code }})
           </td>
-          <td style="width: 33%; padding: 4px 8px; text-align: center; vertical-align: top;">
-            <strong>SESSION:</strong> {{ session }}
+          <td style="padding: 4px 8px; text-align: right; vertical-align: top;">
+            <strong>CENTER:</strong> {{ center_name|upper }}
           </td>
-          <!-- <td style="width: 34%; padding: 4px 8px; text-align: right; vertical-align: top;">
-      <strong>COURSE:</strong> {{ course_name|upper }}
-    </td> -->
         </tr>
 
         <!-- Row 2 -->
         <tr>
           <td style="width: 33%; padding: 4px 8px; vertical-align: top;">
-            <strong>COLLEGE:</strong> {{ college_name|upper }}
+            <strong>SESSION:</strong> {{ session }}
           </td>
-          <td style="width: 33%; padding: 4px 8px; text-align: center; vertical-align: top;">
-            <strong>YEAR:</strong> {{ year|default:"-"|upper }}
-          </td>
+          
           <td style="width: 34%; padding: 4px 8px; text-align: right; vertical-align: top;">
-            <strong>CODE:</strong> {{ college_code }}
+          </td>
+          <td style="width: 33%; padding: 4px 13px; text-align: right; vertical-align: top;">
+            <strong>YEAR:</strong> {{ year|default:"-"|upper }}
           </td>
         </tr>
 
