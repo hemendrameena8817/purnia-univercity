@@ -1,6 +1,8 @@
 from io import BytesIO
+from django.db.models import Q
 import os
 import base64
+import qrcode
 import re
 from django.template.loader import render_to_string
 from weasyprint import HTML
@@ -170,29 +172,38 @@ def generate_ug_admit_card_pdf(student, exam):
             # --- SYSTEMATIC 3-STEP LOOKUP (No overrides) ---
             sch = None
             
-            # Condition 1: (1st Priority) Matching by Resolved Department
-            if curr_dept_id:
-                # 1a. Attempt Subject-Specific match first in this department
-                sch = sch_qs.filter(department__id=curr_dept_id, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
-                # 1b. Fallback to general department category if no subject match
-                if not sch:
-                    sch = sch_qs.filter(department__id=curr_dept_id, exam_type__iexact=base_cat).last()
-
-            # Condition 2: (2nd Priority) Fallback to MJC mapping where Department is Null
+            # Rule 1: Dept exists, Subject & MJC are null (Condition: department match)
             if not sch and curr_dept_id:
-                # 2a. Attempt Subject-Specific match in MJC first
-                sch = sch_qs.filter(department__isnull=True, mjc__id=curr_dept_id, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
-                # 2b. Fallback to general MJC category
-                if not sch:
-                    sch = sch_qs.filter(department__isnull=True, mjc__id=curr_dept_id, exam_type__iexact=base_cat).last()
+                sch = sch_qs.filter(
+                    department__id=curr_dept_id,
+                    mjc__isnull=True,
+                    exam_subject__isnull=True,
+                    exam_type__iexact=base_cat
+                ).last()
 
-            # Condition 3: (3rd Priority) Final Fallback for General Common Papers (no dept/mjc)
+            # Rule 2: MJC exists, Department is null, Subject exists
+            if not sch and curr_dept_id:
+                sch = sch_qs.filter(
+                    mjc__id=curr_dept_id,
+                    department__isnull=True,
+                    exam_subject__isnull=False,
+                    exam_type__iexact=base_cat
+                ).filter(
+                    Q(exam_subject__course_name__iexact=course_name) | 
+                    Q(exam_subject__paper_code=ass.paper_code)
+                ).last()
+
+            # Rule 3: MJC & Department are BOTH null, match strictly by Subject
             if not sch:
-                # 3a. Attempt Subject-Specific match in Common pool
-                sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
-                # 3b. Truly general Category slot (e.g. university-wide common subject)
-                if not sch:
-                    sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_type__iexact=base_cat).last()
+                 sch = sch_qs.filter(
+                    department__isnull=True,
+                    mjc__isnull=True,
+                    exam_subject__isnull=False,
+                    exam_type__iexact=base_cat
+                ).filter(
+                    Q(exam_subject__course_name__iexact=course_name) | 
+                    Q(exam_subject__paper_code=ass.paper_code)
+                ).last()
 
             # if sch:
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
