@@ -10,6 +10,8 @@ from ..models import (
     UGStudentProfile, ExamRegistration, StudentCourseAssessment, 
     UGExamCenterMapping, UGExamSchedule, CourseStructure
 )
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, Border, Side
 
 def wordwrap_br(text, words_per_line=4):
     """Split a long string into chunks of N words joined by <br>."""
@@ -50,25 +52,21 @@ def get_base64_image(image_field):
     except Exception:
         return ""
 
-def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
+def _get_roll_sheet_data(exam, college, department_uid=None):
     """
-    Generates Exam Roll Sheet PDF for UG.
-    Filters students by college and exam (via semester & session).
-    Header includes all papers scheduled for this exam.
-    Optional: Filters by department_uid.
+    Common helper to fetch and process data for both PDF and Excel roll sheets.
     """
     sem_int = get_sem_integer(exam.semester)
-    print(f"{sem_int = }")
     session_str = str(exam.session or "").strip()
-    print(f"{session_str = }")
     
-    # 1. Fetch Exam Registrations
+    # 1. Fetch Exam Registrations using the foreign key
     filters = {
         'student__college': college,
-        'sem': sem_int,
-        'session__iexact': session_str,
+        'exam': exam,
+        'status': 'REGISTERED'  # Only show confirmed students
     }
     if department_uid:
+        # Use department's UID directly if provided
         filters['student__major_course__uid'] = department_uid
 
     registrations = ExamRegistration.objects.filter(
@@ -76,10 +74,6 @@ def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
     ).select_related(
         'student', 'student__batch', 'student__program', 'student__major_course'
     ).prefetch_related('assessment').order_by('student__roll_no', 'student__registration_no')
-    print(f"{registrations = }")
-
-    # All statuses (don't exclude pending/open etc. as requested)
-    # the registrations queryset remains unchanged from the initial filter
 
     if not registrations.exists():
         return None
@@ -94,13 +88,9 @@ def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
     if center_mapping and center_mapping.center:
         center_name = center_mapping.center.name
 
-    # 3. Define Header Categories (Priority Order)
-    # This list defines which columns appear and in what order
+    # 3. Define Header Categories
     category_order = ['MJC', 'MIC', 'SEC', 'VAC', 'MDC', 'AEC']
     
-    # IMPORTANT: To keep the table structure consistent, we find categories 
-    # across ALL students registered for this exam in the college, 
-    # even if we are currently filtering for one department.
     college_registrations = ExamRegistration.objects.filter(
         student__college=college,
         sem=sem_int,
@@ -112,27 +102,17 @@ def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
         label='ESE-Theory'
     ).values_list('course_type', flat=True).distinct()
     
-    # Normalize and filter found types
     found_types = [t.strip().upper() for t in found_types if t]
-    
-    # Final sorted headers: use ordered list first, then any extra ones alphabetically
     active_headers = [cat for cat in category_order if cat in found_types]
     others = sorted([t for t in found_types if t not in category_order])
     active_headers.extend(others)
-
-    # Convert to format expected by template
-    subjects = [{"course_name_html": h, "course_type": h} for h in active_headers]
 
     # 4. Build Student Row Data
     student_data = []
     for reg in registrations:
         student = reg.student
-        
-        # Create a lookup: Category -> Subject Name (e.g., 'MJC' -> 'History of India')
         assessments = reg.assessment.filter(label='ESE-Theory')
         name_lookup = { (ass.course_type or "").strip().upper(): ass.course_name for ass in assessments }
-
-        # For each column in the header, pick the student's course name or return "-"
         row_subjects = [name_lookup.get(h, "-") for h in active_headers]
 
         student_data.append({
@@ -143,7 +123,35 @@ def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
             "subjects_marked": row_subjects,
         })
  
-    # 5. Context
+    batch_val = registrations.first().student.batch.name if (registrations.exists() and registrations.first().student.batch) else ""
+    batch_name = f"{exam.session or ''} ({batch_val})".strip(" ()") if batch_val else str(exam.session or "").strip()
+
+    return {
+        "exam": exam,
+        "college_name": college.name,
+        "college_code": college.college_code or college.center_code or "-",
+        "center_name": center_name,
+        "batch_name": batch_name,
+        "year": exam.exam_month_year or "-",
+        "session": batch_name,
+        "active_headers": active_headers,
+        "student_data": student_data,
+        "registrations": registrations, # Kept for backward compat/advanced use
+    }
+
+
+def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
+    """
+    Generates Exam Roll Sheet PDF for UG.
+    """
+    data = _get_roll_sheet_data(exam, college, department_uid)
+    if not data:
+        return None
+
+    # PDF-specific subject formatting
+    subjects = [{"course_name_html": h, "course_type": h} for h in data['active_headers']]
+
+    # Signature
     base_static_path = os.path.join(settings.BASE_DIR, 'ug', 'static', 'ug', 'images')
     controller_sig_path = os.path.join(base_static_path, 'controller-of-examination-signature.png')
     controller_sig_b64 = ""
@@ -151,27 +159,100 @@ def generate_ug_roll_sheet_pdf(exam, college, department_uid=None):
         with open(controller_sig_path, 'rb') as f:
             controller_sig_b64 = base64.b64encode(f.read()).decode('utf-8')
 
-    first_student = registrations.first().student
-    display_course = first_student.program.name if first_student.program else (first_student.degree.name if first_student.degree else "-")
-
     context = {
-        "exam": exam,
-        "college_name": college.name,
-        "college_code": college.college_code or college.center_code or "-",
-        "center_name": center_name,
-        "course_name": display_course,
-        # "branch_name": first_student.major_course.name if first_student.major_course else "-",
-        "batch_name": first_student.batch.name if first_student.batch else "-",
-        "year": exam.exam_month_year or "-",
-        "session": exam.session or "-",
+        **data,
         "subjects": subjects,
-        "student_data": student_data,
         "controller_signature": controller_sig_b64,
     }
 
-    # 6. Render & Generate
     html_string = render_to_string('ug/roll_sheet.html', context)
     buffer = BytesIO()
-    HTML(string=html_string, base_url=settings.MEDIA_ROOT).write_pdf(target=buffer)
+    HTML(string=html_string, base_url=settings.BASE_DIR).write_pdf(target=buffer)
     
+    return buffer.getvalue()
+
+
+def generate_ug_roll_sheet_excel(exam, college, department_uid=None):
+    """
+    Generates Exam Roll Sheet in Excel format (.xlsx) for UG.
+    """
+    data = _get_roll_sheet_data(exam, college, department_uid)
+    if not data:
+        return None
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Roll Sheet"
+    
+    header_font = Font(bold=True, size=12)
+    sub_header_font = Font(bold=True)
+    center_align = Alignment(horizontal='center', vertical='center')
+    left_align = Alignment(horizontal='left', vertical='center')
+    thin_border = Border(
+        left=Side(style='thin'), 
+        right=Side(style='thin'), 
+        top=Side(style='thin'), 
+        bottom=Side(style='thin')
+    )
+
+    # Header section
+    ws.merge_cells('A1:J1')
+    ws['A1'] = f"PURNEA UNIVERSITY, PURNIA"
+    ws['A1'].font = header_font
+    ws['A1'].alignment = center_align
+
+    ws.merge_cells('A2:J2')
+    ws['A2'] = f"Exam Roll Sheet - {exam.name or 'UG Exam'}"
+    ws['A2'].alignment = center_align
+
+    cur_row = 4
+    ws.cell(row=cur_row, column=1, value="COLLEGE:").font = sub_header_font
+    ws.cell(row=cur_row, column=2, value=data['college_name'])
+    ws.cell(row=cur_row, column=5, value="CODE:").font = sub_header_font
+    ws.cell(row=cur_row, column=6, value=data['college_code'])
+    
+    cur_row += 1
+    ws.cell(row=cur_row, column=1, value="SESSION:").font = sub_header_font
+    ws.cell(row=cur_row, column=2, value=data['session'])
+    ws.cell(row=cur_row, column=5, value="YEAR:").font = sub_header_font
+    ws.cell(row=cur_row, column=6, value=data['year'])
+    
+    cur_row += 2
+    # Table Header
+    headers = ["#", "Student Name", "Roll No", "Reg No", "Department"] + data['active_headers']
+    for col_num, header_title in enumerate(headers, 1):
+        cell = ws.cell(row=cur_row, column=col_num, value=header_title)
+        cell.font = sub_header_font
+        cell.border = thin_border
+        cell.alignment = center_align
+
+    # Student Data
+    data_row = cur_row + 1
+    for idx, student in enumerate(data['student_data'], 1):
+        row_values = [
+            idx,
+            student['name'],
+            student['roll_no'],
+            student['registration_no'],
+            student['department_name'],
+        ]
+        row_values.extend(student['subjects_marked'])
+        
+        for col_num, value in enumerate(row_values, 1):
+            cell = ws.cell(row=data_row, column=col_num, value=value)
+            cell.border = thin_border
+            cell.alignment = left_align if col_num == 2 else center_align
+        
+        data_row += 1
+
+    # Adjust column widths
+    ws.column_dimensions['B'].width = 30
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 20
+    for col_idx in range(6, len(headers) + 1):
+        ws.column_dimensions[ws.cell(row=cur_row, column=col_idx).column_letter].width = 25
+
+    buffer = BytesIO()
+    wb.save(buffer)
     return buffer.getvalue()
