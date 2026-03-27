@@ -34,6 +34,36 @@ def normalize_course_name(value):
     value = re.sub(r'[^a-z0-9]+', ' ', value)
     return re.sub(r'\s+', ' ', value).strip()
 
+def find_strict_subject_schedule(queryset, course_name, paper_code, new_course_code=None):
+    if paper_code:
+        match = queryset.filter(exam_subject__paper_code=paper_code).last()
+        if match:
+            return match
+
+    if new_course_code:
+        match = queryset.filter(exam_subject__new_course_code=new_course_code).last()
+        if match:
+            return match
+
+    if course_name:
+        match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
+        if match:
+            return match
+
+    target_name = normalize_course_name(course_name)
+    if not target_name:
+        return None
+
+    for schedule in queryset.select_related('exam_subject'):
+        subject = schedule.exam_subject
+        if not subject:
+            continue
+        schedule_name = normalize_course_name(subject.course_name)
+        if schedule_name and schedule_name == target_name:
+            return schedule
+
+    return None
+
 def find_best_subject_schedule(queryset, course_name, paper_code, new_course_code=None, allow_last_fallback=False):
     if paper_code:
         match = queryset.filter(exam_subject__paper_code=paper_code).last()
@@ -219,39 +249,68 @@ def generate_ug_admit_card_pdf(student, exam):
 
             # --- SYSTEMATIC 3-STEP LOOKUP (No overrides) ---
             sch = None
-            if not sch and base_cat in ['AEC', 'VAC', 'SEC'] and curr_dept_id:
-                sch = find_best_subject_schedule(
-                    sch_qs.filter(
-                        mjc__id=curr_dept_id,
-                        department__isnull=True,
-                        exam_subject__isnull=False,
-                        exam_type__iexact=base_cat
-                    ),
-                    course_name,
-                    ass.paper_code,
-                    ass.new_course_code
-                )
+            if base_cat in ['AEC', 'VAC', 'SEC']:
+                student_major_course_id = student.major_course.id if student.major_course else None
 
-            if not sch and base_cat in ['AEC', 'VAC', 'SEC']:
-                sch = find_best_subject_schedule(
-                    sch_qs.filter(
-                        department__isnull=True,
+                if student_major_course_id:
+                    sch = find_strict_subject_schedule(
+                        sch_qs.filter(
+                            mjc__id=student_major_course_id,
+                            department__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
+
+                if not sch:
+                    sch = find_strict_subject_schedule(
+                        sch_qs.filter(
+                            department__isnull=True,
+                            mjc__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
+            else:
+                if not sch and curr_dept_id:
+                    sch = sch_qs.filter(
+                        department__id=curr_dept_id,
                         mjc__isnull=True,
-                        exam_subject__isnull=False,
+                        exam_subject__isnull=True,
                         exam_type__iexact=base_cat
-                    ),
-                    course_name,
-                    ass.paper_code,
-                    ass.new_course_code
-                )
+                    ).last()
 
-            if not sch and curr_dept_id:
-                sch = sch_qs.filter(
-                    department__id=curr_dept_id,
-                    mjc__isnull=True,
-                    exam_subject__isnull=True,
-                    exam_type__iexact=base_cat
-                ).last()
+                if not sch and curr_dept_id:
+                    sch = find_best_subject_schedule(
+                        sch_qs.filter(
+                            mjc__id=curr_dept_id,
+                            department__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
+
+                if not sch:
+                    sch = find_best_subject_schedule(
+                        sch_qs.filter(
+                            department__isnull=True,
+                            mjc__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
 
             # if sch:
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
