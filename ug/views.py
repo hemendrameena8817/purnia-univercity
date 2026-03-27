@@ -15,25 +15,25 @@ import base64
 from django.conf import settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-class UGAdmitCardPDFView(APIView):
+class UGAdmitCardPDFView(View):
     """
     Generates and returns admit card PDF for a single UG student.
     Query params: registration_no (Staff only), exam_uid
     """
 
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
+    # authentication_classes = [JWTAuthentication]
+    # permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not request.user.is_authenticated:
-             return HttpResponse("Access Denied: Please log in.", status=401)
+        # if not request.user.is_authenticated:
+        #      return HttpResponse("Access Denied: Please log in.", status=401)
 
         exam_uid = request.GET.get("exam_uid")
         if not exam_uid:
             return HttpResponse("Exam UID is required", status=400)
 
         # 1. ID is the Login Username (Registration Number)
-        registration_no = request.user.username
+        # registration_no = request.user.username
         
         # 2. Staff Override via query param
         reg_no_param = request.GET.get("registration_no")
