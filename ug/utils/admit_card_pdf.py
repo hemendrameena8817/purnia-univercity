@@ -169,10 +169,18 @@ def generate_ug_admit_card_pdf(student, exam):
                     exam_type__iexact=category
                 ).last()
 
-            if sch:
-                print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
-            else:
-                print(f"  - NO SCHEDULE found for Category: {category}")
+            # Step 7: Final Fallback - Common papers (no department and no mjc)
+            if not sch:
+                sch = sch_qs.filter(
+                    department__isnull=True,
+                    mjc__isnull=True,
+                    exam_type__iexact=category
+                ).last()
+
+            # if sch:
+                # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
+            # else:
+                # print(f"  - NO SCHEDULE found for Category: {category}")
 
             # Prepare row data
             context['schedules'].append({
