@@ -323,7 +323,7 @@ class SemesterRegistrationAdmin(ImportExportModelAdmin):
 @admin.register(ExamRegistration)
 class ExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = ExamRegistrationResource
-    list_display = ('student', 'sem', 'status', 'fees', 'is_open')
+    list_display = ('student','exam', 'sem', 'status', 'fees', 'is_open')
     list_filter = ('sem', 'status', 'is_open')
     search_fields = ('student__registration_no', 'student__first_name')
     ordering = ('student', 'sem')
