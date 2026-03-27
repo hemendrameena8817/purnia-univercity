@@ -580,7 +580,8 @@ class UGExamScheduleAdmin(ImportExportModelAdmin):
         'exam',
         ExamDateFilter,
         'sitting',
-        'department',
+        ('department', admin.RelatedOnlyFieldListFilter),
+        ('exam_subject', admin.RelatedOnlyFieldListFilter),
     )
 
     # 🔥 Add date hierarchy (BEST for date filtering UX)
@@ -590,7 +591,7 @@ class UGExamScheduleAdmin(ImportExportModelAdmin):
         'exam__name',
         'department__name',
         'mjc__name',
-        'exam_subject',
+        'exam_subject__course_name',
     )
 
     raw_id_fields = ('exam','exam_subject')
