@@ -149,24 +149,33 @@ def generate_ug_admit_card_pdf(student, exam):
 
             print(f"DEBUG: Processing {category} - {course_name} (Dept ID: {dept_id})")
 
+            # Step 1: Category cleaning & Department resolution
+            # Clean category (e.g. 'AEC' from 'AEC-1')
+            base_cat = str(category).split('-')[0].strip().upper() if category else ""
+            
+            # Simple Override: For AEC, VAC, or SEC, use student's Major Course Department if dept_id is missing or as primary
+            curr_dept_id = dept_id
+            if base_cat in ['AEC', 'VAC', 'SEC'] and student.major_course:
+                curr_dept_id = student.major_course.id
+
             # Step 4: Check Exam Schedule Context
             sch_qs = UGExamSchedule.objects.filter(exam=exam)
 
-            # Step 5: Filter by category and department
+            # Step 5: Filter by resolved department and category base
             sch = None
-            if dept_id:
+            if curr_dept_id:
                 # Primary match: By department ID AND category
                 sch = sch_qs.filter(
-                    department__id=dept_id,
-                    exam_type__iexact=category
+                    department__id=curr_dept_id,
+                    exam_type__iexact=base_cat
                 ).last()
 
-            # Step 6: Fallback - If department match fails, check records where department is null but mjc matches
-            if not sch and dept_id:
+            # Step 6: Fallback - MJC/Major matching (if dept match fails)
+            if not sch and curr_dept_id:
                 sch = sch_qs.filter(
                     department__isnull=True,
-                    mjc__id=dept_id,
-                    exam_type__iexact=category
+                    mjc__id=curr_dept_id,
+                    exam_type__iexact=base_cat
                 ).last()
 
             # Step 7: Final Fallback - Common papers (no department and no mjc)
@@ -174,7 +183,7 @@ def generate_ug_admit_card_pdf(student, exam):
                 sch = sch_qs.filter(
                     department__isnull=True,
                     mjc__isnull=True,
-                    exam_type__iexact=category
+                    exam_type__iexact=base_cat
                 ).last()
 
             # if sch:
@@ -191,10 +200,10 @@ def generate_ug_admit_card_pdf(student, exam):
                 'exam_date': sch.exam_date if sch else "-",
                 'sitting': (sch.sitting if sch else "General") if sch else "-",
             })
-
-        # 4. Sort schedules according to Date (Ascending) and then Category Priority
+ 
+        # 4. Sort schedules according to Requested Order (AEC, VAC, SEC, MJC, MIC, MDC)
         order_priority = {
-            'MJC': 1, 'MIC': 2, 'SEC': 3, 'VAC': 4, 'MDC': 5, 'AEC': 6
+            'AEC': 1, 'VAC': 2, 'SEC': 3, 'MJC': 4, 'MIC': 5, 'MDC': 6
         }
         
         def get_sort_key(s):
