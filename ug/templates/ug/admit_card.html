@@ -401,7 +401,17 @@
             <td>{{ s.category|upper }}</td>
             <td>{{ s.code|default:"" }}</td>
             <td class="subject-col hindi-text">{{ s.name }}</td>
-            <td>{{ s.exam_time|default:"-" }} to {{ s.sitting|default:"" }}</td>
+            <td>
+              {% if s.exam_time and s.sitting %}
+                {{ s.exam_time }} to {{ s.sitting }}
+              {% elif s.exam_time %}
+                {{ s.exam_time }}
+              {% elif s.sitting %}
+                {{ s.sitting }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
             <td>
                 {{ s.exam_date }}<br/>
             </td>
