@@ -35,6 +35,38 @@ def normalize_course_name(value):
     return re.sub(r'\s+', ' ', value).strip()
 
 def find_strict_subject_schedule(queryset, course_name, paper_code, new_course_code=None):
+    target_name = normalize_course_name(course_name)
+
+    # PRIORITY 1: Course Name (Exact or Fuzzy Match) MUST BE FIRST!
+    # Because 'paper_code' is shared across different subjects in AEC/VAC/SEC (e.g. 1006 = Hindi, English, Urdu)
+    if target_name:
+        if course_name:
+            match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
+            if match:
+                return match
+
+        best_match = None
+        best_score = 0.0
+        for schedule in queryset.select_related('exam_subject'):
+            subject = schedule.exam_subject
+            if not subject:
+                continue
+            schedule_name = normalize_course_name(subject.course_name)
+            if not schedule_name:
+                continue
+            if schedule_name == target_name:
+                return schedule
+            # Check for high similarity fuzzy match
+            score = SequenceMatcher(None, target_name, schedule_name).ratio()
+            if score > best_score:
+                best_score = score
+                best_match = schedule
+        
+        # High threshold for strict match
+        if best_score > 0.85:
+            return best_match
+
+    # PRIORITY 2: Paper Code Fallbacks
     if paper_code:
         match = queryset.filter(exam_subject__paper_code=paper_code).last()
         if match:
@@ -44,27 +76,40 @@ def find_strict_subject_schedule(queryset, course_name, paper_code, new_course_c
         match = queryset.filter(exam_subject__new_course_code=new_course_code).last()
         if match:
             return match
-
-    if course_name:
-        match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
-        if match:
-            return match
-
-    target_name = normalize_course_name(course_name)
-    if not target_name:
-        return None
-
-    for schedule in queryset.select_related('exam_subject'):
-        subject = schedule.exam_subject
-        if not subject:
-            continue
-        schedule_name = normalize_course_name(subject.course_name)
-        if schedule_name and schedule_name == target_name:
-            return schedule
 
     return None
 
 def find_best_subject_schedule(queryset, course_name, paper_code, new_course_code=None, allow_last_fallback=False):
+    target_name = normalize_course_name(course_name)
+
+    # PRIORITY 1: Course Name Match (Highest priority to avoid shared code collision)
+    if target_name:
+        if course_name:
+            match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
+            if match:
+                return match
+
+        best_match = None
+        best_score = 0.0
+        for schedule in queryset.select_related('exam_subject'):
+            subject = schedule.exam_subject
+            if not subject:
+                continue
+            schedule_name = normalize_course_name(subject.course_name)
+            if not schedule_name:
+                continue
+            if target_name in schedule_name or schedule_name in target_name:
+                return schedule
+            score = SequenceMatcher(None, target_name, schedule_name).ratio()
+            if score > best_score:
+                best_score = score
+                best_match = schedule
+
+        # Lower threshold for best match
+        if best_score >= 0.70:
+            return best_match
+
+    # PRIORITY 2: Paper Code Fallback
     if paper_code:
         match = queryset.filter(exam_subject__paper_code=paper_code).last()
         if match:
@@ -74,34 +119,6 @@ def find_best_subject_schedule(queryset, course_name, paper_code, new_course_cod
         match = queryset.filter(exam_subject__new_course_code=new_course_code).last()
         if match:
             return match
-
-    if course_name:
-        match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
-        if match:
-            return match
-
-    target_name = normalize_course_name(course_name)
-    if not target_name:
-        return queryset.last() if allow_last_fallback else None
-
-    best_match = None
-    best_score = 0.0
-    for schedule in queryset.select_related('exam_subject'):
-        subject = schedule.exam_subject
-        if not subject:
-            continue
-        schedule_name = normalize_course_name(subject.course_name)
-        if not schedule_name:
-            continue
-        if target_name in schedule_name or schedule_name in target_name:
-            return schedule
-        score = SequenceMatcher(None, target_name, schedule_name).ratio()
-        if score > best_score:
-            best_score = score
-            best_match = schedule
-
-    if best_score >= 0.72:
-        return best_match
 
     return queryset.last() if allow_last_fallback else None
 
@@ -247,37 +264,41 @@ def generate_ug_admit_card_pdf(student, exam):
             # Step 4: Check Exam Schedule Context
             sch_qs = UGExamSchedule.objects.filter(exam=exam)
 
-            # --- SYSTEMATIC 3-STEP LOOKUP (No overrides) ---
+            # --- SYSTEMATIC 3-STEP LOOKUP (Common Priority) ---
             sch = None
             if base_cat in ['AEC', 'VAC', 'SEC']:
-                student_major_course_id = student.major_course.id if student.major_course else None
+                # Priority 1: Common Paper Pool (Both Department and MJC NULL)
+                # This fixes the 2:00 PM vs 10:00 AM problem for Art of Being Happy / Creative Writing
+                sch = find_strict_subject_schedule(
+                    sch_qs.filter(
+                        department__isnull=True,
+                        mjc__isnull=True,
+                        exam_subject__isnull=False,
+                        exam_type__iexact=base_cat
+                    ),
+                    course_name,
+                    ass.paper_code,
+                    ass.new_course_code
+                )
 
-                if student_major_course_id:
-                    sch = find_strict_subject_schedule(
-                        sch_qs.filter(
-                            mjc__id=student_major_course_id,
-                            department__isnull=True,
-                            exam_subject__isnull=False,
-                            exam_type__iexact=base_cat
-                        ),
-                        course_name,
-                        ass.paper_code,
-                        ass.new_course_code
-                    )
-
+                # Priority 2: Student MJC Specific Mapping (If not found in common pool)
                 if not sch:
-                    sch = find_strict_subject_schedule(
-                        sch_qs.filter(
-                            department__isnull=True,
-                            mjc__isnull=True,
-                            exam_subject__isnull=False,
-                            exam_type__iexact=base_cat
-                        ),
-                        course_name,
-                        ass.paper_code,
-                        ass.new_course_code
-                    )
+                    student_major_course_id = student.major_course.id if student.major_course else None
+                    if student_major_course_id:
+                        sch = find_strict_subject_schedule(
+                            sch_qs.filter(
+                                mjc__id=student_major_course_id,
+                                department__isnull=True,
+                                exam_subject__isnull=False,
+                                exam_type__iexact=base_cat
+                            ),
+                            course_name,
+                            ass.paper_code,
+                            ass.new_course_code
+                        )
             else:
+                # Standard Subjects (MJC, MIC, MDC)
+                # Rule 1: Dept-wide Group Slot
                 if not sch and curr_dept_id:
                     sch = sch_qs.filter(
                         department__id=curr_dept_id,
@@ -286,6 +307,7 @@ def generate_ug_admit_card_pdf(student, exam):
                         exam_type__iexact=base_cat
                     ).last()
 
+                # Rule 2: Specific MJC Subject Match
                 if not sch and curr_dept_id:
                     sch = find_best_subject_schedule(
                         sch_qs.filter(
@@ -299,6 +321,7 @@ def generate_ug_admit_card_pdf(student, exam):
                         ass.new_course_code
                     )
 
+                # Rule 3: Catch-all common match
                 if not sch:
                     sch = find_best_subject_schedule(
                         sch_qs.filter(
@@ -320,7 +343,9 @@ def generate_ug_admit_card_pdf(student, exam):
             # Prepare row data
             context['schedules'].append({
                 'category': category or "-",
-                'code': ass.new_course_code or "",
+                # PRIORITY: 1. Schedule code -> 2. Paper code -> 3. Course code
+                'code': (sch.exam_subject.paper_code if sch and sch.exam_subject else None) or \
+                        ass.paper_code or ass.new_course_code or "-",
                 'name': course_name or (sch.exam_subject.course_name if sch and sch.exam_subject else (sch.json_data.get('subject_name') if sch and sch.json_data else "-")),
                 'exam_time': sch.exam_time if sch else "-",
                 'exam_date': sch.exam_date if sch else "-",
