@@ -298,16 +298,8 @@ def generate_ug_admit_card_pdf(student, exam):
                         )
             else:
                 # Standard Subjects (MJC, MIC, MDC)
-                # Rule 1: Dept-wide Group Slot
-                if not sch and curr_dept_id:
-                    sch = sch_qs.filter(
-                        department__id=curr_dept_id,
-                        mjc__isnull=True,
-                        exam_subject__isnull=True,
-                        exam_type__iexact=base_cat
-                    ).last()
-
-                # Rule 2: Specific MJC Subject Match
+                
+                # Rule 1: Specific Subject Match (Highest Priority)
                 if not sch and curr_dept_id:
                     sch = find_best_subject_schedule(
                         sch_qs.filter(
@@ -320,6 +312,15 @@ def generate_ug_admit_card_pdf(student, exam):
                         ass.paper_code,
                         ass.new_course_code
                     )
+
+                # Rule 2: Generic Dept-wide Group Slot (Fallback if no subject found)
+                if not sch and curr_dept_id:
+                    sch = sch_qs.filter(
+                        department__id=curr_dept_id,
+                        mjc__isnull=True,
+                        exam_subject__isnull=True,
+                        exam_type__iexact=base_cat
+                    ).last()
 
                 # Rule 3: Catch-all common match
                 if not sch:
@@ -335,7 +336,12 @@ def generate_ug_admit_card_pdf(student, exam):
                         ass.new_course_code
                     )
 
-            # if sch:
+            # FALLBACK - If NO match is found anywhere
+            if not sch:
+                if curr_dept_id:
+                     sch = sch_qs.filter(department__id=curr_dept_id, mjc__isnull=True, exam_subject__isnull=True, exam_type__iexact=base_cat).last()
+                if not sch:
+                     sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_subject__isnull=True, exam_type__iexact=base_cat).last()
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
             # else:
                 # print(f"  - NO SCHEDULE found for Category: {category}")
