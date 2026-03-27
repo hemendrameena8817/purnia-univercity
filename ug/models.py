@@ -324,7 +324,7 @@ class CourseStructure(models.Model):
         verbose_name_plural = 'Course Structures'
 
     def __str__(self):
-        return f"{self.course_type}"
+        return f"{self.course_name} | {self.course_type}"
 
 
 class StudentCourseAssessment(models.Model):
