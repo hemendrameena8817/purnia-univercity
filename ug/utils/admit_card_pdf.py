@@ -1,5 +1,6 @@
 from io import BytesIO
 from django.db.models import Q
+from difflib import SequenceMatcher
 import os
 import base64
 import qrcode
@@ -27,6 +28,47 @@ def get_sem_integer(sem_str):
         if sem_upper.endswith(f"-{rom}") or sem_upper.endswith(f" {rom}") or sem_upper == rom:
             return val
     return None
+
+def normalize_course_name(value):
+    value = str(value or '').strip().lower()
+    value = re.sub(r'[^a-z0-9]+', ' ', value)
+    return re.sub(r'\s+', ' ', value).strip()
+
+def find_best_subject_schedule(queryset, course_name, paper_code, allow_last_fallback=False):
+    if paper_code:
+        match = queryset.filter(exam_subject__paper_code=paper_code).last()
+        if match:
+            return match
+
+    if course_name:
+        match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
+        if match:
+            return match
+
+    target_name = normalize_course_name(course_name)
+    if not target_name:
+        return queryset.last() if allow_last_fallback else None
+
+    best_match = None
+    best_score = 0.0
+    for schedule in queryset.select_related('exam_subject'):
+        subject = schedule.exam_subject
+        if not subject:
+            continue
+        schedule_name = normalize_course_name(subject.course_name)
+        if not schedule_name:
+            continue
+        if target_name in schedule_name or schedule_name in target_name:
+            return schedule
+        score = SequenceMatcher(None, target_name, schedule_name).ratio()
+        if score > best_score:
+            best_score = score
+            best_match = schedule
+
+    if best_score >= 0.72:
+        return best_match
+
+    return queryset.last() if allow_last_fallback else None
 
 def generate_ug_admit_card_pdf(student, exam):
     """
@@ -172,17 +214,30 @@ def generate_ug_admit_card_pdf(student, exam):
 
             # --- SYSTEMATIC 3-STEP LOOKUP (No overrides) ---
             sch = None
-            subject_match = Q(exam_subject__course_name__iexact=course_name) | Q(exam_subject__paper_code=ass.paper_code)
-            
-            if not sch and base_cat in ['AEC', 'VAC', 'SEC']:
-                sch = sch_qs.filter(
-                    department__isnull=True,
-                    mjc__isnull=True,
-                    exam_subject__isnull=False,
-                    exam_type__iexact=base_cat
-                ).filter(subject_match).last()
+            if not sch and base_cat in ['AEC', 'VAC', 'SEC'] and curr_dept_id:
+                sch = find_best_subject_schedule(
+                    sch_qs.filter(
+                        mjc__id=curr_dept_id,
+                        department__isnull=True,
+                        exam_subject__isnull=False,
+                        exam_type__iexact=base_cat
+                    ),
+                    course_name,
+                    ass.paper_code
+                )
 
-            # Rule 1: Dept exists, Subject & MJC are null (Condition: department match)
+            if not sch and base_cat in ['AEC', 'VAC', 'SEC']:
+                sch = find_best_subject_schedule(
+                    sch_qs.filter(
+                        department__isnull=True,
+                        mjc__isnull=True,
+                        exam_subject__isnull=False,
+                        exam_type__iexact=base_cat
+                    ),
+                    course_name,
+                    ass.paper_code
+                )
+
             if not sch and curr_dept_id:
                 sch = sch_qs.filter(
                     department__id=curr_dept_id,
@@ -191,23 +246,17 @@ def generate_ug_admit_card_pdf(student, exam):
                     exam_type__iexact=base_cat
                 ).last()
 
-            # Rule 2: MJC exists, Department is null, Subject exists
-            if not sch and curr_dept_id:
-                sch = sch_qs.filter(
-                    mjc__id=curr_dept_id,
-                    department__isnull=True,
-                    exam_subject__isnull=False,
-                    exam_type__iexact=base_cat
-                ).filter(subject_match).last()
-
-            # Rule 3: MJC & Department are BOTH null, match strictly by Subject
             if not sch:
-                sch = sch_qs.filter(
-                    department__isnull=True,
-                    mjc__isnull=True,
-                    exam_subject__isnull=False,
-                    exam_type__iexact=base_cat
-                ).filter(subject_match).last()
+                sch = find_best_subject_schedule(
+                    sch_qs.filter(
+                        department__isnull=True,
+                        mjc__isnull=True,
+                        exam_subject__isnull=False,
+                        exam_type__iexact=base_cat
+                    ),
+                    course_name,
+                    ass.paper_code
+                )
 
             # if sch:
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
