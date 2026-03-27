@@ -153,38 +153,46 @@ def generate_ug_admit_card_pdf(student, exam):
             # Clean category (e.g. 'AEC' from 'AEC-1')
             base_cat = str(category).split('-')[0].strip().upper() if category else ""
             
-            # Simple Override: For AEC, VAC, or SEC, use student's Major Course Department if dept_id is missing or as primary
+            # Smart Overrides: For AEC/VAC/SEC/MJC/MIC/MDC, resolve the best possible department
             curr_dept_id = dept_id
-            if base_cat in ['AEC', 'VAC', 'SEC'] and student.major_course:
+            if base_cat == 'MJC' and student.major_course:
+                curr_dept_id = student.major_course.id
+            elif base_cat == 'MIC' and student.minor_course:
+                curr_dept_id = student.minor_course.id
+            elif base_cat == 'MDC' and student.mdc_course:
+                curr_dept_id = student.mdc_course.id
+            elif base_cat in ['AEC', 'VAC', 'SEC'] and student.major_course:
                 curr_dept_id = student.major_course.id
 
             # Step 4: Check Exam Schedule Context
             sch_qs = UGExamSchedule.objects.filter(exam=exam)
 
-            # Step 5: Filter by resolved department and category base
+            # --- SYSTEMATIC 3-STEP LOOKUP (No overrides) ---
             sch = None
+            
+            # Condition 1: (1st Priority) Matching by Resolved Department
             if curr_dept_id:
-                # Primary match: By department ID AND category
-                sch = sch_qs.filter(
-                    department__id=curr_dept_id,
-                    exam_type__iexact=base_cat
-                ).last()
+                # 1a. Attempt Subject-Specific match first in this department
+                sch = sch_qs.filter(department__id=curr_dept_id, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
+                # 1b. Fallback to general department category if no subject match
+                if not sch:
+                    sch = sch_qs.filter(department__id=curr_dept_id, exam_type__iexact=base_cat).last()
 
-            # Step 6: Fallback - MJC/Major matching (if dept match fails)
+            # Condition 2: (2nd Priority) Fallback to MJC mapping where Department is Null
             if not sch and curr_dept_id:
-                sch = sch_qs.filter(
-                    department__isnull=True,
-                    mjc__id=curr_dept_id,
-                    exam_type__iexact=base_cat
-                ).last()
+                # 2a. Attempt Subject-Specific match in MJC first
+                sch = sch_qs.filter(department__isnull=True, mjc__id=curr_dept_id, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
+                # 2b. Fallback to general MJC category
+                if not sch:
+                    sch = sch_qs.filter(department__isnull=True, mjc__id=curr_dept_id, exam_type__iexact=base_cat).last()
 
-            # Step 7: Final Fallback - Common papers (no department and no mjc)
+            # Condition 3: (3rd Priority) Final Fallback for General Common Papers (no dept/mjc)
             if not sch:
-                sch = sch_qs.filter(
-                    department__isnull=True,
-                    mjc__isnull=True,
-                    exam_type__iexact=base_cat
-                ).last()
+                # 3a. Attempt Subject-Specific match in Common pool
+                sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
+                # 3b. Truly general Category slot (e.g. university-wide common subject)
+                if not sch:
+                    sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_type__iexact=base_cat).last()
 
             # if sch:
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
