@@ -36,9 +36,9 @@ class UGAdmitCardPDFView(APIView):
         registration_no = request.user.username
         
         # 2. Staff Override via query param
-        reg_no_param = request.GET.get("registration_no")
-        if reg_no_param:
-            registration_no = reg_no_param
+        # reg_no_param = request.GET.get("registration_no")
+        # if reg_no_param:
+        #     registration_no = reg_no_param
 
         # 3. Fetch Student
         student = get_object_or_404(UGStudentProfile, registration_no=registration_no)
