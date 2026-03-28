@@ -372,6 +372,54 @@ def generate_ug_admit_card_pdf(student, exam):
                 exam_time_val = "02:00 PM to 05:00 PM"
                 sitting_val = ""
 
+            # HARDCODED OVERRIDE FOR AEC MIL - MAITHILI
+            if base_cat == 'AEC' and course_name and course_name.strip() == 'MIL - Maithili':
+                exam_date_val = datetime.date(2026, 4, 9)
+                exam_time_val = "02:00 PM to 05:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR AEC MIL - BENGALI
+            if base_cat == 'AEC' and course_name and course_name.strip() == 'MIL - Bengali':
+                exam_date_val = datetime.date(2026, 4, 9)
+                exam_time_val = "02:00 PM to 05:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR VAC FIT INDIA
+            if base_cat == 'VAC' and course_name and course_name.strip() == 'Fit India':
+                exam_date_val = datetime.date(2026, 4, 10)
+                exam_time_val = "10:00 AM to 01:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR VAC ART OF BEING HAPPY
+            if base_cat == 'VAC' and course_name and course_name.strip() == 'Art of Being Happy':
+                exam_date_val = datetime.date(2026, 4, 11)
+                exam_time_val = "02:00 PM to 05:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR SEC BASIC IT TOOLS
+            if base_cat == 'SEC' and course_name and course_name.strip() == 'Basic IT Tools':
+                exam_date_val = datetime.date(2026, 4, 13)
+                exam_time_val = "10:00 AM to 01:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR SEC DIGITAL MARKETING
+            if base_cat == 'SEC' and course_name and course_name.strip() == 'Digital Marketing':
+                exam_date_val = datetime.date(2026, 4, 15)
+                exam_time_val = "10:00 AM to 01:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR SEC PUBLIC SPEAKING
+            if base_cat == 'SEC' and course_name and course_name.strip() == 'Public Speaking English Language and Leadership':
+                exam_date_val = datetime.date(2026, 4, 15)
+                exam_time_val = "02:00 PM to 05:00 PM"
+                sitting_val = ""
+
+            # HARDCODED OVERRIDE FOR AEC MIL - ENGLISH COMMUNICATION
+            if base_cat == 'AEC' and course_name and course_name.strip() == 'MIL- English Communication':
+                exam_date_val = datetime.date(2026, 4, 8)
+                exam_time_val = "10:00 AM to 01:00 PM"
+                sitting_val = ""
+
             context['schedules'].append({
                 'category': category or "-",
                 # PRIORITY: 1. Schedule code -> 2. Paper code -> 3. Course code
