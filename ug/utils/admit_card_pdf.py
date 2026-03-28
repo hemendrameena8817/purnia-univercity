@@ -41,13 +41,13 @@ def find_strict_subject_schedule(queryset, course_name, paper_code, new_course_c
     # Because 'paper_code' is shared across different subjects in AEC/VAC/SEC (e.g. 1006 = Hindi, English, Urdu)
     if target_name:
         if course_name:
-            match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
+            match = queryset.filter(exam_subject__course_name__iexact=course_name).order_by('exam_date', 'exam_time').first()
             if match:
                 return match
 
         best_match = None
         best_score = 0.0
-        for schedule in queryset.select_related('exam_subject'):
+        for schedule in queryset.select_related('exam_subject').order_by('exam_date', 'exam_time'):
             subject = schedule.exam_subject
             if not subject:
                 continue
@@ -68,12 +68,12 @@ def find_strict_subject_schedule(queryset, course_name, paper_code, new_course_c
 
     # PRIORITY 2: Paper Code Fallbacks
     if paper_code:
-        match = queryset.filter(exam_subject__paper_code=paper_code).last()
+        match = queryset.filter(exam_subject__paper_code=paper_code).order_by('exam_date', 'exam_time').first()
         if match:
             return match
 
     if new_course_code:
-        match = queryset.filter(exam_subject__new_course_code=new_course_code).last()
+        match = queryset.filter(exam_subject__new_course_code=new_course_code).order_by('exam_date', 'exam_time').first()
         if match:
             return match
 
@@ -85,13 +85,13 @@ def find_best_subject_schedule(queryset, course_name, paper_code, new_course_cod
     # PRIORITY 1: Course Name Match (Highest priority to avoid shared code collision)
     if target_name:
         if course_name:
-            match = queryset.filter(exam_subject__course_name__iexact=course_name).last()
+            match = queryset.filter(exam_subject__course_name__iexact=course_name).order_by('exam_date', 'exam_time').first()
             if match:
                 return match
 
         best_match = None
         best_score = 0.0
-        for schedule in queryset.select_related('exam_subject'):
+        for schedule in queryset.select_related('exam_subject').order_by('exam_date', 'exam_time'):
             subject = schedule.exam_subject
             if not subject:
                 continue
@@ -111,16 +111,16 @@ def find_best_subject_schedule(queryset, course_name, paper_code, new_course_cod
 
     # PRIORITY 2: Paper Code Fallback
     if paper_code:
-        match = queryset.filter(exam_subject__paper_code=paper_code).last()
+        match = queryset.filter(exam_subject__paper_code=paper_code).order_by('exam_date', 'exam_time').first()
         if match:
             return match
 
     if new_course_code:
-        match = queryset.filter(exam_subject__new_course_code=new_course_code).last()
+        match = queryset.filter(exam_subject__new_course_code=new_course_code).order_by('exam_date', 'exam_time').first()
         if match:
             return match
 
-    return queryset.last() if allow_last_fallback else None
+    return queryset.order_by('exam_date', 'exam_time').first() if allow_last_fallback else None
 
 def generate_ug_admit_card_pdf(student, exam):
     """
@@ -306,7 +306,7 @@ def generate_ug_admit_card_pdf(student, exam):
                         sch = matches.first()
                     elif matches.count() > 1:
                         # Take the first available if multiple exist
-                        sch = matches.first()
+                        sch = matches.order_by('exam_date', 'exam_time').first()
 
                 # Check 2: If Course mapping misses, fallback to the Student's real Department
                 if not sch and dept_id:
@@ -314,7 +314,7 @@ def generate_ug_admit_card_pdf(student, exam):
                     if matches.count() == 1:
                         sch = matches.first()
                     elif matches.count() > 1:
-                        sch = matches.first()
+                        sch = matches.order_by('exam_date', 'exam_time').first()
 
                 # Check 3: Final Resort, any schedule matching the category
                 if not sch:
@@ -322,16 +322,38 @@ def generate_ug_admit_card_pdf(student, exam):
                     if matches.count() == 1:
                         sch = matches.first()
                     elif matches.count() > 1:
-                        sch = matches.first()
+                        sch = matches.order_by('exam_date', 'exam_time').first()
 
             # FALLBACK - If NO match is found anywhere
             if not sch and dept_id:
                 matches = sch_qs.filter(department__id=dept_id, exam_type__iexact=base_cat)
                 if matches.count() >= 1:
-                    sch = matches.first()
+                    sch = matches.order_by('exam_date', 'exam_time').first()
                 # print(f"  - MATCHED via {'category' if sch.department.exists() else 'mjc-fallback'} logic: {sch.exam_date} | {sch.exam_time}")
             # else:
                 # print(f"  - NO SCHEDULE found for Category: {category}")
+
+            if base_cat == 'SEC' and course_name and 'Creative Writing' in str(course_name):
+                print(f"==================== DEBUG SEC CREATIVE WRITING ====================")
+                print(f"course_name: {course_name}, paper_code: {ass.paper_code}")
+                print(f"base_cat: {base_cat}, dept_id: {dept_id}, curr_dept_id: {curr_dept_id}")
+                
+                print("--- Priority 1 Pool (Common) ---")
+                qs1 = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_subject__isnull=False, exam_type__iexact=base_cat).order_by('exam_date', 'exam_time')
+                for q in qs1: 
+                    print(f"  {q.exam_date} {q.exam_time} | Subj: {q.exam_subject.course_name} | Code: {q.exam_subject.paper_code}")
+                
+                student_major_course_id = student.major_course.id if student.major_course else None
+                if student_major_course_id:
+                    print(f"--- Priority 2 Pool (MJC Specific map) for {student_major_course_id} ---")
+                    qs2 = sch_qs.filter(mjc__id=student_major_course_id, department__isnull=True, exam_subject__isnull=False, exam_type__iexact=base_cat).order_by('exam_date', 'exam_time')
+                    for q in qs2: 
+                        print(f"  {q.exam_date} {q.exam_time} | Subj: {q.exam_subject.course_name} | Code: {q.exam_subject.paper_code}")
+
+                print(f">>> Final resolved schedule for this assessment: {sch}")
+                if sch:
+                    print(f"    Date: {sch.exam_date}, Time: {sch.exam_time}, Sitting: {sch.sitting}")
+                print(f"====================================================================")
 
             # Prepare row data
             context['schedules'].append({
