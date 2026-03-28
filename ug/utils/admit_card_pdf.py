@@ -267,35 +267,35 @@ def generate_ug_admit_card_pdf(student, exam):
             # --- SYSTEMATIC 3-STEP LOOKUP (Common Priority) ---
             sch = None
             if base_cat in ['AEC', 'VAC', 'SEC']:
-                # Priority 1: Common Paper Pool (Both Department and MJC NULL)
-                # This fixes the 2:00 PM vs 10:00 AM problem for Art of Being Happy / Creative Writing
-                sch = find_strict_subject_schedule(
-                    sch_qs.filter(
-                        department__isnull=True,
-                        mjc__isnull=True,
-                        exam_subject__isnull=False,
-                        exam_type__iexact=base_cat
-                    ),
-                    course_name,
-                    ass.paper_code,
-                    ass.new_course_code
-                )
+                # Priority 2: Student MJC Specific Mapping (MJC Overrides MUST be prioritized first)
+                student_major_course_id = student.major_course.id if student.major_course else None
+                if student_major_course_id:
+                    sch = find_strict_subject_schedule(
+                        sch_qs.filter(
+                            mjc__id=student_major_course_id,
+                            department__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
 
-                # Priority 2: Student MJC Specific Mapping (If not found in common pool)
                 if not sch:
-                    student_major_course_id = student.major_course.id if student.major_course else None
-                    if student_major_course_id:
-                        sch = find_strict_subject_schedule(
-                            sch_qs.filter(
-                                mjc__id=student_major_course_id,
-                                department__isnull=True,
-                                exam_subject__isnull=False,
-                                exam_type__iexact=base_cat
-                            ),
-                            course_name,
-                            ass.paper_code,
-                            ass.new_course_code
-                        )
+                    # Priority 1: Common Paper Pool (Both Department and MJC NULL)
+                    # This fixes the 2:00 PM vs 10:00 AM problem for Art of Being Happy / Creative Writing
+                    sch = find_strict_subject_schedule(
+                        sch_qs.filter(
+                            department__isnull=True,
+                            mjc__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
             else:
                 # Standard Subjects (MJC, MIC, MDC)
                 
