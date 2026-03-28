@@ -258,13 +258,7 @@ def generate_ug_admit_card_pdf(student, exam):
             
             # Smart Overrides: For AEC/VAC/SEC/MJC/MIC/MDC, resolve the best possible department
             curr_dept_id = dept_id
-            if base_cat == 'MJC' and student.major_course:
-                curr_dept_id = student.major_course.id
-            elif base_cat == 'MIC' and student.minor_course:
-                curr_dept_id = student.minor_course.id
-            elif base_cat == 'MDC' and student.mdc_course:
-                curr_dept_id = student.mdc_course.id
-            elif base_cat in ['AEC', 'VAC', 'SEC'] and student.major_course:
+            if student.major_course:
                 curr_dept_id = student.major_course.id
 
             # Step 4: Check Exam Schedule Context
@@ -305,13 +299,15 @@ def generate_ug_admit_card_pdf(student, exam):
             else:
                 # Standard Subjects (MJC, MIC, MDC)
                 
-                # Check 1: Find EXACT schedule mapped to this specific Course (MJC/MIC/MDC)
+                # Check 1: Find EXACT schedule mapped via mjc OR department to student major_course
                 if not sch and curr_dept_id:
-                    matches = sch_qs.filter(mjc__id=curr_dept_id, exam_type__iexact=base_cat)
+                    matches = sch_qs.filter(
+                        Q(mjc__id=curr_dept_id) | Q(department__id=curr_dept_id),
+                        exam_type__iexact=base_cat
+                    )
                     if matches.count() == 1:
                         sch = matches.first()
                     elif matches.count() > 1:
-                        # Take the first available if multiple exist
                         sch = matches.order_by('exam_date', 'exam_time').first()
 
                 # Check 2: If Course mapping misses, fallback to the Student's real Department
@@ -422,9 +418,9 @@ def generate_ug_admit_card_pdf(student, exam):
 
             context['schedules'].append({
                 'category': category or "-",
-                # PRIORITY: 1. Schedule code -> 2. Paper code -> 3. Course code
-                'code': (sch.exam_subject.paper_code if sch and sch.exam_subject else None) or \
-                        ass.paper_code or ass.new_course_code or "-",
+                # MAPPING: Code maps to new_course_code natively 
+                'code': (sch.exam_subject.new_course_code if sch and sch.exam_subject else None) or \
+                        ass.new_course_code or ass.paper_code or "-",
                 'name': course_name or (sch.exam_subject.course_name if sch and sch.exam_subject else (sch.json_data.get('subject_name') if sch and sch.json_data else "-")),
                 'exam_time': exam_time_val,
                 'exam_date': exam_date_val,
