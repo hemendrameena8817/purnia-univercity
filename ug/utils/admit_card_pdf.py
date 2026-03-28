@@ -361,15 +361,25 @@ def generate_ug_admit_card_pdf(student, exam):
                 print(f"====================================================================")
 
             # Prepare row data
+            exam_time_val = sch.exam_time if sch else "-"
+            exam_date_val = sch.exam_date if sch else "-"
+            sitting_val = (sch.sitting if sch else "General") if sch else "-"
+
+            # HARDCODED OVERRIDE FOR AEC MIL - URDU
+            if base_cat == 'AEC' and course_name and course_name.strip() == 'MIL - Urdu':
+                exam_date_val = "April 9, 2026"
+                exam_time_val = "01:00 PM to 05:00 PM"
+                sitting_val = "2nd Sitting"
+
             context['schedules'].append({
                 'category': category or "-",
                 # PRIORITY: 1. Schedule code -> 2. Paper code -> 3. Course code
                 'code': (sch.exam_subject.paper_code if sch and sch.exam_subject else None) or \
                         ass.paper_code or ass.new_course_code or "-",
                 'name': course_name or (sch.exam_subject.course_name if sch and sch.exam_subject else (sch.json_data.get('subject_name') if sch and sch.json_data else "-")),
-                'exam_time': sch.exam_time if sch else "-",
-                'exam_date': sch.exam_date if sch else "-",
-                'sitting': (sch.sitting if sch else "General") if sch else "-",
+                'exam_time': exam_time_val,
+                'exam_date': exam_date_val,
+                'sitting': sitting_val,
             })
  
         # 4. Sort schedules according to Requested Order (AEC, VAC, SEC, MJC, MIC, MDC)
