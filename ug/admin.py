@@ -230,9 +230,9 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Disable bulk actions for speed
     actions = None
     
-    def has_add_permission(self, request):
-        # Disable add in admin (use migration scripts instead)
-        return False
+    # def has_add_permission(self, request):
+    #     # Disable add in admin (use migration scripts instead)
+    #     return False
     
     def get_queryset(self, request):
         """Optimize queryset - limit to recent records by default"""
