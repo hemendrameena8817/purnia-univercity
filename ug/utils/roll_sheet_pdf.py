@@ -123,8 +123,9 @@ def _get_roll_sheet_data(exam, college, department_uid=None):
             "subjects_marked": row_subjects,
         })
  
-    batch_val = registrations.first().student.batch.name if (registrations.exists() and registrations.first().student.batch) else ""
-    batch_name = f"{exam.session or ''} ({batch_val})".strip(" ()") if batch_val else str(exam.session or "").strip()
+    batch_val = ""
+    # Removed session and batch completely per request
+    batch_name = ""
 
     return {
         "exam": exam,
