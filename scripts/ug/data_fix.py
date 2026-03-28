@@ -34,11 +34,26 @@ def fix_assessment_data(dry_run=True, limit=None, semester=None, session=None):
 
     # 🔥 Build CourseStructure map (avoid DB hit inside loop)
     course_map = {}
-    for c in CourseStructure.objects.all().order_by('id'):
+    course_qs = CourseStructure.objects.all()
+    
+    # Filter CourseStructure by semester if provided
+    # Convert semester string (1ST, 2ND, 3RD) to integer (1, 2, 3) for CourseStructure
+    if semester is not None:
+        semester_mapping = {
+            '1ST': '1', '2ND': '2', '3RD': '3', '4TH': '4',
+            '5TH': '5', '6TH': '6', '7TH': '7', '8TH': '8'
+        }
+        course_semester = semester_mapping.get(semester, semester)
+        course_qs = course_qs.filter(semester=course_semester)
+        print(f"Loading CourseStructure for semester: {course_semester} (from {semester})")
+    
+    for c in course_qs.order_by('id'):
         key = (c.course_type, c.department_id)
         # take first occurrence only
         if key not in course_map:
             course_map[key] = c
+    
+    print(f"Loaded {len(course_map)} CourseStructure mappings")
 
     updated = 0
     skipped = 0
