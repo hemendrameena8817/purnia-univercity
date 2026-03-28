@@ -517,7 +517,7 @@ class ExamRegistrationPaymentAdmin(ImportExportModelAdmin):
     resource_class = ExamRegistrationPaymentResource
     list_display = ('order_id', 'registration', 'amount', 'payment_status', 'created_at', 'updated_at')
     list_filter = ('payment_status', 'created_at', 'updated_at')
-    search_fields = ('order_id', 'registration__uid')   
+    search_fields = ('order_id', 'registration__uid', 'registration__student__registration_no')   
     readonly_fields = ('created_at', 'updated_at')
     raw_id_fields = ('registration',)
 
