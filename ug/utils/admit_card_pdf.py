@@ -56,6 +56,11 @@ def find_strict_subject_schedule(queryset, course_name, paper_code, new_course_c
                 continue
             if schedule_name == target_name:
                 return schedule
+                
+            # Allow substring match ("urdu" in "mil urdu") to prevent shared paper_code fallback trap
+            if target_name in schedule_name or schedule_name in target_name:
+                return schedule
+                
             # Check for high similarity fuzzy match
             score = SequenceMatcher(None, target_name, schedule_name).ratio()
             if score > best_score:
