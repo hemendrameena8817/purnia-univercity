@@ -324,7 +324,7 @@ class SemesterRegistrationAdmin(ImportExportModelAdmin):
 class ExamRegistrationAdmin(ImportExportModelAdmin):
     resource_class = ExamRegistrationResource
     list_display = ('student','exam', 'sem', 'status', 'fees', 'is_open')
-    list_filter = ('sem', 'status', 'is_open')
+    list_filter = ('sem', 'status', 'is_open', 'student__major_course')
     search_fields = ('student__registration_no', 'student__first_name')
     ordering = ('student', 'sem')
     raw_id_fields = ('student', 'assessment')
