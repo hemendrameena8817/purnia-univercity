@@ -5,6 +5,7 @@ import os
 import base64
 import qrcode
 import re
+import datetime
 from django.template.loader import render_to_string
 from weasyprint import HTML
 from django.conf import settings
@@ -367,7 +368,7 @@ def generate_ug_admit_card_pdf(student, exam):
 
             # HARDCODED OVERRIDE FOR AEC MIL - URDU
             if base_cat == 'AEC' and course_name and course_name.strip() == 'MIL - Urdu':
-                exam_date_val = "April 9, 2026"
+                exam_date_val = datetime.date(2026, 4, 9)
                 exam_time_val = "01:00 PM to 05:00 PM"
                 sitting_val = "2nd Sitting"
 
