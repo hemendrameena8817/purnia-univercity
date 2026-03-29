@@ -80,10 +80,6 @@ class PGOldStudentProfile(models.Model):
     # Academic Progress
     batch_code = models.CharField(max_length=30, null=True, blank=True)
     current_semester = models.CharField(max_length=30, null=True, blank=True)
-    final_result = models.CharField(max_length=50, null=True, blank=True)
-    gpa = models.CharField(max_length=20, null=True, blank=True)
-    cgpa = models.CharField(max_length=20, null=True, blank=True)
-    total_percentage = models.CharField(max_length=20, null=True, blank=True)
     profile_image = models.ImageField(upload_to='pgold/profiles/', null=True, blank=True)
     signature = models.ImageField(upload_to='pgold/signatures/', null=True, blank=True)
     # Original staging IDs (for reference)

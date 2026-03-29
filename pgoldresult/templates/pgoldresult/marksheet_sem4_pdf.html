@@ -17,7 +17,7 @@
 
     body {
         font-family: "Times New Roman", serif;
-        font-size: 11px;
+        font-size: 14px;
         color: #000;
         position: relative;
         min-height: 70%;
@@ -176,7 +176,7 @@
 
     .cgpa-title {
         text-align: center;
-        font-size: 14px;
+        font-size: 20px;
         font-weight: bold;
         margin: 20px 0 10px 0;
     }
@@ -356,21 +356,22 @@
     </table>
 
     <div class="footer-section">
-        <div style="display: table; width: 100%;">
-            <p style="margin: 5px 0;">Remarks : <strong>{{ semester_result.status|upper }}</strong> <span style="float: right;">Grade : <strong>{{ cgpa_data.letter_grade|default:"--" }}</strong></span></p>
-            <div style="display: table-cell; width: 35%; vertical-align: bottom;">
-                <div style="margin-top: 25px; font-weight: normal;">
+        <div style="width: 100%;">
+            <div style="display: flex; justify-content: space-between; margin: 5px 0;">
+                <p style="margin: 0;">Remarks : <strong>{{ semester_result.status|upper }}</strong></p>
+                <p style="margin: 0;">Grade : <strong>{{ cgpa_data.grade_description|default:"--" }}</strong></p>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px;">
+                <div style="width: 35%; font-weight: normal; padding-top:50px;">
                     Date of Publication : {{ exam_info.pub_date|default:"18-08-2024" }}
                 </div>
-            </div>
-            <div style="display: table-cell; width: 30%; text-align: center; vertical-align: top;">
-                <div style="margin-top: 20px;">
-                   {% if qr_code_image %}
-                   <img src="{{ qr_code_image }}" style="width: 80px; height: 80px; border: 0.5px solid #000;padding: 2.5px;">
-                   {% endif %}
+                <div style="width: 30%; text-align: center; padding-top: 20px;">
+                    {% if qr_code_image %}
+                    <img src="{{ qr_code_image }}" style="width: 80px; height: 80px; border: 0.5px solid #000; padding: 2.5px;">
+                    {% endif %}
                 </div>
+                <div style="width: 35%;"></div>
             </div>
-            <div style="display: table-cell; width: 35%;"></div>
         </div>
     </div>
 

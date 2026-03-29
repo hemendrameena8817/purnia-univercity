@@ -66,10 +66,6 @@ class Command(BaseCommand):
                             profile.pg_department = row.get('pg_department', profile.pg_department)
                             profile.pg_degree = row.get('pg_degree', profile.pg_degree)
                             profile.pg_program = row.get('pg_program', profile.pg_program)
-                            profile.final_result = row.get('final_result', profile.final_result)
-                            profile.gpa = row.get('gpa', profile.gpa)
-                            profile.cgpa = row.get('cgpa', profile.cgpa)
-                            profile.total_percentage = row.get('total_percentage', profile.total_percentage)
                             profile.source_user_id = row.get('source_user_id', profile.source_user_id)
                             profile.is_active = row.get('is_active', profile.is_active)
                             

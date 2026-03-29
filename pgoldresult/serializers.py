@@ -13,7 +13,6 @@ class PGOldStudentProfileSerializer(serializers.ModelSerializer):
             'fathers_name', 'mothers_name', 'gender', 'dob', 'college',
             'course_code', 'discipline_code', 'pg_faculty', 'pg_department',
             'pg_degree', 'pg_program', 'batch_code', 'current_semester',
-            'final_result', 'gpa', 'cgpa', 'total_percentage',
             'is_active', 'created_at', 'updated_at'
         ]
 
@@ -35,7 +34,7 @@ class StudentInfoSerializer(serializers.ModelSerializer):
         model = PGOldResult
         fields = [
              'uid','session_code',
-            'course_code', 'discipline_code', 'final_result', 'grand_total_mark',
+            'course_code', 'discipline_code', 'grand_total_mark',
             'total_secured_mark', 'total_per', 'gpa', 'cgpa', 'grade'
         ]
     # def get_college(self, obj):

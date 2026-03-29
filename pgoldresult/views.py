@@ -568,10 +568,10 @@ class PGResultCalculatorView(APIView):
         - session: Academic session (required)
         - format: Response format - 'json', 'html', or 'pdf' (default: 'json')
         """
-        registration_no = request.GET.get('registration_no')
-        roll_no = request.GET.get('roll_no')
-        semester = request.GET.get('semester')
-        session = request.GET.get('session')
+        registration_no = (request.GET.get('registration_no') or '').strip() or None
+        roll_no = (request.GET.get('roll_no') or '').strip() or None
+        semester = (request.GET.get('semester') or '').strip()
+        session = (request.GET.get('session') or '').strip()
         response_format = request.GET.get('format', 'pdf')
         save_to_old_result = request.GET.get('save', 'false').lower() == 'true'
         
@@ -683,10 +683,10 @@ def generate_marksheet_pdf(request):
     """
     Generate PDF marksheet - Now fully functional with WeasyPrint
     """
-    registration_no = request.GET.get('registration_no')
-    roll_no = request.GET.get('roll_no')
-    semester = request.GET.get('semester')
-    session = request.GET.get('session')
+    registration_no = (request.GET.get('registration_no') or '').strip() or None
+    roll_no = (request.GET.get('roll_no') or '').strip() or None
+    semester = (request.GET.get('semester') or '').strip()
+    session = (request.GET.get('session') or '').strip()
     
     if not semester or not session:
         from rest_framework import status
