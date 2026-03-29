@@ -63,10 +63,6 @@ class Command(BaseCommand):
                     pg_faculty=record.faculty,
                     batch_code=record.batch_code,
                     current_semester=record.semester_code,
-                    final_result=record.final_result,
-                    gpa=record.gpa,
-                    cgpa=record.cgpa,
-                    total_percentage=record.total_per,
                     source_user_id=record.user_id,
                 )
                 profile_cache[reg_no] = profile

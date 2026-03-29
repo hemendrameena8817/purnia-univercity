@@ -19,10 +19,6 @@ class PGOldStudentProfileAdmin(ImportExportModelAdmin):
         'course_code',
         'discipline_code',
         'batch_code',
-        'final_result',
-        'gpa',
-        'cgpa',
-        'total_percentage',
         'pg_faculty',
         'pg_department',
         'pg_degree',
@@ -38,7 +34,6 @@ class PGOldStudentProfileAdmin(ImportExportModelAdmin):
         'course_code',
         'discipline_code',
         'batch_code',
-        'final_result',
         'is_active',
     )
     
@@ -92,14 +87,6 @@ class PGOldStudentProfileAdmin(ImportExportModelAdmin):
                 'pg_program',
             )
         }),
-        ('Result Information', {
-            'fields': (
-                'final_result',
-                'gpa',
-                'cgpa',
-                'total_percentage',
-            )
-        }),
         ('Source Information', {
             'fields': (
                 'source_user_id',
@@ -145,7 +132,8 @@ class PGOldResultAdmin(ImportExportModelAdmin):
     
     search_fields = (
         'subject_name',
-        'paper_code'
+        'paper_code',
+        'student_profile__registration_no',
     )
     
     readonly_fields = (

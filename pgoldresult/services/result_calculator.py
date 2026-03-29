@@ -309,11 +309,15 @@ class PGResultCalculator:
         passed_subjects = sum(1 for result in combined_results if result['subject_result'] == 'PASS')
         failed_subjects = total_subjects - passed_subjects
         
-        # Determine result status
+        # Passing rule: minimum 3 subjects must be passed
+        # Sem 1 (5 subjects): pass 3, fail at most 2
+        # Sem 2/3 (6 subjects): pass 3, fail at most 3
+        # Music dept (5 subjects all sems): pass 3, fail at most 2
+        MIN_PASS_REQUIRED = 3
         if failed_subjects == 0:
             status = 'PASS'
             status_text = 'PASSED - All subjects cleared'
-        elif failed_subjects <= 2:  # Allow up to 2 back papers
+        elif passed_subjects >= MIN_PASS_REQUIRED:
             status = 'BACK_PAPER'
             status_text = f'BACK PAPER - {failed_subjects} subject(s) to clear'
         else:
@@ -435,17 +439,6 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
     from pgoldresult.models import PGOldResult, PGOldStudentProfile, PGCenterInstituteMap, PGExamMasterDump
     from django.db.models import Sum
     
-    # Ensure fresh calculation of credits and SGPA before fetching data
-    if registration_no and semester and session:
-        try: recalculate_pgo_sgpa(registration_no, semester, session)
-        except: pass
-    elif roll_no and semester and session:
-        # Resolve registration_no from roll_no if needed
-        res_temp = PGOldResult.objects.filter(college_roll_no=roll_no, semester_code=semester, session_code=session).first()
-        if res_temp and res_temp.college_reg_no:
-            try: recalculate_pgo_sgpa(res_temp.college_reg_no, semester, session)
-            except: pass
-
     if registration_no:
         profile = PGOldStudentProfile.objects.filter(registration_no=registration_no).first()
     else:
@@ -471,9 +464,14 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
         
     final_result_ids = []
     for p_code, sessions_available in papers_history.items():
-        if session and session in sessions_available:
-            target_p_session = session
+        if session:
+            # When session is specified, only include papers that exist in that session
+            if session in sessions_available:
+                target_p_session = session
+            else:
+                continue  # Skip papers not in the requested session
         else:
+            # No session filter: carry-forward from latest session
             target_p_session = sorted(list(sessions_available), reverse=True)[0]
         
         # Add IDs of records for this paper from the selected session
@@ -481,6 +479,13 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
         final_result_ids.extend(p_ids)
         
     results = PGOldResult.objects.filter(id__in=final_result_ids).order_by('paper_code', '-maximum_mark')
+
+    # Determine the effective session from the actually selected records, then recalculate
+    effective_session = results.first().session_code if results.exists() else session
+    effective_reg_no = registration_no or (profile.registration_no if profile else None)
+    if effective_reg_no and semester and effective_session:
+        try: recalculate_pgo_sgpa(effective_reg_no, semester, effective_session)
+        except: pass
         
     grouped_subjects = {}
     
@@ -610,8 +615,32 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
     combined_results = list(grouped_subjects.values())
     total_credits = 0.0
     total_grade_points = 0.0
-    
-    for subject in combined_results:
+
+    # Determine how many subjects count toward GPA (last subject excluded per university rule)
+    _sem_num = (semester or '').replace('ST','').replace('ND','').replace('RD','').replace('TH','').strip()
+    _is_music = any(
+        r for r in results
+        if (r.discipline_code or '').strip().upper() in ('M04', 'M05')
+        or 'MUSIC' in (r.discipline_code or '').upper()
+    )
+    _max_gpa_subjects = 99  # default: all
+    _excl_paper_code = None  # specific paper code to exclude from GPA
+    if _is_music:
+        if _sem_num == '1':            _max_gpa_subjects = 5   # excl. PG106
+        elif _sem_num in ('2', '3'):   _max_gpa_subjects = 4   # excl. PG205/PG305
+        elif _sem_num == '4':          _excl_paper_code = 'PG405'
+    else:
+        if _sem_num == '1':            _max_gpa_subjects = 4   # excl. PG105
+        elif _sem_num in ('2', '3'):   _max_gpa_subjects = 5   # excl. PG206/PG306
+        elif _sem_num == '4':          _excl_paper_code = 'PG403'
+
+    _sorted_results = sorted(combined_results, key=lambda x: x.get('paper_code', ''))
+    for _idx, subject in enumerate(_sorted_results):
+        if _idx >= _max_gpa_subjects:
+            break
+        # Skip specific excluded paper for Sem 4
+        if _excl_paper_code and (subject.get('paper_code') or '').strip().upper() == _excl_paper_code:
+            continue
         credits_val = subject.get('credits')
         if credits_val:
             try: total_credits = float(total_credits) + float(credits_val)
@@ -641,9 +670,10 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
     # Final sanity check removed: We now respect total_ce=0 for failing students.
     
     try:
-        cur_sgpa = getattr(profile, 'gpa', None)
-        if cur_sgpa and str(cur_sgpa).strip():
-            sgpa_val = float(cur_sgpa)
+        # Prefer SGPA saved by recalculate_pgo_sgpa (correct, uses all carry-forward papers)
+        db_gpa = getattr(results.first(), 'gpa', None) if results.exists() else None
+        if db_gpa and str(db_gpa).strip():
+            sgpa_val = float(db_gpa)
         elif float(total_credits) > 0:
             sgpa_val = float(total_grade_points) / float(total_credits)
         else:
@@ -664,11 +694,14 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
         if center_map:
             center_name = center_map.center_name or ''
 
-    semester_result = {
-        'status':  profile.final_result or (first_result.final_result if first_result else ''),
-        'status_text': profile.final_result or (first_result.final_result if first_result else ''),
-    }
+    # Always read final_result from the effective session's records (freshly updated by recalculate_pgo_sgpa)
+    current_session_result = all_res.filter(session_code=effective_session).first() if effective_session else first_result
+    final_result_status = (current_session_result.final_result if current_session_result else '') or ''
 
+    semester_result = {
+        'status':  final_result_status,
+        'status_text': final_result_status,
+    }
     student_info = {
         'registration_no': profile.registration_no,
         'roll_no': profile.roll_no,
@@ -739,9 +772,9 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
         'session': session,
         'combined_results': combined_results,
         'sgpa_data': {
-            'total_credits': total_credits,
-            'total_grade_points': total_grade_points,
-            'sgpa': round(float(sgpa_val), 2)
+            'total_credits': total_credits if final_result_status == 'PASS' else '',
+            'total_grade_points': total_grade_points if final_result_status == 'PASS' else '',
+            'sgpa': round(float(sgpa_val), 2) if final_result_status == 'PASS' else '',
         },
         'semester_result': semester_result,
         'total_subjects': len(combined_results),
@@ -801,7 +834,7 @@ def get_pg_cgpa_data(registration_no=None, roll_no=None):
                 cr_sum = 0.0
                 
                 # To be accurate, we should probably just use the stored subject_gp
-                is_music = 'MUSIC' in (res.discipline_code or '').upper() or (res.discipline_code or '').strip().upper() == 'M04'
+                is_music = 'MUSIC' in (res.discipline_code or '').upper() or (res.discipline_code or '').strip().upper() in ('M04', 'M05')
                 
                 for r in sem_results:
                     try:
@@ -861,15 +894,27 @@ def get_pg_cgpa_data(registration_no=None, roll_no=None):
 
     cgpa = round(total_gp / total_cr, 2) if total_cr > 0 else 0.0
     
-    # Grading for CGPA
-    if cgpa >= 9.0: letter, numerical = 'O', 10
-    elif cgpa >= 8.0: letter, numerical = 'A++', 9
-    elif cgpa >= 7.0: letter, numerical = 'A+', 8
-    elif cgpa >= 6.0: letter, numerical = 'A', 7
-    elif cgpa >= 5.0: letter, numerical = 'B+', 6
-    elif cgpa >= 4.5: letter, numerical = 'B', 5
-    elif cgpa >= 4.0: letter, numerical = 'C', 4
-    else: letter, numerical = 'F', 0
+    # Grading for CGPA with description
+    if cgpa >= 9.0: letter, numerical, desc = 'O', 10, 'Outstanding'
+    elif cgpa >= 8.0: letter, numerical, desc = 'A++', 9, 'Excellent'
+    elif cgpa >= 7.0: letter, numerical, desc = 'A+', 8, 'Very Good'
+    elif cgpa >= 6.0: letter, numerical, desc = 'A', 7, 'Good'
+    elif cgpa >= 5.0: letter, numerical, desc = 'B+', 6, 'Average'
+    elif cgpa >= 4.5: letter, numerical, desc = 'B', 5, 'Satisfactory'
+    elif cgpa >= 4.0: letter, numerical, desc = 'C', 4, 'Pass'
+    else: letter, numerical, desc = 'F', 0, 'Fail'
+
+    # Save grade description to dsc_grad field for Sem 4 records
+    if profile:
+        PGOldResult.objects.filter(
+            student_profile=profile,
+            semester_code='4TH'
+        ).update(
+            dsc_grad=desc,
+            cgpa=str(cgpa),
+            let_grad=letter,
+            numrical_let_grad=str(numerical)
+        )
 
     return {
         'sem1': sem_data['1ST'],
@@ -878,7 +923,8 @@ def get_pg_cgpa_data(registration_no=None, roll_no=None):
         'sem4': sem_data['4TH'],
         'cgpa': cgpa,
         'letter_grade': letter,
-        'numerical_grade': numerical
+        'numerical_grade': numerical,
+        'grade_description': desc
     }
 
 
@@ -891,7 +937,7 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
     
     # 1. Fetch ALL results for this student and semester (across all sessions)
     all_res = PGOldResult.objects.filter(
-        college_reg_no=registration_no,
+        student_profile__registration_no=registration_no,
         semester_code=semester
     )
     
@@ -929,15 +975,26 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
 
     semester_total_credits = 0.0
     any_subject_failed = False
-    
-    # NEW RULE: Sort papers and only count credits for first N subjects
-    # Semester 1: 4 subjects, Sem 2/3: 5 subjects
+
+    # Detect Music department
+    is_music_dept = any(
+        r for r in all_res
+        if (r.discipline_code or '').strip().upper() in ('M04', 'M05')
+        or 'MUSIC' in (r.discipline_code or '').upper()
+    )
+
+    # Subjects that count toward GPA (last subject excluded per university rule)
     sorted_paper_codes = sorted(records_by_paper.keys())
     sem_num = semester.replace('ST', '').replace('ND', '').replace('RD', '').replace('TH', '').strip()
-    max_subjects_to_sum = 99 # Default to all
-    if sem_num == '1': max_subjects_to_sum = 4
-    elif sem_num in ('2', '3'): max_subjects_to_sum = 5
-    elif sem_num == '4': max_subjects_to_sum = 5 # Standard for Sem 4
+    max_subjects_to_sum = 99  # Default to all
+    if is_music_dept:
+        if sem_num == '1':   max_subjects_to_sum = 5  # excl. PG106
+        elif sem_num in ('2', '3'): max_subjects_to_sum = 4  # excl. PG205/PG305
+        elif sem_num == '4': max_subjects_to_sum = 5
+    else:
+        if sem_num == '1':   max_subjects_to_sum = 4  # excl. PG105
+        elif sem_num in ('2', '3'): max_subjects_to_sum = 5  # excl. PG206/PG306
+        elif sem_num == '4': max_subjects_to_sum = 5
             
     for idx, paper_code in enumerate(sorted_paper_codes):
         records = records_by_paper[paper_code]
@@ -969,6 +1026,7 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
             total_max = 0.0
             total_secured = 0.0
             subj_component_failed = False
+            cia_failed = False  # Rule: if ANY mid-term fails → subject FAIL
             
             for r in records:
                 # Normalize status
@@ -982,6 +1040,9 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
                 
                 max_m = float(r.maximum_mark) if r.maximum_mark else 0
                 pass_m = float(r.pass_mark) if r.pass_mark else 0
+                # Fallback: if pass_mark not set, use 45% of max as minimum
+                if pass_m == 0 and max_m > 0:
+                    pass_m = max_m * 0.45
                 sec_m = 0
                 if r.mark_secured:
                     secured_upper = r.mark_secured.strip().upper()
@@ -995,6 +1056,8 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
                 # Check component level passing
                 if sec_m < pass_m:
                     subj_component_failed = True
+                    if norm_stat == 'CIA':
+                        cia_failed = True  # Explicit CIA fail
                 
                 # If we have duplicate records for same normalized status, take the latest one (higher ID)
                 if norm_stat not in status_marks or r.id > status_marks[norm_stat]['id']:
@@ -1020,7 +1083,7 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
                 else: gp_val, letter = 0, 'F'
                 
                 subj_final_status = 'PASS'
-                if percentage < 45 or has_absent or subj_component_failed:
+                if percentage < 45 or has_absent or subj_component_failed or cia_failed:
                     gp_val, letter = 0, 'F'
                     subj_final_status = 'FAIL'
                     any_subject_failed = True
@@ -1035,24 +1098,30 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
                     r.save(update_fields=['subject_gp', 'let_grad_sub', 'subject_ng', 'numrical_let_grad', 'subject_result', 'subject_total_mark'])
             
             gp = float(primary_r.subject_gp) if primary_r.subject_gp else 0.0
-            total_credits = float(total_credits) + float(credits)
-            total_grade_points = float(total_grade_points) + float(gp)
-            
+
             # ONLY add to semester total if within the limit requested by user
-            # AND exclude DSE-1/GE-1 for Semester 4 (PG405 for Music)
+            # Sem4 Music: exclude PG405 from GPA, Sem4 Non-Music: exclude PG403 from GPA
             is_excluded = False
             if sem_num == '4':
-                is_music_dept = False
-                if any(r for r in records if (r.discipline_code or '').strip().upper() == 'M04' or 'MUSIC' in (r.discipline_code or '').upper()):
-                    is_music_dept = True
-                
                 p_code = (paper_code or '').strip().upper()
                 if is_music_dept:
                     if p_code == 'PG405': is_excluded = True
                 else:
-                    if p_code in ('DSE-1', 'GE-1'): is_excluded = True
+                    if p_code == 'PG403': is_excluded = True
+
+            # Credit earned exclusion for Music dept (different from GPA exclusion)
+            # Music: Sem1=PG105, Sem2=PG205, Sem3=PG305, Sem4=PG405
+            if is_music_dept:
+                _p = (paper_code or '').strip().upper()
+                _credit_excl_map = {'1': 'PG105', '2': 'PG205', '3': 'PG305', '4': 'PG405'}
+                is_excluded_from_credits = (_p == _credit_excl_map.get(sem_num, ''))
+            else:
+                is_excluded_from_credits = is_excluded  # Same as GPA for non-music
 
             if idx < max_subjects_to_sum and not is_excluded:
+                total_credits = float(total_credits) + float(credits)
+                total_grade_points = float(total_grade_points) + float(gp)
+            if idx < max_subjects_to_sum and not is_excluded_from_credits:
                 semester_total_credits += credits
                 
             if primary_r.subject_result and 'FAIL' in str(primary_r.subject_result).upper():
@@ -1069,7 +1138,7 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
     if sem_num == '4' and semester_total_credits > 0:
         is_music = False
         sample_r = results.first()
-        if sample_r and ((sample_r.discipline_code or '').strip().upper() == 'M04' or 'MUSIC' in (sample_r.discipline_code or '').upper()):
+        if sample_r and ((sample_r.discipline_code or '').strip().upper() in ('M04', 'M05') or 'MUSIC' in (sample_r.discipline_code or '').upper()):
             is_music = True
         
         if is_music:
@@ -1079,28 +1148,85 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
         
     results.update(total_ce=str(int(semester_total_credits)))
 
-    # 4. Calculate SGPA
+    # 4. Calculate SGPA and save to gpa field
     sgpa = round(float(total_grade_points) / float(total_credits), 2) if total_credits > 0 else 0.0
     
     # NEW RULE: If any subject is failed, SGPA is 0.0
     if any_subject_failed:
         sgpa = 0.0
     
+    results.update(gpa=str(sgpa))
+
     # 3. Determine status
-    if failed_subjects == 0:
-        status = 'PASS'
-    elif failed_subjects <= 2:
-        status = 'PROMOTED'
+    # Sem 4 special rule: Only PASS/FAIL (no PROMOTED)
+    # Sem 1/2/3: minimum 3 subjects must be passed for PROMOTED
+    # Sem 1 (5 subjects): pass 3, fail at most 2
+    # Sem 2/3 (6 subjects): pass 3, fail at most 3
+    # Music dept (5 subjects all sems): pass 3, fail at most 2
+    
+    if sem_num == '4':
+        # Sem 4: Only PASS or FAIL (all subjects must pass)
+        if failed_subjects == 0:
+            status = 'PASS'
+        else:
+            status = 'FAIL'
     else:
-        status = 'FAIL'
+        # Sem 1/2/3: PASS, PROMOTED, or FAIL
+        passed_subjects = int(total_subjects) - int(failed_subjects)
+        MIN_PASS_REQUIRED = 3
+        if failed_subjects == 0:
+            status = 'PASS'
+        elif passed_subjects >= MIN_PASS_REQUIRED:
+            status = 'PROMOTED'
+        else:
+            status = 'FAIL'
         
-    # 4. Update Profile
-    profile = PGOldStudentProfile.objects.filter(registration_no=registration_no).first()
-    if profile:
-        profile.gpa = str(sgpa)
-        profile.final_result = status
-        profile.save()
-        
+    # 4. Save semester status to PGOldResult.final_result for all current-session records
+    results.update(final_result=status)
+
+    # 5. Carry-forward check: if student was PROMOTED in a prior session,
+    #    determine the resolved status (QUALIFIED / PARTIALLY_QUALIFIED / DISQUALIFIED)
+    #    BUT: Skip if current session is a fresh attempt (all semester papers given)
+    #    ALSO: Skip for Sem 4 (only PASS/FAIL allowed)
+    
+    # Detect if current session is a fresh attempt (not just back papers)
+    # Count ONLY papers actually given in the current session (before carry-forward)
+    current_session_papers = set(all_res.filter(session_code=session).values_list('paper_code', flat=True))
+    current_papers_count = len(current_session_papers)
+    expected_total_papers = 5 if (is_music_dept or sem_num == '1') else 6
+    is_fresh_attempt = (current_papers_count >= expected_total_papers)
+    
+    prior_sessions = (
+        PGOldResult.objects
+        .filter(student_profile__registration_no=registration_no, semester_code=semester)
+        .exclude(session_code=session)
+        .values_list('session_code', flat=True)
+        .distinct()
+    )
+    prior_promoted_session = None
+    
+    if not is_fresh_attempt and sem_num != '4':  # Only check carry-forward if NOT a fresh attempt AND NOT Sem 4
+        # Find the EARLIEST (oldest) PROMOTED session to track carry-forward from
+        for prior_sess in sorted(prior_sessions):
+            if prior_sess < session:
+                # Check if this session had failures (PROMOTED status)
+                had_fails = PGOldResult.objects.filter(
+                    student_profile__registration_no=registration_no,
+                    semester_code=semester,
+                    session_code=prior_sess,
+                    subject_result__in=['F', 'FAIL']
+                ).exists()
+                if had_fails:
+                    prior_promoted_session = prior_sess
+                    break  # Take the earliest one
+
+        if prior_promoted_session:
+            carry = check_final_status(registration_no, semester, prior_promoted_session)
+            if carry['total_back_papers'] > 0:
+                status = carry['status']
+                # Persist the resolved carry-forward status in current session records
+                results.update(final_result=status)
+
     return {
         'success': True,
         'sgpa': sgpa,
@@ -1108,4 +1234,71 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
         'total_grade_points': total_grade_points,
         'status': status,
         'failed_subjects': failed_subjects
+    }
+
+
+def check_final_status(registration_no: str, semester: str, promoted_session: str) -> Dict:
+    """
+    When a student was PROMOTED in `promoted_session`, determine their resolved status
+    based on how they performed in subsequent sessions for the same semester.
+
+    Rules:
+    - ALL back papers passed in later session  -> PASS
+    - SOME back papers passed, some still fail -> PARTIALLY_QUALIFIED
+    - NONE of the back papers passed           -> FAIL
+    """
+    from pgoldresult.models import PGOldResult
+
+    all_results = PGOldResult.objects.filter(
+        student_profile__registration_no=registration_no,
+        semester_code=semester
+    )
+
+    def _is_fail(val):
+        return str(val or '').strip().upper() in ('F', 'FAIL')
+
+    def _is_pass(val):
+        return str(val or '').strip().upper() in ('P', 'PASS')
+
+    # Step 1: Identify papers the student failed in the promoted session
+    # A paper is failed if ANY component (CIA/ESE) has a fail result
+    failed_papers = set()
+    for r in all_results.filter(session_code=promoted_session):
+        if r.paper_code and _is_fail(r.subject_result):
+            failed_papers.add(r.paper_code.strip().upper())
+
+    if not failed_papers:
+        return {'status': 'PASS', 'cleared': 0, 'pending': 0, 'total_back_papers': 0}
+
+    # Step 2: Check if those papers were passed in ALL components in any later session
+    later_results = all_results.exclude(session_code=promoted_session)
+
+    cleared_papers = set()
+    for paper_code in failed_papers:
+        paper_records = list(later_results.filter(paper_code__iexact=paper_code))
+        # Group by session: paper is cleared if ALL components pass in ANY single later session
+        sessions_map = {}
+        for r in paper_records:
+            sessions_map.setdefault(r.session_code, []).append(r.subject_result)
+        if any(all(_is_pass(v) for v in vals) for vals in sessions_map.values()):
+            cleared_papers.add(paper_code)
+
+    cleared = len(cleared_papers)
+    total_back = len(failed_papers)
+    pending = total_back - cleared
+
+    if cleared == total_back:
+        final_status = 'QUALIFIED'
+    elif cleared == 0:
+        final_status = 'DISQUALIFIED'
+    else:
+        final_status = 'PARTIALLY_QUALIFIED'
+
+    return {
+        'status': final_status,
+        'cleared': cleared,
+        'pending': pending,
+        'total_back_papers': total_back,
+        'failed_papers': list(failed_papers),
+        'cleared_papers': list(cleared_papers),
     }
