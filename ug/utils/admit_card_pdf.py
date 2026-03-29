@@ -258,7 +258,13 @@ def generate_ug_admit_card_pdf(student, exam):
             
             # Smart Overrides: For AEC/VAC/SEC/MJC/MIC/MDC, resolve the best possible department
             curr_dept_id = dept_id
-            if student.major_course:
+            if base_cat == 'MJC' and student.major_course:
+                curr_dept_id = student.major_course.id
+            elif base_cat == 'MIC' and student.minor_course:
+                curr_dept_id = student.minor_course.id
+            elif base_cat == 'MDC' and student.mdc_course:
+                curr_dept_id = student.mdc_course.id
+            elif base_cat in ['AEC', 'VAC', 'SEC'] and student.major_course:
                 curr_dept_id = student.major_course.id
 
             # Step 4: Check Exam Schedule Context
@@ -302,8 +308,8 @@ def generate_ug_admit_card_pdf(student, exam):
                 # Check 1: Find EXACT schedule mapped via mjc OR department to student major_course
                 if not sch and curr_dept_id:
                     matches = sch_qs.filter(
-                        Q(mjc__id=curr_dept_id) | Q(department__id=curr_dept_id),
-                        exam_type__iexact=base_cat
+                            Q(mjc__id=curr_dept_id) | Q(department__id=curr_dept_id),
+                            exam_type__iexact=base_cat
                     )
                     if matches.count() == 1:
                         sch = matches.first()
