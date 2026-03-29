@@ -48,11 +48,18 @@ def _resolve_student_schedules_for_attendance(student, exam):
             continue
         seen_subjects.add(subj_key)
         
-        dept_obj = student.department
-        dept_id = dept_obj.id if dept_obj else None
-        base_cat = str(category).split('-')[0].strip().upper() if category else ""
-        
-        curr_dept_id = student.major_course.id if student.major_course else dept_id
+        # Logic from admit_card_pdf.py
+        dept_id = student.department.id if student.department else None
+        base_cat = (str(category or "").split('-')[0].strip().upper())
+        curr_dept_id = dept_id
+        if base_cat == 'MJC' and student.major_course:
+            curr_dept_id = student.major_course.id
+        elif base_cat == 'MIC' and student.minor_course:
+            curr_dept_id = student.minor_course.id
+        elif base_cat == 'MDC' and student.mdc_course:
+            curr_dept_id = student.mdc_course.id
+        elif base_cat in ['AEC', 'VAC', 'SEC'] and student.major_course:
+            curr_dept_id = student.major_course.id
 
         sch = None
         if base_cat in ['AEC', 'VAC', 'SEC']:

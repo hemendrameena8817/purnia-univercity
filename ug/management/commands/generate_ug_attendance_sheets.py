@@ -3,7 +3,7 @@ import logging
 import traceback
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
-from ug.models import UGExam, ExamRegistration, UGDepartment
+from ug.models import UGExam, ExamRegistration, UGDepartment, UGExamCenterMapping
 from colleges.models import College
 from ug.utils.attendance_sheet_pdf import generate_ug_attendance_sheet_pdf
 from ug.utils.roll_sheet_pdf import get_sem_integer
@@ -40,34 +40,41 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Generating UG attendance sheets for Exam: {exam.name} ({exam.session})")
 
-        sem_int = get_sem_integer(exam.semester)
-        session_str = str(exam.session or "").strip()
+        # Get all relevant centers for this exam
+        center_mappings = UGExamCenterMapping.objects.filter(exam=exam).select_related('center')
 
-        filters = {
-            'exam': exam,
-            'status': 'REGISTERED',
-        }
-        if sem_int: filters['sem'] = sem_int
-        if session_str: filters['session__iexact'] = session_str
-        
-        if registration_no:
-            filters['student__registration_no'] = registration_no
-        
-        if college_uids:
-            colleges_found = College.objects.filter(uid__in=college_uids)
-            filters['student__college__in'] = colleges_found
-
-        # Find colleges with matching registrations
-        college_ids = ExamRegistration.objects.filter(**filters).values_list('student__college_id', flat=True).distinct()
-        colleges = College.objects.filter(id__in=college_ids).order_by('name')
-
-        if not colleges.exists():
-            self.stdout.write(self.style.WARNING("No registered students found matching the criteria."))
+        if not center_mappings.exists():
+            self.stdout.write(self.style.WARNING("No center mappings found for this exam."))
             return
 
-        for college in colleges:
-            self.stdout.write(f"\nProcessing College: {college.name}")
-            self.process_generation(exam, college, output_dir, registration_no)
+        for mapping in center_mappings:
+            center_name_safe = "".join(c if c.isalnum() else "_" for c in mapping.center.name)
+            center_path = os.path.join(output_dir, center_name_safe)
+            
+            if not os.path.exists(center_path):
+                os.makedirs(center_path)
+
+            self.stdout.write(self.style.SUCCESS(f"\nProcessing Exam Center: {mapping.center.name}"))
+            
+            # Colleges for this center
+            colleges = mapping.attached_colleges.all()
+            if college_uids:
+                colleges = colleges.filter(uid__in=college_uids)
+
+            if not colleges.exists():
+                self.stdout.write(f"    - No matching colleges for this center.")
+                continue
+
+            for college in colleges:
+                # Check for active registrations in this college for this exam
+                has_regs = ExamRegistration.objects.filter(
+                    student__college=college, exam=exam, status='REGISTERED'
+                ).exists()
+                
+                if not has_regs:
+                    continue
+
+                self.process_generation(exam, college, center_path, registration_no)
 
         self.stdout.write(self.style.SUCCESS(f"\nBatch generation complete! Files saved in: {output_dir}"))
 
