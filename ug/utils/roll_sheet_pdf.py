@@ -209,12 +209,8 @@ def generate_ug_roll_sheet_excel(exam, college, department_uid=None):
     cur_row = 4
     ws.cell(row=cur_row, column=1, value="COLLEGE:").font = sub_header_font
     ws.cell(row=cur_row, column=2, value=data['college_name'])
-    ws.cell(row=cur_row, column=5, value="CODE:").font = sub_header_font
-    ws.cell(row=cur_row, column=6, value=data['college_code'])
     
-    cur_row += 1
-    ws.cell(row=cur_row, column=1, value="SESSION:").font = sub_header_font
-    ws.cell(row=cur_row, column=2, value=data['session'])
+    # Repositioned YEAR to immediately follow COLLEGE; CODE and SESSION completely removed per request
     ws.cell(row=cur_row, column=5, value="YEAR:").font = sub_header_font
     ws.cell(row=cur_row, column=6, value=data['year'])
     

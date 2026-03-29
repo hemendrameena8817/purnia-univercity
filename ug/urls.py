@@ -24,12 +24,14 @@ from ug.api.payments import (
 )
 from .views import (
     UGAdmitCardPDFView, UGBulkAdmitCardPDFView, UGAdmitCardTestView, 
-    UGRollSheetPDFView, UGExamListView
+    UGRollSheetPDFView, UGAttendanceSheetPDFView, UGExamListView
 )
 
 app_name = 'ug'
 
 urlpatterns = [
+    # ... existing ...
+    path('attendance-sheet/pdf/', UGAttendanceSheetPDFView.as_view(), name='ug-attendance-sheet-pdf'),
     # Semester Registration APIs (Student)
     path(
         'semester-registration/eligibility/',
