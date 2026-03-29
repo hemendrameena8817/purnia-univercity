@@ -620,21 +620,27 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
     _sem_num = (semester or '').replace('ST','').replace('ND','').replace('RD','').replace('TH','').strip()
     _is_music = any(
         r for r in results
-        if (r.discipline_code or '').strip().upper() == 'M04'
+        if (r.discipline_code or '').strip().upper() in ('M04', 'M05')
         or 'MUSIC' in (r.discipline_code or '').upper()
     )
     _max_gpa_subjects = 99  # default: all
+    _excl_paper_code = None  # specific paper code to exclude from GPA
     if _is_music:
-        if _sem_num == '1':            _max_gpa_subjects = 5  # excl. PG106
-        elif _sem_num in ('2', '3'):   _max_gpa_subjects = 4  # excl. PG205/PG305
+        if _sem_num == '1':            _max_gpa_subjects = 5   # excl. PG106
+        elif _sem_num in ('2', '3'):   _max_gpa_subjects = 4   # excl. PG205/PG305
+        elif _sem_num == '4':          _excl_paper_code = 'PG405'
     else:
-        if _sem_num == '1':            _max_gpa_subjects = 4  # excl. PG105
-        elif _sem_num in ('2', '3'):   _max_gpa_subjects = 5  # excl. PG206/PG306
+        if _sem_num == '1':            _max_gpa_subjects = 4   # excl. PG105
+        elif _sem_num in ('2', '3'):   _max_gpa_subjects = 5   # excl. PG206/PG306
+        elif _sem_num == '4':          _excl_paper_code = 'PG403'
 
     _sorted_results = sorted(combined_results, key=lambda x: x.get('paper_code', ''))
     for _idx, subject in enumerate(_sorted_results):
         if _idx >= _max_gpa_subjects:
             break
+        # Skip specific excluded paper for Sem 4
+        if _excl_paper_code and (subject.get('paper_code') or '').strip().upper() == _excl_paper_code:
+            continue
         credits_val = subject.get('credits')
         if credits_val:
             try: total_credits = float(total_credits) + float(credits_val)
@@ -828,7 +834,7 @@ def get_pg_cgpa_data(registration_no=None, roll_no=None):
                 cr_sum = 0.0
                 
                 # To be accurate, we should probably just use the stored subject_gp
-                is_music = 'MUSIC' in (res.discipline_code or '').upper() or (res.discipline_code or '').strip().upper() == 'M04'
+                is_music = 'MUSIC' in (res.discipline_code or '').upper() or (res.discipline_code or '').strip().upper() in ('M04', 'M05')
                 
                 for r in sem_results:
                     try:
@@ -888,15 +894,27 @@ def get_pg_cgpa_data(registration_no=None, roll_no=None):
 
     cgpa = round(total_gp / total_cr, 2) if total_cr > 0 else 0.0
     
-    # Grading for CGPA
-    if cgpa >= 9.0: letter, numerical = 'O', 10
-    elif cgpa >= 8.0: letter, numerical = 'A++', 9
-    elif cgpa >= 7.0: letter, numerical = 'A+', 8
-    elif cgpa >= 6.0: letter, numerical = 'A', 7
-    elif cgpa >= 5.0: letter, numerical = 'B+', 6
-    elif cgpa >= 4.5: letter, numerical = 'B', 5
-    elif cgpa >= 4.0: letter, numerical = 'C', 4
-    else: letter, numerical = 'F', 0
+    # Grading for CGPA with description
+    if cgpa >= 9.0: letter, numerical, desc = 'O', 10, 'Outstanding'
+    elif cgpa >= 8.0: letter, numerical, desc = 'A++', 9, 'Excellent'
+    elif cgpa >= 7.0: letter, numerical, desc = 'A+', 8, 'Very Good'
+    elif cgpa >= 6.0: letter, numerical, desc = 'A', 7, 'Good'
+    elif cgpa >= 5.0: letter, numerical, desc = 'B+', 6, 'Average'
+    elif cgpa >= 4.5: letter, numerical, desc = 'B', 5, 'Satisfactory'
+    elif cgpa >= 4.0: letter, numerical, desc = 'C', 4, 'Pass'
+    else: letter, numerical, desc = 'F', 0, 'Fail'
+
+    # Save grade description to dsc_grad field for Sem 4 records
+    if profile:
+        PGOldResult.objects.filter(
+            student_profile=profile,
+            semester_code='4TH'
+        ).update(
+            dsc_grad=desc,
+            cgpa=str(cgpa),
+            let_grad=letter,
+            numrical_let_grad=str(numerical)
+        )
 
     return {
         'sem1': sem_data['1ST'],
@@ -905,7 +923,8 @@ def get_pg_cgpa_data(registration_no=None, roll_no=None):
         'sem4': sem_data['4TH'],
         'cgpa': cgpa,
         'letter_grade': letter,
-        'numerical_grade': numerical
+        'numerical_grade': numerical,
+        'grade_description': desc
     }
 
 
@@ -960,7 +979,7 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
     # Detect Music department
     is_music_dept = any(
         r for r in all_res
-        if (r.discipline_code or '').strip().upper() == 'M04'
+        if (r.discipline_code or '').strip().upper() in ('M04', 'M05')
         or 'MUSIC' in (r.discipline_code or '').upper()
     )
 
@@ -1081,22 +1100,28 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
             gp = float(primary_r.subject_gp) if primary_r.subject_gp else 0.0
 
             # ONLY add to semester total if within the limit requested by user
-            # AND exclude DSE-1/GE-1 for Semester 4 (PG405 for Music)
+            # Sem4 Music: exclude PG405 from GPA, Sem4 Non-Music: exclude PG403 from GPA
             is_excluded = False
             if sem_num == '4':
-                is_music_dept = False
-                if any(r for r in records if (r.discipline_code or '').strip().upper() == 'M04' or 'MUSIC' in (r.discipline_code or '').upper()):
-                    is_music_dept = True
-                
                 p_code = (paper_code or '').strip().upper()
                 if is_music_dept:
                     if p_code == 'PG405': is_excluded = True
                 else:
-                    if p_code in ('DSE-1', 'GE-1'): is_excluded = True
+                    if p_code == 'PG403': is_excluded = True
+
+            # Credit earned exclusion for Music dept (different from GPA exclusion)
+            # Music: Sem1=PG105, Sem2=PG205, Sem3=PG305, Sem4=PG405
+            if is_music_dept:
+                _p = (paper_code or '').strip().upper()
+                _credit_excl_map = {'1': 'PG105', '2': 'PG205', '3': 'PG305', '4': 'PG405'}
+                is_excluded_from_credits = (_p == _credit_excl_map.get(sem_num, ''))
+            else:
+                is_excluded_from_credits = is_excluded  # Same as GPA for non-music
 
             if idx < max_subjects_to_sum and not is_excluded:
                 total_credits = float(total_credits) + float(credits)
                 total_grade_points = float(total_grade_points) + float(gp)
+            if idx < max_subjects_to_sum and not is_excluded_from_credits:
                 semester_total_credits += credits
                 
             if primary_r.subject_result and 'FAIL' in str(primary_r.subject_result).upper():
@@ -1113,7 +1138,7 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
     if sem_num == '4' and semester_total_credits > 0:
         is_music = False
         sample_r = results.first()
-        if sample_r and ((sample_r.discipline_code or '').strip().upper() == 'M04' or 'MUSIC' in (sample_r.discipline_code or '').upper()):
+        if sample_r and ((sample_r.discipline_code or '').strip().upper() in ('M04', 'M05') or 'MUSIC' in (sample_r.discipline_code or '').upper()):
             is_music = True
         
         if is_music:
@@ -1133,24 +1158,44 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
     results.update(gpa=str(sgpa))
 
     # 3. Determine status
-    # Passing rule: minimum 3 subjects must be passed
+    # Sem 4 special rule: Only PASS/FAIL (no PROMOTED)
+    # Sem 1/2/3: minimum 3 subjects must be passed for PROMOTED
     # Sem 1 (5 subjects): pass 3, fail at most 2
     # Sem 2/3 (6 subjects): pass 3, fail at most 3
     # Music dept (5 subjects all sems): pass 3, fail at most 2
-    passed_subjects = int(total_subjects) - int(failed_subjects)
-    MIN_PASS_REQUIRED = 3
-    if failed_subjects == 0:
-        status = 'PASS'
-    elif passed_subjects >= MIN_PASS_REQUIRED:
-        status = 'PROMOTED'
+    
+    if sem_num == '4':
+        # Sem 4: Only PASS or FAIL (all subjects must pass)
+        if failed_subjects == 0:
+            status = 'PASS'
+        else:
+            status = 'FAIL'
     else:
-        status = 'FAIL'
+        # Sem 1/2/3: PASS, PROMOTED, or FAIL
+        passed_subjects = int(total_subjects) - int(failed_subjects)
+        MIN_PASS_REQUIRED = 3
+        if failed_subjects == 0:
+            status = 'PASS'
+        elif passed_subjects >= MIN_PASS_REQUIRED:
+            status = 'PROMOTED'
+        else:
+            status = 'FAIL'
         
     # 4. Save semester status to PGOldResult.final_result for all current-session records
     results.update(final_result=status)
 
     # 5. Carry-forward check: if student was PROMOTED in a prior session,
     #    determine the resolved status (QUALIFIED / PARTIALLY_QUALIFIED / DISQUALIFIED)
+    #    BUT: Skip if current session is a fresh attempt (all semester papers given)
+    #    ALSO: Skip for Sem 4 (only PASS/FAIL allowed)
+    
+    # Detect if current session is a fresh attempt (not just back papers)
+    # Count ONLY papers actually given in the current session (before carry-forward)
+    current_session_papers = set(all_res.filter(session_code=session).values_list('paper_code', flat=True))
+    current_papers_count = len(current_session_papers)
+    expected_total_papers = 5 if (is_music_dept or sem_num == '1') else 6
+    is_fresh_attempt = (current_papers_count >= expected_total_papers)
+    
     prior_sessions = (
         PGOldResult.objects
         .filter(student_profile__registration_no=registration_no, semester_code=semester)
@@ -1159,24 +1204,28 @@ def recalculate_pgo_sgpa(registration_no: str, semester: str, session: str) -> D
         .distinct()
     )
     prior_promoted_session = None
-    for prior_sess in sorted(prior_sessions):
-        if prior_sess < session:
-            had_fails = PGOldResult.objects.filter(
-                student_profile__registration_no=registration_no,
-                semester_code=semester,
-                session_code=prior_sess,
-                subject_result__in=['F', 'FAIL']
-            ).exists()
-            if had_fails:
-                prior_promoted_session = prior_sess
-                break
+    
+    if not is_fresh_attempt and sem_num != '4':  # Only check carry-forward if NOT a fresh attempt AND NOT Sem 4
+        # Find the EARLIEST (oldest) PROMOTED session to track carry-forward from
+        for prior_sess in sorted(prior_sessions):
+            if prior_sess < session:
+                # Check if this session had failures (PROMOTED status)
+                had_fails = PGOldResult.objects.filter(
+                    student_profile__registration_no=registration_no,
+                    semester_code=semester,
+                    session_code=prior_sess,
+                    subject_result__in=['F', 'FAIL']
+                ).exists()
+                if had_fails:
+                    prior_promoted_session = prior_sess
+                    break  # Take the earliest one
 
-    if prior_promoted_session:
-        carry = check_final_status(registration_no, semester, prior_promoted_session)
-        if carry['total_back_papers'] > 0:
-            status = carry['status']
-            # Persist the resolved carry-forward status in current session records
-            results.update(final_result=status)
+        if prior_promoted_session:
+            carry = check_final_status(registration_no, semester, prior_promoted_session)
+            if carry['total_back_papers'] > 0:
+                status = carry['status']
+                # Persist the resolved carry-forward status in current session records
+                results.update(final_result=status)
 
     return {
         'success': True,
