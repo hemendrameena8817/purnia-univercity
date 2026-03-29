@@ -10,6 +10,7 @@ from io import BytesIO
 from weasyprint import HTML
 from .models import UGStudentProfile, UGExam
 from .utils.admit_card_pdf import generate_ug_admit_card_pdf
+from .utils.attendance_sheet_pdf import generate_ug_attendance_sheet_pdf
 import os
 import base64
 from django.conf import settings
@@ -253,6 +254,48 @@ class UGRollSheetPDFView(View):
                 excel_url += f"&department_uid={department_uid}"
             response["Refresh"] = f"2; url={excel_url}"
             
+        return response
+
+
+class UGAttendanceSheetPDFView(View):
+    """
+    Generates and returns Exam Attendance Sheet PDF for UG.
+    Query params: exam_uid, college_uid, registration_no (optional)
+    """
+    def get(self, request, exam_uid=None, college_uid=None):
+        from colleges.models import College
+        from .models import UGExam
+        from .utils.attendance_sheet_pdf import generate_ug_attendance_sheet_pdf
+
+        exam_uid = exam_uid or request.GET.get("exam_uid")
+        college_uid = college_uid or request.GET.get("college_uid")
+
+        if not all([exam_uid, college_uid]):
+            return HttpResponse("exam_uid and college_uid are required", status=400)
+
+        exam = get_object_or_404(UGExam, uid=exam_uid)
+        college = get_object_or_404(College, uid=college_uid)
+        
+        registration_no = request.GET.get("registration_no")
+        department_uid = request.GET.get("department_uid")
+
+        pdf_content = generate_ug_attendance_sheet_pdf(
+            exam, college, department_uid=department_uid, registration_no=registration_no
+        )
+
+        if not pdf_content:
+            return HttpResponse("No data found for attendance sheet", status=404)
+
+        download = request.GET.get("download", "false").lower() == "true"
+        disposition = "attachment" if download else "inline"
+        
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        safe_college_name = "".join(c if c.isalnum() else "_" for c in college.name)
+        filename = f"Attendance_Sheet_{safe_college_name}.pdf"
+        if registration_no:
+            filename = f"Attendance_Sheet_{registration_no}.pdf"
+            
+        response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
         return response
 
 
