@@ -600,10 +600,11 @@ class UGStudentAttendanceListView(APIView):
         now_local = timezone.localtime(timezone.now())
         today = now_local.date()
         current_time = now_local.time()
+
         exam_type_param = request.query_params.get('exam_type', '').strip().upper()
 
-        # Build schedule filter for TODAY
-        schedule_filter = Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
+        # Build schedule filter STRICTLY for TODAY
+        schedule_filter = Q(exam_date=today)
         
         # Initial schedules queryset
         todays_schedules = UGExamSchedule.objects.filter(schedule_filter).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
@@ -621,29 +622,25 @@ class UGStudentAttendanceListView(APIView):
         if exam_type_param:
             todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
 
-        # --- STRICT 1st SEMESTER AUTO-SELECTION ---
-        # Only show Semester-I exams by default as per requirement
-        todays_schedules = todays_schedules.filter(exam__semester__icontains="I")
+        # --- SMART SEMESTER-I NARROWING ---
+        # Prioritize 1st Semester exams automatically
+        sem1_scheds = todays_schedules.filter(exam__semester__icontains="I")
+        if sem1_scheds.exists():
+            todays_schedules = sem1_scheds
 
         # Pick the most recently added exam that matches today's Semester-I criteria
         recent_exam_id = todays_schedules.order_by('exam__id').values_list('exam', flat=True).last()
-        
         if not recent_exam_id:
-            # Absolute fallback to the last UG exam in the system if no schedules match today
+            # Fallback to the absolute last UG exam in the system
             last_exam = UGExam.objects.all().last()
             if last_exam:
-                recent_exam_id = last_exam.id
+                 recent_exam_id = last_exam.id
         
-        # If we have a resolve context (either from today or absolute fallback)
         if recent_exam_id:
-            # Sync todays_schedules to the finalized exam ID
+            # Re-fetch strictly tied to the resolved exam context
             todays_schedules = UGExamSchedule.objects.filter(schedule_filter, exam_id=recent_exam_id).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
-            
-            # Re-apply dept/type filters if they were active
-            if department:
-                todays_schedules = todays_schedules.filter(dept_filter)
-            if exam_type_param:
-                todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
+            if department: todays_schedules = todays_schedules.filter(dept_filter)
+            if exam_type_param: todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
 
         print(f"{todays_schedules = }")
         if not todays_schedules.exists():
@@ -654,28 +651,24 @@ class UGStudentAttendanceListView(APIView):
                 "total": 0
             }, status=status.HTTP_200_OK)
 
-        active_schedules = list(todays_schedules)
-        
-        # Check custom attendance window logic
-        is_window_open = False
+        # Validate Window and 11 PM Cutoff
+        refined_schedules = []
+        is_any_window_open = False
         window_message = "Attendance window has closed for today."
         
-        for schedule in active_schedules:
+        for schedule in todays_schedules:
             if schedule.attendance_from and schedule.attendance_to:
-                # If custom range provided
                 if schedule.attendance_from <= now_local <= schedule.attendance_to:
-                    is_window_open = True
-                    break
+                    refined_schedules.append(schedule)
+                    is_any_window_open = True
                 else:
                     window_message = f"Attendance allowed from {schedule.attendance_from.strftime('%I:%M %p')} to {schedule.attendance_to.strftime('%I:%M %p')}."
             else:
-                # Regular cutoff fallback
-                CUTOFF_HOUR = 23
-                if current_time.hour < CUTOFF_HOUR:
-                    is_window_open = True
-                    break
-        
-        if not is_window_open:
+                if current_time.hour < 23:
+                    refined_schedules.append(schedule)
+                    is_any_window_open = True
+
+        if not refined_schedules:
             return Response({
                 "attendance_open": False,
                 "message": window_message,
@@ -683,6 +676,7 @@ class UGStudentAttendanceListView(APIView):
                 "total": 0
             }, status=status.HTTP_200_OK)
 
+        active_schedules = refined_schedules
         time_slots = []
         for s in todays_schedules:
             slot = f"{s.exam_time} to {s.sitting}" if s.exam_time and s.sitting else (s.exam_time or s.sitting or "TBD")
@@ -753,19 +747,34 @@ class UGStudentAttendanceListView(APIView):
                 "total": 0
             }, status=status.HTTP_200_OK)
 
+        # Initial assessments for all registered students
         student_assessments = StudentCourseAssessment.objects.filter(
             student_id__in=registered_student_ids,
             label__iregex=r'^ESE-Theory',
             semester = '1ST'
         ).select_related('student').order_by('student__roll_no', 'student__registration_no')
 
+        # --- PRECISION Q FILTER (Stops future turns from appearing with '-' times) ---
         q_filter = Q()
-        if relevant_paper_names:
-            q_filter |= Q(course_name__in=relevant_paper_names)
-        if relevant_course_types:
-            q_filter |= Q(course_type__in=relevant_course_types)
+        for s in todays_schedules:
+            paper_q = Q()
+            # 1. Subject Identifier Match
+            if s.exam_subject and s.exam_subject.course_name:
+                paper_q = Q(course_name=s.exam_subject.course_name.strip())
+            elif s.exam_type:
+                paper_q = Q(course_type__icontains=s.exam_type.split('-')[0].strip())
+            
+            # 2. Strict Mapping (Check student belongs to this schedule's Dept/MJC)
+            mjc_ids = list(s.mjc.values_list('id', flat=True))
+            dept_ids = list(s.department.values_list('id', flat=True))
+            if mjc_ids or dept_ids:
+                combined_mapped_ids = list(set(mjc_ids + dept_ids))
+                paper_q &= Q(student__major_course_id__in=combined_mapped_ids)
+            
+            q_filter |= paper_q
 
         if q_filter:
+            # This ensures only student assessments matching TODAY'S turn show up
             student_assessments = student_assessments.filter(q_filter)
 
         search_query = request.query_params.get('search', '').strip()
