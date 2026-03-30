@@ -1204,15 +1204,16 @@ class PGExamScheduleResource(resources.ModelResource):
 
     class Meta:
         model = PGExamSchedule
-        exclude = ('uid', 'exam')
+        exclude = ('uid', 'exam', 'id')
         import_id_fields = ('exam_id', 'common_course_structure', 'group', 'session', 'semester')
         export_order = (
-            'id', 'exam_id', 'exam_name', 'group', 'common_course_structure',
+            'exam_id', 'exam_name', 'group', 'common_course_structure',
             'session', 'semester', 'exam_date', 'exam_time', 'sitting',
-            'created_at', 'updated_at',
         )
 
     def before_import_row(self, row, row_number=None, **kwargs):
+        row.pop('uid', None)
+        row.pop('id', None)
         val = str(row.get('exam', '') or '').strip()
         if val and not val.isdigit():
             exam = (
