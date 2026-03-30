@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 Generate Attendance Sheets for PG106 paper code only
 
 Usage:
-git statypython manage.py generate_pg106_attendance_sheets --exam-uid 10f3ea2b-675b-4c5d-baf6-017ef4b6b0de
+python manage.py generate_pg106_attendance_sheets --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48
+
 python manage.py generate_pg106_attendance_sheets --exam-uid <exam-uid> --registration-no <reg-no>
 python manage.py generate_pg106_attendance_sheets --exam-uid <exam-uid> --college-uid <college-uid1> <college-uid2>
 """
@@ -84,16 +85,24 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("No null exam_date schedules with course structures found."))
             return
 
-        # Find departments linked to those course structures (M2M)
-        null_date_dept_ids = set(
+        # Find departments from CSS (M2M)
+        css_dept_ids = set(
             PGCommonCourseStructure.objects.filter(id__in=null_date_css_ids)
             .values_list('departments__id', flat=True)
             .distinct()
         )
-        self.stdout.write(f"Dept IDs from null-date course structures: {null_date_dept_ids}")
+        # Also find departments from schedule's group (M2M)
+        group_dept_ids = set(
+            PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
+            .exclude(group=None)
+            .values_list('group__department__id', flat=True)
+            .distinct()
+        )
+        null_date_dept_ids = css_dept_ids | group_dept_ids
+        self.stdout.write(f"Dept IDs (CSS: {css_dept_ids}, Group: {group_dept_ids})")
 
         if not null_date_dept_ids:
-            self.stdout.write(self.style.WARNING("No departments found in null-date course structures."))
+            self.stdout.write(self.style.WARNING("No departments found in null-date schedules."))
             return
 
         # Find registered students whose department is in those course structures
