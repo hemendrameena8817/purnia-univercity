@@ -123,14 +123,14 @@ def generate_pg106_attendance_sheet_pdf(
     if cm and cm.center:
         center_name = cm.center.name
 
-    # ── Schedules (restricted to allowed_css_ids) ────────────────────────────
-    sched_qs = PGExamSchedule.objects.filter(exam=exam)
+    # ── Schedules (null-date only, restricted to allowed_css_ids) ─────────────
+    sched_qs = PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
     if allowed_css_ids is not None:
         sched_qs = sched_qs.filter(common_course_structure_id__in=allowed_css_ids)
     all_schedules = list(
         sched_qs.select_related('common_course_structure', 'group')
         .prefetch_related('group__department')
-        .order_by('exam_date', 'exam_time')
+        .order_by('exam_time')
     )
 
     # ── Pre-build schedule lookup ────────────────────────────────────────────
@@ -399,11 +399,11 @@ def generate_pg106_roll_sheet_pdf(
     if cm and cm.center:
         center_name = cm.center.name
 
-    # ── Schedules (restricted to allowed_css_ids) ────────────────────────────
-    sched_qs = PGExamSchedule.objects.filter(exam=exam)
+    # ── Schedules (null-date only, restricted to allowed_css_ids) ─────────────
+    sched_qs = PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
     if allowed_css_ids is not None:
         sched_qs = sched_qs.filter(common_course_structure_id__in=allowed_css_ids)
-    schedules_all = sched_qs.select_related('common_course_structure', 'group').order_by('exam_date', 'exam_time')
+    schedules_all = sched_qs.select_related('common_course_structure', 'group').order_by('exam_time')
 
     # ── Controller signature ─────────────────────────────────────────────────
     def _find_static(filename):
