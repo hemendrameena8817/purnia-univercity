@@ -24,6 +24,30 @@ roman_to_arabic.update({'XI': '11', 'XII': '12', 'XIII': '13', 'XIV': '14', 'XV'
 roman_map_inv = {v: k for k, v in roman_to_arabic.items()}
 
 
+_ordinal_map = {
+    1: ('1ST', 'FIRST'), 2: ('2ND', 'SECOND'), 3: ('3RD', 'THIRD'),
+    4: ('4TH', 'FOURTH'), 5: ('5TH', 'FIFTH'), 6: ('6TH', 'SIXTH'),
+    7: ('7TH', 'SEVENTH'), 8: ('8TH', 'EIGHTH'),
+}
+
+
+def _build_sem_variants(s_int):
+    s_str = str(s_int)
+    roman_s = roman_map_inv.get(s_str, "")
+    variants = set()
+    for v in [s_str, roman_s,
+              f"SEM-{s_str}", f"SEM {s_str}",
+              f"SEMESTER-{s_str}", f"SEMESTER {s_str}",
+              f"SEM-{roman_s}", f"SEM {roman_s}",
+              f"SEMESTER-{roman_s}", f"SEMESTER {roman_s}"]:
+        if v:
+            variants.add(v.upper())
+    for suffix in _ordinal_map.get(s_int, ()):
+        variants.update([suffix, f"SEM-{suffix}", f"SEM {suffix}",
+                         f"SEMESTER-{suffix}", f"SEMESTER {suffix}"])
+    return variants
+
+
 def _sem_variants_from_exam(exam):
     ey = str(exam.year) if exam.year else ""
     sem_ints = set()
@@ -42,17 +66,7 @@ def _sem_variants_from_exam(exam):
     for s_int in sem_ints:
         s_str = str(s_int)
         roman_s = roman_map_inv.get(s_str, "")
-        for v in [s_str, roman_s,
-                  f"SEM-{s_str}", f"SEM {s_str}",
-                  f"SEMESTER-{s_str}", f"SEMESTER {s_str}",
-                  f"SEM-{roman_s}", f"SEM {roman_s}",
-                  f"SEMESTER-{roman_s}", f"SEMESTER {roman_s}"]:
-            if v:
-                variants.add(v.upper())
-        if s_str == '3':
-            for suffix in ['3RD', 'THIRD']:
-                variants.update([suffix, f"SEM-{suffix}", f"SEM {suffix}",
-                                  f"SEMESTER-{suffix}", f"SEMESTER {suffix}"])
+        variants.update(_build_sem_variants(s_int))
     return list(sem_ints), list(variants)
 
 
@@ -153,15 +167,7 @@ def generate_pg106_attendance_sheet_pdf(
     distinct_sems = list(set(r.sem for r in regs_list if r.sem is not None))
     d_sem_variants = set()
     for s_int in distinct_sems:
-        s_str = str(s_int)
-        roman_s = roman_map_inv.get(s_str, "")
-        for v in [s_str, roman_s,
-                  f"SEM-{s_str}", f"SEM {s_str}",
-                  f"SEMESTER-{s_str}", f"SEMESTER {s_str}",
-                  f"SEM-{roman_s}", f"SEM {roman_s}",
-                  f"SEMESTER-{roman_s}", f"SEMESTER {roman_s}"]:
-            if v:
-                d_sem_variants.add(v.upper())
+        d_sem_variants.update(_build_sem_variants(s_int))
 
     assess_filter = dict(
         student_id__in=student_ids,
@@ -431,15 +437,7 @@ def generate_pg106_roll_sheet_pdf(
         dept_sems = list(set(r.sem for r in dept_regs if r.sem is not None))
         dept_sem_variants = set()
         for s_int in dept_sems:
-            s_str = str(s_int)
-            roman_s = roman_map_inv.get(s_str, "")
-            for v in [s_str, roman_s,
-                      f"SEM-{s_str}", f"SEM {s_str}",
-                      f"SEMESTER-{s_str}", f"SEMESTER {s_str}",
-                      f"SEM-{roman_s}", f"SEM {roman_s}",
-                      f"SEMESTER-{roman_s}", f"SEMESTER {roman_s}"]:
-                if v:
-                    dept_sem_variants.add(v.upper())
+            dept_sem_variants.update(_build_sem_variants(s_int))
 
         code_to_id = {}
         norm_to_id = {}
@@ -511,23 +509,11 @@ def generate_pg106_roll_sheet_pdf(
         rows = []
         for reg in dept_regs:
             stu = reg.student
-            stu_sem_variants = set()
-            if reg.sem:
-                s_int = reg.sem
-                s_str = str(s_int)
-                roman_s = roman_map_inv.get(s_str, "")
-                for v in [s_str, roman_s,
-                           f"SEM-{s_str}", f"SEM {s_str}",
-                           f"SEMESTER-{s_str}", f"SEMESTER {s_str}",
-                           f"SEM-{roman_s}", f"SEM {roman_s}",
-                           f"SEMESTER-{roman_s}", f"SEMESTER {roman_s}"]:
-                    if v:
-                        stu_sem_variants.add(v.upper())
+            stu_sem_variants = _build_sem_variants(reg.sem) if reg.sem else set()
 
             sa = PGStudentCourseAssessment.objects.filter(
                 student=stu,
                 semester__in=list(stu_sem_variants) if stu_sem_variants else sem_variants,
-                label__icontains='ESE',
                 session=reg.session if reg.session else exam.session,
             )
             stu_sids = []
