@@ -227,6 +227,8 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Fast FK lookups in forms
     raw_id_fields = ('student', 'department', 'batch')
     
+    readonly_fields = ('uid',)
+    
     # Disable bulk actions for speed
     actions = None
     
@@ -253,7 +255,7 @@ class StudentCourseAssessmentAdmin(ImportExportModelAdmin):
     # Organized fieldsets for detail view
     fieldsets = (
         ('Basic Information', {
-            'fields': ('student', 'semester', 'paper_code', 'course_code', 'new_course_code', 'course_type','course_name', 'label')
+            'fields': ('uid', 'student', 'semester', 'paper_code', 'course_code', 'new_course_code', 'course_type','course_name', 'label')
         }),
         ('Individual Assessment (CIA/ESE)', {
             'fields': (
