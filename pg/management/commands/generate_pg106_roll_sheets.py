@@ -51,7 +51,7 @@ class Command(BaseCommand):
         except PGExam.DoesNotExist:
             raise CommandError(f"PGExam with UID {exam_uid} does not exist.")
 
-        self.stdout.write(f"Generating null-date subject roll sheets for Exam: {exam.name} ({exam.session})")
+        self.stdout.write(f"Generating PG305/PG306 roll sheets for Exam: {exam.name} ({exam.session})")
 
         filters = {
             'exam': exam,
@@ -67,36 +67,36 @@ class Command(BaseCommand):
                 raise CommandError("None of the specified college UIDs were found.")
             filters['student__college__in'] = colleges_found
 
-        from pg.models import PGStudentCourseAssessment, PGExamSchedule
+        from pg.models import PGStudentCourseAssessment
 
-        # Get all registrations for this exam
+        # Get all registrations for this exam (scoped)
         all_regs = PGExamRegistration.objects.filter(**filters)
         exam_student_ids = list(all_regs.values_list('student_id', flat=True).distinct())
 
-        # Find course codes whose exam_date is NULL in PGExamSchedule for this exam
-        null_date_course_codes = set(
-            PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
-            .exclude(common_course_structure=None)
-            .values_list('common_course_structure__course_code', flat=True)
-            .distinct()
-        )
-        self.stdout.write(f"Null-date course codes: {sorted(null_date_course_codes)}")
+        # Music department for PG305 split
+        music_dept = PGDepartment.objects.filter(name__icontains='Music').only('id').first()
 
-        if not null_date_course_codes:
-            self.stdout.write(self.style.WARNING("No null exam_date schedules found for this exam."))
-            return
-
-        # Find registered students enrolled in those null-date course codes
-        target_student_ids = set(
-            PGStudentCourseAssessment.objects.filter(
-                student_id__in=exam_student_ids,
-                course_code__in=null_date_course_codes
-            ).values_list('student_id', flat=True).distinct()
+        # PG305 students (Music) — scoped to exam students only
+        pg305_qs = PGStudentCourseAssessment.objects.filter(
+            paper_code='PG305', student_id__in=exam_student_ids
         )
-        self.stdout.write(f"Target students with null-date subjects: {len(target_student_ids)}")
+        if music_dept:
+            pg305_qs = pg305_qs.filter(department=music_dept)
+        pg305_student_ids = set(pg305_qs.values_list('student_id', flat=True).distinct())
+
+        # PG306 students (Non-Music) — scoped to exam students only
+        pg306_qs = PGStudentCourseAssessment.objects.filter(
+            paper_code='PG306', student_id__in=exam_student_ids
+        )
+        if music_dept:
+            pg306_qs = pg306_qs.exclude(department=music_dept)
+        pg306_student_ids = set(pg306_qs.values_list('student_id', flat=True).distinct())
+
+        target_student_ids = pg305_student_ids | pg306_student_ids
+        self.stdout.write(f"PG305: {len(pg305_student_ids)} | PG306: {len(pg306_student_ids)} | Total: {len(target_student_ids)}")
 
         if not target_student_ids:
-            self.stdout.write(self.style.WARNING("No registered students found with null-date subjects."))
+            self.stdout.write(self.style.WARNING("No PG305/PG306 enrolled students found."))
             return
 
         # Find colleges with matching registrations
@@ -104,10 +104,10 @@ class Command(BaseCommand):
         colleges = list(College.objects.filter(id__in=college_ids))
 
         if not colleges:
-            self.stdout.write(self.style.WARNING("No colleges found with matching students."))
+            self.stdout.write(self.style.WARNING("No colleges found with PG305/PG306 students."))
             return
 
-        self.stdout.write(f"Found {len(colleges)} colleges.")
+        self.stdout.write(f"Found {len(colleges)} colleges with PG305/PG306 registrations.")
 
         for college in colleges:
             self.stdout.write(f"\nProcessing College: {college.name} ({college.college_code})")
