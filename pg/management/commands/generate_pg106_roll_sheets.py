@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 Generate Roll Sheets for PG106 paper code only
 
 Usage:
-python manage.py generate_pg106_roll_sheets --exam-uid <exam-uid>
+python manage.py generate_pg106_roll_sheets --exam-uid ba082de1-32fb-4c6a-b5b6-4facdc678f48
+
 python manage.py generate_pg106_roll_sheets --exam-uid <exam-uid> --registration-no <reg-no>
 python manage.py generate_pg106_roll_sheets --exam-uid <exam-uid> --college-uid <college-uid1> <college-uid2>
 """
@@ -51,7 +52,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"Generating PG306 roll sheets for Exam: {exam.name} ({exam.session})")
 
-        # Base filters (PG306 filtering will be done via course enrollment)
+        # Base filters (PG305/PG306 filtering will be done via course enrollment)
         filters = {
             'exam': exam,
             'status': 'REGISTERED',
@@ -139,13 +140,12 @@ class Command(BaseCommand):
         self.stdout.write(f"  - Generating PG106 for Department: {dept_name}...")
         
         try:
-            # Pass paper_code filter to the PDF generator
+            # Students are already filtered for PG305/PG306 at script level
             pdf_content = generate_pg_roll_sheet_pdf(
                 exam, 
                 college, 
                 department=department, 
-                registration_no=registration_no,
-                paper_code='PG106'  # Filter for PG106
+                registration_no=registration_no
             )
             
             if pdf_content:
