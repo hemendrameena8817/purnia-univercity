@@ -794,6 +794,10 @@ class UGExamSchedule(models.Model):
     exam_time = models.CharField(max_length=100, null=True, blank=True)
     sitting = models.CharField(max_length=50, null=True, blank=True)
     
+    # Custom window for marking attendance
+    attendance_from = models.DateTimeField(null=True, blank=True, help_text="Attendance start date and time")
+    attendance_to = models.DateTimeField(null=True, blank=True, help_text="Attendance end date and time")
+    
     json_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

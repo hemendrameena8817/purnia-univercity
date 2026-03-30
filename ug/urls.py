@@ -24,7 +24,10 @@ from ug.api.payments import (
 )
 from .views import (
     UGAdmitCardPDFView, UGBulkAdmitCardPDFView, UGAdmitCardTestView, 
-    UGRollSheetPDFView, UGAttendanceSheetPDFView, UGExamListView
+    UGRollSheetPDFView, UGAttendanceSheetPDFView, UGExamListView,
+    UGCenterAttachedCollegesView, UGDispatchMemoView, UGStudentAttendanceListView,
+    UGAttendanceMarkView, UGCenterDropdown, UGAttendanceCountView,
+    UGExamDropDownloadView, UGCenterDepartmentListView
 )
 
 app_name = 'ug'
@@ -100,4 +103,15 @@ urlpatterns = [
     path('roll-sheet/pdf/', UGRollSheetPDFView.as_view(), name='ug-roll-sheet-pdf'),
     # UG Exams List
     path('exams/', UGExamListView.as_view(), name='ug-exam-list'),
+
+    ##center api for attendence sheet
+    path('center/attached-colleges/', UGCenterAttachedCollegesView.as_view(), name='ug-center-attached-colleges'),
+    path('student-attendance/list/', UGStudentAttendanceListView.as_view(), name='ug-student-attendance-list'),
+    path('student-attendance/mark/', UGAttendanceMarkView.as_view(), name='ug-student-attendance-mark'),
+    path('center/dispatch-memo/', UGDispatchMemoView.as_view(), name='ug-center-dispatch-memo'),
+    # Subject-wise attendance count for a particular exam
+    path('center/dropdown/', UGCenterDropdown.as_view(), name='ug-center-dropdown'),
+    path('attendance/count/', UGAttendanceCountView.as_view(), name='ug-attendance-count'),
+    path('exam-drop/', UGExamDropDownloadView.as_view(), name='ug-exam-drop'),
+    path('center/departments/', UGCenterDepartmentListView.as_view(), name='ug-center-departments'),
 ]
