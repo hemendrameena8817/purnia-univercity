@@ -70,14 +70,29 @@ class Command(BaseCommand):
         # Filter students by paper code (PG305 for Music, PG306 for others)
         from pg.models import PGStudentCourseAssessment
         
-        # Get both PG305 and PG306 students
+        # Get Music department
+        music_dept = PGDepartment.objects.filter(name__icontains='Music').first()
+        
+        # Get PG305 students (Music department)
+        pg305_filter = {'paper_code': 'PG305'}
+        if music_dept:
+            pg305_filter['department'] = music_dept
+        
         pg305_student_ids = set(PGStudentCourseAssessment.objects.filter(
-            paper_code='PG305'
+            **pg305_filter
         ).values_list('student_id', flat=True).distinct())
         
-        pg306_student_ids = set(PGStudentCourseAssessment.objects.filter(
-            paper_code='PG306'
-        ).values_list('student_id', flat=True).distinct())
+        # Get PG306 students (Non-Music departments)
+        pg306_filter = {'paper_code': 'PG306'}
+        if music_dept:
+            # Exclude Music department from PG306
+            pg306_student_ids = set(PGStudentCourseAssessment.objects.filter(
+                **pg306_filter
+            ).exclude(department=music_dept).values_list('student_id', flat=True).distinct())
+        else:
+            pg306_student_ids = set(PGStudentCourseAssessment.objects.filter(
+                **pg306_filter
+            ).values_list('student_id', flat=True).distinct())
         
         # Combine both sets
         target_student_ids = pg305_student_ids | pg306_student_ids

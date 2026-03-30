@@ -16,6 +16,7 @@ class UGAttendanceStudentSerializer(serializers.ModelSerializer):
     is_absent       = serializers.BooleanField(source='ind_is_absent', read_only=True)
     department      = serializers.SerializerMethodField()
     category        = serializers.CharField(source='course_type', read_only=True)
+    exam_details    = serializers.SerializerMethodField()
 
     class Meta:
         model  = StudentCourseAssessment
@@ -32,7 +33,117 @@ class UGAttendanceStudentSerializer(serializers.ModelSerializer):
             'department',
             'category',
             'is_absent',
+            'exam_details',
         ]
+
+    def get_exam_details(self, obj):
+        schedules = self.context.get('todays_schedules', [])
+        student = obj.student
+        
+        course_name = (obj.course_name or "").strip()
+        category = (obj.course_type or "").strip().upper()
+        base_cat = category.split('-')[0].strip()
+        
+        matched_sched = None
+        
+        # 1. Identify relevant department for standard subjects
+        curr_dept_id = None
+        if student:
+            if base_cat == 'MJC': curr_dept_id = student.major_course_id
+            elif base_cat == 'MIC': curr_dept_id = student.minor_course_id
+            elif base_cat == 'MDC': curr_dept_id = student.mdc_course_id
+
+        # --- SYSTEMATIC LOOKUP (Synced with Admit Card Logic) ---
+        if base_cat in ['AEC', 'VAC', 'SEC']:
+            # Priority A: Check if there's a schedule for this category specifically mapped to student's MJC
+            if student and student.major_course_id:
+                for s in schedules:
+                    if s.exam_type == base_cat and any(m.id == student.major_course_id for m in s.mjc.all()):
+                        # We still verify subject name if schedule has one
+                        if s.exam_subject:
+                            if s.exam_subject.course_name.strip().lower() == course_name.lower():
+                                matched_sched = s
+                                break
+                        else:
+                            matched_sched = s
+                            break
+
+            # Priority B: Common Paper Pool (Both Department and MJC NULL)
+            if not matched_sched:
+                for s in schedules:
+                    if s.exam_type == base_cat and not s.department.all() and not s.mjc.all():
+                        if s.exam_subject:
+                            if s.exam_subject.course_name.strip().lower() == course_name.lower():
+                                matched_sched = s
+                                break
+                        else:
+                            matched_sched = s
+                            break
+        else:
+            # MJC, MIC, MDC logic
+            if curr_dept_id:
+                for s in schedules:
+                    if s.exam_type == base_cat:
+                        is_mjc_matched = any(m.id == curr_dept_id for m in s.mjc.all())
+                        is_dept_matched = any(d.id == curr_dept_id for d in s.department.all())
+                        if is_mjc_matched or is_dept_matched:
+                            matched_sched = s
+                            break
+
+        # Final check by paper name if nothing found yet (broad fallback)
+        if not matched_sched:
+            for s in schedules:
+                if s.exam_subject and s.exam_subject.course_name.strip().lower() == course_name.lower():
+                    matched_sched = s
+                    break
+
+        # --- APPLY HARDCODED OVERRIDES (Synced with Admit Card) ---
+        exam_time_val = "-"
+        exam_date_val = "-"
+        
+        if matched_sched:
+            exam_time_val = f"{matched_sched.exam_time} to {matched_sched.sitting}" if matched_sched.exam_time and matched_sched.sitting else (matched_sched.exam_time or matched_sched.sitting or "TBD")
+            exam_date_val = str(matched_sched.exam_date)
+
+        # AEC MIL - URDU / MAITHILI / BENGALI
+        if base_cat == 'AEC' and course_name in ['MIL - Urdu', 'MIL - Maithili', 'MIL - Bengali']:
+            exam_date_val = "2026-04-09"
+            exam_time_val = "02:00 PM to 05:00 PM"
+
+        # VAC FIT INDIA
+        if base_cat == 'VAC' and course_name == 'Fit India':
+            exam_date_val = "2026-04-10"
+            exam_time_val = "10:00 AM to 01:00 PM"
+
+        # VAC ART OF BEING HAPPY
+        if base_cat == 'VAC' and course_name == 'Art of Being Happy':
+            exam_date_val = "2026-04-11"
+            exam_time_val = "02:00 PM to 05:00 PM"
+
+        # SEC BASIC IT TOOLS
+        if base_cat == 'SEC' and course_name == 'Basic IT Tools':
+            exam_date_val = "2026-04-13"
+            exam_time_val = "10:00 AM to 01:00 PM"
+
+        # SEC DIGITAL MARKETING
+        if base_cat == 'SEC' and course_name == 'Digital Marketing':
+            exam_date_val = "2026-04-15"
+            exam_time_val = "10:00 AM to 01:00 PM"
+
+        # SEC PUBLIC SPEAKING
+        if base_cat == 'SEC' and course_name == 'Public Speaking English Language and Leadership':
+            exam_date_val = "2026-04-15"
+            exam_time_val = "02:00 PM to 05:00 PM"
+
+        # AEC MIL - ENGLISH COMMUNICATION
+        if base_cat == 'AEC' and course_name == 'MIL- English Communication':
+            exam_date_val = "2026-04-08"
+            exam_time_val = "10:00 AM to 01:00 PM"
+
+        return {
+            "exam_date": exam_date_val,
+            "exam_time": exam_time_val
+        }
 
     def get_department(self, obj):
         c_type = (obj.course_type or "").upper().strip()
