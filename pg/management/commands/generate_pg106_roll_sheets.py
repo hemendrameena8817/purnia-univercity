@@ -67,36 +67,46 @@ class Command(BaseCommand):
                 raise CommandError("None of the specified college UIDs were found.")
             filters['student__college__in'] = colleges_found
 
-        from pg.models import PGStudentCourseAssessment, PGExamSchedule
+        from pg.models import PGExamSchedule, PGGroup
 
         # Get all registered students for this exam
         all_regs = PGExamRegistration.objects.filter(**filters)
-        exam_student_ids = list(all_regs.values_list('student_id', flat=True).distinct())
 
-        # Find course codes with null exam_date in schedule for this exam
-        null_date_course_codes = set(
+        # Find groups with null exam_date in schedule for this exam
+        null_date_group_ids = set(
             PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
-            .exclude(common_course_structure=None)
-            .values_list('common_course_structure__course_code', flat=True)
+            .exclude(group=None)
+            .values_list('group_id', flat=True)
             .distinct()
         )
-        self.stdout.write(f"Null-date course codes: {sorted(null_date_course_codes)}")
+        self.stdout.write(f"Null-date group IDs: {null_date_group_ids}")
 
-        if not null_date_course_codes:
-            self.stdout.write(self.style.WARNING("No null exam_date schedules found for this exam."))
+        if not null_date_group_ids:
+            self.stdout.write(self.style.WARNING("No null exam_date schedules with groups found for this exam."))
             return
 
-        # Find registered students who have those course codes as paper_code in their assessment
+        # Find departments belonging to those null-date groups
+        null_date_dept_ids = set(
+            PGGroup.objects.filter(id__in=null_date_group_ids)
+            .values_list('department__id', flat=True)
+            .distinct()
+        )
+        self.stdout.write(f"Null-date group dept IDs: {null_date_dept_ids}")
+
+        if not null_date_dept_ids:
+            self.stdout.write(self.style.WARNING("No departments found in null-date groups."))
+            return
+
+        # Find registered students whose department is in null-date groups
         target_student_ids = set(
-            PGStudentCourseAssessment.objects.filter(
-                student_id__in=exam_student_ids,
-                paper_code__in=null_date_course_codes
+            all_regs.filter(
+                student__department_id__in=null_date_dept_ids
             ).values_list('student_id', flat=True).distinct()
         )
         self.stdout.write(f"Target students: {len(target_student_ids)}")
 
         if not target_student_ids:
-            self.stdout.write(self.style.WARNING("No registered students found with null-date paper codes."))
+            self.stdout.write(self.style.WARNING("No registered students found in null-date group departments."))
             return
 
         # Find colleges with matching registrations
