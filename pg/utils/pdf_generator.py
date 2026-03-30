@@ -787,7 +787,7 @@ def _roman_to_int(roman):
             res += roman_map.get(roman[i], 0)
     return res
 
-def generate_pg_attendance_sheet_pdf(exam, college, department=None, registration_no=None):
+def generate_pg_attendance_sheet_pdf(exam, college, department=None, registration_no=None, allowed_student_ids=None):
     """
     Generates student-wise PG Attendance Sheet PDF.
     One page per student with: photo, barcode, exam schedule table.
@@ -864,6 +864,9 @@ def generate_pg_attendance_sheet_pdf(exam, college, department=None, registratio
 
     if registration_no:
         regs_qs = regs_qs.filter(student__registration_no=registration_no)
+
+    if allowed_student_ids is not None:
+        regs_qs = regs_qs.filter(student_id__in=allowed_student_ids)
 
     regs_qs = regs_qs.select_related(
         'student', 'student__department', 'student__program'
