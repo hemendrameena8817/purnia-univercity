@@ -1212,6 +1212,17 @@ class PGExamScheduleResource(resources.ModelResource):
             'created_at', 'updated_at',
         )
 
+    def before_import_row(self, row, row_number=None, **kwargs):
+        val = str(row.get('exam', '') or '').strip()
+        if val and not val.isdigit():
+            exam = (
+                PGExam.objects.filter(name=val).first() or
+                PGExam.objects.filter(name__iexact=val).first() or
+                PGExam.objects.filter(name__icontains=val).first()
+            )
+            if exam:
+                row['exam'] = str(exam.id)
+
 
 @admin.register(PGExamSchedule)
 class PGExamScheduleAdmin(ImportExportModelAdmin):
