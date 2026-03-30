@@ -598,12 +598,18 @@ class UGStudentAttendanceListView(APIView):
         today = now_local.date()
         current_time = now_local.time()
 
-        todays_schedules = UGExamSchedule.objects.filter(
-            exam_date=today
-        ).filter(
-            Q(department=department) | Q(mjc=department) | Q(exam_subject__department=department) # Check both relationships
-        ).select_related('exam', 'exam_subject').order_by('exam_time').distinct()
+        # Filter schedules explicitly tied to this department or generic university-wide subjects
+        dept_filter = (
+            Q(department=department) | 
+            Q(mjc=department) | 
+            Q(exam_subject__department=department) |
+            (Q(department__isnull=True) & Q(mjc__isnull=True) & Q(exam_subject__department__isnull=True))
+        )
 
+        todays_schedules = UGExamSchedule.objects.filter(
+            Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
+        ).filter(dept_filter).select_related('exam', 'exam_subject').order_by('exam_time').distinct()
+        print(f"{todays_schedules = }")
         if not todays_schedules.exists():
             return Response({
                 "attendance_open": False,
@@ -641,19 +647,32 @@ class UGStudentAttendanceListView(APIView):
                 "total": 0
             }, status=status.HTTP_200_OK)
 
-        active_exam_time = ", ".join(todays_schedules.values_list('exam_time', flat=True).distinct())
+        time_slots = []
+        for s in todays_schedules:
+            slot = f"{s.exam_time} to {s.sitting}" if s.exam_time and s.sitting else (s.exam_time or s.sitting or "TBD")
+            if slot not in time_slots:
+                time_slots.append(slot)
+        active_exam_time = ", ".join(time_slots)
 
         active_exam = active_schedules[0].exam
-        relevant_paper_codes = [
-            s.exam_subject.course_code.upper().strip()
-            for s in active_schedules
-            if s.exam_subject and s.exam_subject.course_code
-        ]
+        relevant_paper_names = []
+        relevant_course_types = []
+        
+        for s in active_schedules:
+            if s.exam_subject and s.exam_subject.course_name:
+                relevant_paper_names.append(s.exam_subject.course_name.strip())
+            else:
+                # Fallback: Agar Admin ne subject blank chhod chuka hai par Type (MJC/MIC) daala hai
+                if getattr(s, 'exam_type', None):
+                    relevant_course_types.append(s.exam_type.upper().strip())
+                
+        relevant_paper_names = list(set(relevant_paper_names))
+        relevant_course_types = list(set(relevant_course_types))
 
-        if not relevant_paper_codes:
+        if not relevant_paper_names and not relevant_course_types:
             return Response({
                 "attendance_open": True,
-                "message": "Active slot found but no paper codes configured.",
+                "message": "Active slot found but no paper names/types configured.",
                 "students": [],
                 "total": 0
             }, status=status.HTTP_200_OK)
@@ -677,15 +696,23 @@ class UGStudentAttendanceListView(APIView):
 
         student_assessments = StudentCourseAssessment.objects.filter(
             student_id__in=registered_student_ids,
-            course_code__in=relevant_paper_codes,
-            label__iregex=r'^ESE',
-            session=active_exam.session,
+            label__iregex=r'^ESE-Theory',
         ).select_related('student').order_by('student__roll_no', 'student__registration_no')
 
-        from .pagination import StandardResultsSetPagination
-        paginator = StandardResultsSetPagination()
+        q_filter = Q()
+        if relevant_paper_names:
+            q_filter |= Q(course_name__in=relevant_paper_names)
+        if relevant_course_types:
+            q_filter |= Q(course_type__in=relevant_course_types)
+
+        if q_filter:
+            student_assessments = student_assessments.filter(q_filter)
+
+        from .pagination import LargeResultsSetPagination
+        paginator = LargeResultsSetPagination()
         paginated_qs = paginator.paginate_queryset(student_assessments, request)
         serializer = UGAttendanceStudentSerializer(paginated_qs, many=True)
+
 
         paginated_response = paginator.get_paginated_response(serializer.data)
         paginated_response.data.update({
@@ -749,14 +776,26 @@ class UGAttendanceMarkView(APIView):
                 results.append({"assessment_uid": uid_str, "status": "error", "error": "Assessment not found."})
                 continue
 
-            course_code_key = (assessment.course_code or '').upper().strip()
-            cache_key = f"{course_code_key}"
+            course_name_key = (assessment.course_name or '').strip()
+            cache_key = f"{course_name_key}"
 
             if cache_key not in schedule_cache:
-                schedules_today = UGExamSchedule.objects.filter(
-                    exam_date=today,
-                    exam_subject__course_code__iexact=course_code_key
-                )
+                # Dynamic Filter: Course Name OR Exam Type (fallback for generic MJC/MIC schedules)
+                time_filter = Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
+                subject_filter = Q()
+
+                if course_name_key:
+                    subject_filter |= Q(exam_subject__course_name__iexact=course_name_key)
+                
+                c_type = (assessment.course_type or '').upper().strip()
+                if c_type:
+                    subject_filter |= Q(exam_type__iexact=c_type, exam_subject__isnull=True)
+
+                if not course_name_key and not c_type:
+                    subject_filter = Q(pk__isnull=True)
+
+                schedules_today = UGExamSchedule.objects.filter(time_filter & subject_filter).distinct()
+                
                 active_slot_exists = False
                 for sched in schedules_today:
                     # Priority: custom attendance fields
@@ -771,10 +810,11 @@ class UGAttendanceMarkView(APIView):
                     if start_t and end_t and start_t <= current_time <= end_t:
                         active_slot_exists = True
                         break
+                        
                 schedule_cache[cache_key] = active_slot_exists
 
             if not schedule_cache[cache_key]:
-                err_msg = f"Attendance is not open for {course_code_key}. No active exam slot."
+                err_msg = f"Attendance is not open for {course_name_key}. No active exam slot."
                 if not is_bulk: return Response({"error": err_msg}, status=status.HTTP_403_FORBIDDEN)
                 results.append({"assessment_uid": uid_str, "status": "error", "error": err_msg})
                 continue
