@@ -1,7 +1,8 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import BasePermission
 from django.shortcuts import get_object_or_404, render
 from django.http import HttpResponse, JsonResponse
 from django.template.loader import get_template
@@ -23,11 +24,21 @@ from .services.pdf_generator import generate_marksheet_pdf as generate_pdf, PGMa
 from django.db.models import Count
 
 
+# Custom permission for testing - only superuser access
+class IsSuperUser(BasePermission):
+    """
+    Permission class to allow only superusers to access views.
+    For testing phase only - will be removed after university approval.
+    """
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and request.user.is_superuser
+
+
 class PGOldResultAPIView(APIView):
     """
     API view to get and create PG old results by roll number or registration number
     """
-    permission_classes = [IsUniversityAdmin]
+    permission_classes = [IsSuperUser]
     
     
     def get(self, request):
@@ -556,7 +567,7 @@ class PGResultCalculatorView(APIView):
     """
     Calculate PG results from ESE and CIA data and generate marksheet
     """
-    permission_classes = [IsUniversityAdmin]
+    permission_classes = [IsSuperUser]
     
     def get(self, request):
         """
@@ -679,6 +690,7 @@ class PGResultCalculatorView(APIView):
 
 
 @api_view(['GET'])
+@permission_classes([IsSuperUser])
 def generate_marksheet_pdf(request):
     """
     Generate PDF marksheet - Now fully functional with WeasyPrint
@@ -766,7 +778,7 @@ class PGOldStudentProfileAPIView(APIView):
     """
     API view to manage PG student profiles
     """
-    permission_classes = [IsUniversityAdmin]
+    permission_classes = [IsSuperUser]
     
     def get(self, request):
         """
@@ -831,7 +843,7 @@ class PGOldStudentProfileAPIView(APIView):
 
 
 class PGoldprofilecount(APIView):
-    permission_classes = [IsUniversityAdmin]
+    permission_classes = [IsSuperUser]
     def get(self, request):
         try:
             profile_count = PGOldStudentProfile.objects.count()
