@@ -1183,7 +1183,7 @@ class PGGroupAdmin(admin.ModelAdmin):
 
 class PGExamScheduleResource(resources.ModelResource):
     exam_id = fields.Field(
-        column_name='exam_id',
+        column_name='exam',
         attribute='exam_id',
     )
     exam_name = fields.Field(
