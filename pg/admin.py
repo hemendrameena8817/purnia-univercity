@@ -1185,17 +1185,17 @@ class PGExamScheduleResource(resources.ModelResource):
     exam = fields.Field(
         column_name='exam',
         attribute='exam',
-        widget=ForeignKeyWidget(PGExam, field='name')
+        widget=SafeForeignKeyWidget(PGExam, field='name')
     )
     common_course_structure = fields.Field(
         column_name='common_course_structure',
         attribute='common_course_structure',
-        widget=ForeignKeyWidget(PGCommonCourseStructure, field='course_code')
+        widget=SafeForeignKeyWidget(PGCommonCourseStructure, field='course_code')
     )
     group = fields.Field(
         column_name='group',
         attribute='group',
-        widget=ForeignKeyWidget(PGGroup, field='name')
+        widget=SafeForeignKeyWidget(PGGroup, field='name')
     )
 
     class Meta:
