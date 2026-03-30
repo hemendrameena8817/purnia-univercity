@@ -695,15 +695,29 @@ def get_ug_old_ba_hons_part1_context(
         
         has_prac = any('LAB' in p['status'] or 'PRAC' in p['status'] for p in sub['papers'])
         if has_prac:
+            subject_name = (sub.get('name') or '').upper()
+            is_music_subsidiary = 'MUSIC' in subject_name
+
+            if is_music_subsidiary:
+                theory_max_marks = 50
+                practical_max_marks = 50
+                theory_pass_marks = 15
+                practical_pass_marks = 20
+            else:
+                theory_max_marks = 75
+                practical_max_marks = 25
+                theory_pass_marks = 23
+                practical_pass_marks = 10
+
             for p in sub['papers']:
                 if 'END' in p['status']: # Theory
                     p['name'] = 'Theory'
-                    p['max_marks'] = 75
-                    p['pass_marks'] = 23
+                    p['max_marks'] = theory_max_marks
+                    p['pass_marks'] = theory_pass_marks
                 else: # Practical
                     p['name'] = 'Practical'
-                    p['max_marks'] = 25
-                    p['pass_marks'] = 10
+                    p['max_marks'] = practical_max_marks
+                    p['pass_marks'] = practical_pass_marks
             
             # Recalculate totals for the subject
             sub['total_max'] = sum(p['max_marks'] for p in sub['papers'])
