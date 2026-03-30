@@ -446,7 +446,7 @@
             {% if subjects.subsidiary_1.name %}
             {% with sub=subjects.subsidiary_1 %}
             {% if sub.papers|length > 1 %}
-              {# With Practical: Theory (pass 23) + Practical (pass 10), combined 33 #}
+              {# With Practical: Theory + Practical pass marks are taken from paper.pass_marks #}
               {% for paper in sub.papers %}
               <tr>
                 {% if forloop.first %}
@@ -458,10 +458,10 @@
                 <td>{% if "LAB" in paper.status or "PRAC" in paper.status %}Practical{% else %}Theory{% endif %}</td>
                 <td>{{ paper.max_marks }}</td>
                 {% if forloop.first %}
-                <td>23</td>
+                <td>{{ paper.pass_marks|default:23 }}</td>
                 <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle">{{ sub.total_pass|default:33 }}</td>
                 {% else %}
-                <td>10</td>
+                <td>{{ paper.pass_marks|default:10 }}</td>
                 {% endif %}
                 <td>{{ paper.obtained }}</td>
                 {% if forloop.first %}
@@ -490,7 +490,7 @@
             {% if subjects.subsidiary_2.name %}
             {% with sub=subjects.subsidiary_2 %}
             {% if sub.papers|length > 1 %}
-              {# With Practical: Theory (pass 23) + Practical (pass 10), combined 33 #}
+              {# With Practical: Theory + Practical pass marks are taken from paper.pass_marks #}
               {% for paper in sub.papers %}
               <tr>
                 {% if forloop.first %}
@@ -502,10 +502,10 @@
                 <td>{% if "LAB" in paper.status or "PRAC" in paper.status %}Practical{% else %}Theory{% endif %}</td>
                 <td>{{ paper.max_marks }}</td>
                 {% if forloop.first %}
-                <td>23</td>
+                <td>{{ paper.pass_marks|default:23 }}</td>
                 <td rowspan="{{ sub.papers|length }}" style="vertical-align: middle">{{ sub.total_pass|default:33 }}</td>
                 {% else %}
-                <td>10</td>
+                <td>{{ paper.pass_marks|default:10 }}</td>
                 {% endif %}
                 <td>{{ paper.obtained }}</td>
                 {% if forloop.first %}
