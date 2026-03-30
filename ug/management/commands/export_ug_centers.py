@@ -39,7 +39,7 @@ class Command(BaseCommand):
             if not m.center:
                 continue
             
-            center_key = (m.center.center_code or m.center.college_code, m.exam.id)
+            center_key = (m.center.college_code, m.exam.id)
             if center_key in processed_centers:
                 continue
                 
@@ -56,7 +56,7 @@ class Command(BaseCommand):
                 'Exam Name': m.exam.name,
                 'Exam Session': m.exam.session,
                 'Centre Name': m.center.name,
-                'Centre Code': m.center.center_code or m.center.college_code,
+                'Centre Code': m.center.college_code,      # Reverted to college_code
                 'Username': college_username,
                 'Attached College Codes': attached
             })
