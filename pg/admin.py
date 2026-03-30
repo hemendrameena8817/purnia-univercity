@@ -1181,9 +1181,38 @@ class PGGroupAdmin(admin.ModelAdmin):
         return ", ".join([d.name for d in obj.department.all() if d.name])
     get_departments.short_description = 'Departments'
 
+class PGExamScheduleResource(resources.ModelResource):
+    exam = fields.Field(
+        column_name='exam',
+        attribute='exam',
+        widget=ForeignKeyWidget(PGExam, field='name')
+    )
+    common_course_structure = fields.Field(
+        column_name='common_course_structure',
+        attribute='common_course_structure',
+        widget=ForeignKeyWidget(PGCommonCourseStructure, field='course_code')
+    )
+    group = fields.Field(
+        column_name='group',
+        attribute='group',
+        widget=ForeignKeyWidget(PGGroup, field='name')
+    )
+
+    class Meta:
+        model = PGExamSchedule
+        exclude = ('uid',)
+        import_id_fields = ('exam', 'common_course_structure', 'group', 'session', 'semester')
+        export_order = (
+            'id', 'exam', 'group', 'common_course_structure',
+            'session', 'semester', 'exam_date', 'exam_time', 'sitting',
+            'created_at', 'updated_at',
+        )
+
+
 @admin.register(PGExamSchedule)
-class PGExamScheduleAdmin(admin.ModelAdmin):
-    list_display = ('exam', 'group', 'common_course_structure', 'exam_date','session','semester', 'exam_time', 'sitting')
+class PGExamScheduleAdmin(ImportExportModelAdmin):
+    resource_class = PGExamScheduleResource
+    list_display = ('exam', 'group', 'common_course_structure', 'exam_date', 'session', 'semester', 'exam_time', 'sitting')
     list_filter = ('exam', 'group', 'exam_date', 'sitting')
     search_fields = ('exam__name', 'common_course_structure__course_code', 'common_course_structure__course_name')
     ordering = ('exam_date', 'exam_time')
