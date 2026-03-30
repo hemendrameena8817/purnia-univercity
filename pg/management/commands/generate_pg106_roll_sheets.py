@@ -129,25 +129,35 @@ class Command(BaseCommand):
         self.null_date_css_ids = null_date_css_ids
         self.stdout.write(f"Found {len(colleges)} colleges.")
 
-        for college in colleges:
-            self.stdout.write(f"\nProcessing College: {college.name} ({college.college_code})")
+        try:
+            for college in colleges:
+                self.stdout.write(f"\nProcessing College: {college.name} ({college.college_code})")
 
-            dept_filters = filters.copy()
-            dept_filters['student__college'] = college
+                dept_filters = filters.copy()
+                dept_filters['student__college'] = college
 
-            if dept_uids:
-                depts_found = PGDepartment.objects.filter(uid__in=dept_uids)
-                dept_filters['student__department__in'] = depts_found
+                if dept_uids:
+                    depts_found = PGDepartment.objects.filter(uid__in=dept_uids)
+                    if not depts_found.exists():
+                        self.stdout.write(self.style.WARNING(f"  - No matching departments found for this college among specified UIDs."))
+                        continue
+                    dept_filters['student__department__in'] = depts_found
 
-            dept_filters['student_id__in'] = list(target_student_ids)
-            dept_ids = PGExamRegistration.objects.filter(**dept_filters).values_list('student__department_id', flat=True).distinct()
-            departments = list(PGDepartment.objects.filter(id__in=dept_ids))
+                dept_filters['student_id__in'] = list(target_student_ids)
+                dept_ids = PGExamRegistration.objects.filter(**dept_filters).values_list('student__department_id', flat=True).distinct()
+                departments = list(PGDepartment.objects.filter(id__in=dept_ids))
 
-            if not departments:
-                self.process_generation(exam, college, None, output_dir, registration_no, target_student_ids)
-            else:
-                for dept in departments:
-                    self.process_generation(exam, college, dept, output_dir, registration_no, target_student_ids)
+                if not departments:
+                    self.process_generation(exam, college, None, output_dir, registration_no, target_student_ids)
+                else:
+                    for dept in departments:
+                        self.process_generation(exam, college, dept, output_dir, registration_no, target_student_ids)
+
+        except Exception as e:
+            logger.error(f"Critical error in PG106 roll sheet generation: {str(e)}")
+            logger.error(traceback.format_exc())
+            self.stdout.write(self.style.ERROR(f"\nCritical error occurred: {str(e)}"))
+            self.stdout.write("Check server logs for full traceback.")
 
         self.stdout.write(self.style.SUCCESS(f"\nPG106 Roll Sheet generation complete! Files saved in: {output_dir}"))
 
