@@ -585,14 +585,17 @@ class UGStudentAttendanceListView(APIView):
         college_uid = request.query_params.get('college_uid')
         department_uid = request.query_params.get('department_uid')
 
-        if not all([college_uid, department_uid]):
+        if not college_uid:
             return Response(
-                {"error": "college_uid and department_uid are required."},
+                {"error": "college_uid is required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         college = get_object_or_404(College, uid=college_uid)
-        department = get_object_or_404(UGDepartment, uid=department_uid)
+        
+        department = None
+        if department_uid:
+            department = get_object_or_404(UGDepartment, uid=department_uid)
 
         now_local = timezone.localtime(timezone.now())
         today = now_local.date()
@@ -600,17 +603,23 @@ class UGStudentAttendanceListView(APIView):
 
         exam_type_param = request.query_params.get('exam_type', '').strip().upper()
 
-        # Filter schedules explicitly tied to this department or generic university-wide subjects
-        dept_filter = (
-            Q(department=department) | 
-            Q(mjc=department) | 
-            Q(exam_subject__department=department) |
-            (Q(department__isnull=True) & Q(mjc__isnull=True) & Q(exam_subject__department__isnull=True))
-        )
+        # Build schedule filter
+        schedule_filter = Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
+        
+        if department:
+            # Filter schedules explicitly tied to this department or generic university-wide subjects
+            dept_filter = (
+                Q(department=department) | 
+                Q(mjc=department) | 
+                Q(exam_subject__department=department) |
+                (Q(department__isnull=True) & Q(mjc__isnull=True) & Q(exam_subject__department__isnull=True))
+            )
+            todays_schedules = UGExamSchedule.objects.filter(schedule_filter).filter(dept_filter)
+        else:
+            # If no department selected, show ALL schedules for today
+            todays_schedules = UGExamSchedule.objects.filter(schedule_filter)
 
-        todays_schedules = UGExamSchedule.objects.filter(
-            Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
-        ).filter(dept_filter).select_related('exam', 'exam_subject').order_by('exam_time').distinct()
+        todays_schedules = todays_schedules.select_related('exam', 'exam_subject').order_by('exam_time').distinct()
         
         if exam_type_param:
             todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
@@ -619,7 +628,7 @@ class UGStudentAttendanceListView(APIView):
         if not todays_schedules.exists():
             return Response({
                 "attendance_open": False,
-                "message": "No exam scheduled today for this department.",
+                "message": "No exams scheduled for the selected criteria.",
                 "students": [],
                 "total": 0
             }, status=status.HTTP_200_OK)
@@ -683,11 +692,32 @@ class UGStudentAttendanceListView(APIView):
                 "total": 0
             }, status=status.HTTP_200_OK)
 
-        registered_student_ids = ExamRegistration.objects.filter(
+        # Center Mapping Logic: Aggregate students from all colleges mapped to this center
+        center_mapping = UGExamCenterMapping.objects.filter(
             exam=active_exam,
-            student__college=college,
-            student__major_course=department, # In UG, department usually corresponds to Major
-            status='REGISTERED'
+            center=college
+        ).first()
+
+        if center_mapping:
+            attached_colleges = list(center_mapping.attached_colleges.all())
+            if college not in attached_colleges:
+                attached_colleges.append(college)
+            
+            college_filter = Q(student__college__in=attached_colleges)
+            print(f"DEBUG: Found center mapping with {len(attached_colleges)} colleges.")
+        else:
+            college_filter = Q(student__college=college)
+            print(f"DEBUG: No center mapping found, using only current college students.")
+
+        # Registration Query
+        registration_filter = Q(college_filter, exam=active_exam, status='REGISTERED')
+        
+        # NOTE: We do NOT filter by student__major_course=department here. 
+        # This allows a center to see students from ANY major who are taking a specific paper 
+        # (critical for common/generic subjects like Hindi, AEC, VAC, etc.)
+        
+        registered_student_ids = ExamRegistration.objects.filter(
+            registration_filter
         ).values_list('student_id', flat=True).distinct()
 
         if not registered_student_ids:
