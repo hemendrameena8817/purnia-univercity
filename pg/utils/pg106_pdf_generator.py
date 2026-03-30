@@ -163,19 +163,18 @@ def generate_pg106_attendance_sheet_pdf(
             if v:
                 d_sem_variants.add(v.upper())
 
-    ese_filter = dict(
+    assess_filter = dict(
         student_id__in=student_ids,
-        label__iregex=r'^ESE',
         session__in=distinct_sessions,
     )
     if d_sem_variants:
-        ese_filter['semester__in'] = list(d_sem_variants)
+        assess_filter['semester__in'] = list(d_sem_variants)
     elif sem_variants:
-        ese_filter['semester__in'] = sem_variants
+        assess_filter['semester__in'] = sem_variants
 
-    assessments = PGStudentCourseAssessment.objects.filter(**ese_filter).values(
+    assessments = PGStudentCourseAssessment.objects.filter(**assess_filter).values(
         'student_id', 'course_code', 'course_name'
-    )
+    ).distinct()
     student_ese_map = {}
     for a in assessments:
         sid = a['student_id']
@@ -286,6 +285,9 @@ def generate_pg106_attendance_sheet_pdf(
                     'subject_name': name,
                     'subject_code': s.common_course_structure.course_code or '-',
                 })
+
+            if not student_schedules:
+                continue
 
             barcode_text = (
                 f"Roll:{student.roll_no or ''} "
@@ -444,10 +446,9 @@ def generate_pg106_roll_sheet_pdf(
         subjects = []
         seen_norms = set()
 
-        # Columns from ESE assessments
+        # Columns from all assessments (no label filter — PG106 subjects are practical/project)
         ese_rows = PGStudentCourseAssessment.objects.filter(
             student_id__in=stu_ids,
-            label__iregex=r'^ESE',
             semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
             session__in=dept_sessions,
         ).values('course_code', 'course_name').distinct()
@@ -485,10 +486,9 @@ def generate_pg106_roll_sheet_pdf(
 
         suffix_map = {get_suffix(s['code']): s['id'] for s in subjects}
 
-        # Assessment name lookup
+        # Assessment name lookup (all labels for PG106)
         asmts = PGStudentCourseAssessment.objects.filter(
             student_id__in=stu_ids,
-            label__iregex=r'^(ESE|CIA)',
             session__in=dept_sessions,
             semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
         ).values('student_id', 'course_code', 'course_name', 'label', 'semester')
