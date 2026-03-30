@@ -283,7 +283,9 @@ def generate_pg106_attendance_sheet_pdf(
             student_schedules = []
             for s in raw_schedules:
                 code_upper = (s.common_course_structure.course_code or "").upper().strip()
-                name = paper_names.get(code_upper) or s.common_course_structure.course_name or '-'
+                name = paper_names.get(code_upper) or s.common_course_structure.course_name or ''
+                if not name or name.strip() in ('-', ''):
+                    continue
                 student_schedules.append({
                     'date': s.exam_date.strftime('%d-%m-%Y') if s.exam_date else '-',
                     'exam_time': s.exam_time or '',
@@ -444,23 +446,7 @@ def generate_pg106_roll_sheet_pdf(
         subjects = []
         seen_norms = set()
 
-        # Columns from all assessments (no label filter — PG106 subjects are practical/project)
-        ese_rows = PGStudentCourseAssessment.objects.filter(
-            student_id__in=stu_ids,
-            semester__in=list(dept_sem_variants) if dept_sem_variants else sem_variants,
-            session__in=dept_sessions,
-        ).values('course_code', 'course_name').distinct()
-
-        for row in ese_rows:
-            nc = normalize_code(row['course_code'])
-            if nc and nc not in seen_norms:
-                seen_norms.add(nc)
-                subjects.append({'id': nc, 'code': row['course_code'] or '-',
-                                  'course_name': row['course_name'] or '-', 'norm_code': nc})
-                code_to_id[(row['course_code'] or '').upper()] = nc
-                norm_to_id[nc] = nc
-
-        # Supplement from schedules (restricted to allowed_css_ids already)
+        # Columns from schedules only (already restricted to allowed_css_ids — PG106 subjects)
         sched_filter = schedules_all.filter(group__department=dept_obj) if dept_obj else schedules_all
         for s in sched_filter:
             if s.common_course_structure:
