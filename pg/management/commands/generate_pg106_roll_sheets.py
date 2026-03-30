@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from pg.models import PGExam, PGExamRegistration, PGDepartment
 from colleges.models import College
-from pg.utils.pdf_generator import generate_pg_roll_sheet_pdf
+from pg.utils.pg305_306_pdf_generator import generate_pg305_306_attendance_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -128,24 +128,31 @@ class Command(BaseCommand):
             departments = list(PGDepartment.objects.filter(id__in=dept_ids))
             
             if not departments:
-                self.process_generation(exam, college, None, output_dir, registration_no)
+                self.process_generation(exam, college, None, output_dir, registration_no, pg305_student_ids, pg306_student_ids)
             else:
                 for dept in departments:
-                    self.process_generation(exam, college, dept, output_dir, registration_no)
+                    self.process_generation(exam, college, dept, output_dir, registration_no, pg305_student_ids, pg306_student_ids)
 
         self.stdout.write(self.style.SUCCESS(f"\nPG106 Roll Sheet generation complete! Files saved in: {output_dir}"))
 
-    def process_generation(self, exam, college, department, output_dir, registration_no=None):
+    def process_generation(self, exam, college, department, output_dir, registration_no=None, pg305_student_ids=None, pg306_student_ids=None):
         dept_name = department.name if department else "General"
-        self.stdout.write(f"  - Generating PG106 for Department: {dept_name}...")
+        
+        # Determine paper code based on department
+        is_music = department and 'MUSIC' in department.name.upper()
+        paper_code = 'PG305' if is_music else 'PG306'
+        student_ids_filter = pg305_student_ids if is_music else pg306_student_ids
+        
+        self.stdout.write(f"  - Generating {paper_code} for Department: {dept_name}...")
         
         try:
-            # Students are already filtered for PG305/PG306 at script level
-            pdf_content = generate_pg_roll_sheet_pdf(
-                exam, 
-                college, 
-                department=department, 
-                registration_no=registration_no
+            # Use new PG305/306 PDF generator with 4 students per page
+            pdf_content = generate_pg305_306_attendance_pdf(
+                exam=exam,
+                college=college,
+                department=department,
+                paper_code=paper_code,
+                student_ids_filter=student_ids_filter
             )
             
             if pdf_content:
@@ -154,9 +161,9 @@ class Command(BaseCommand):
                 
                 if registration_no:
                     safe_reg = registration_no.replace("/", "_")
-                    filename = f"PG106_Roll_Sheet_{safe_reg}.pdf"
+                    filename = f"{paper_code}_Roll_Sheet_{safe_reg}.pdf"
                 else:
-                    filename = f"PG106_Roll_Sheet_{safe_college}_{safe_dept}.pdf"
+                    filename = f"{paper_code}_Roll_Sheet_{safe_college}_{safe_dept}.pdf"
                 
                 file_path = os.path.join(output_dir, filename)
                 
@@ -164,7 +171,9 @@ class Command(BaseCommand):
                     f.write(pdf_content)
                 self.stdout.write(self.style.SUCCESS(f"    Saved: {filename}"))
             else:
-                self.stdout.write(self.style.WARNING(f"    No PG106 students found for {dept_name}."))
+                self.stdout.write(self.style.WARNING(f"    No {paper_code} students returned by generator for {dept_name}."))
         except Exception as e:
-            self.stdout.write(self.style.ERROR(f"    Error generating PG106 PDF for {dept_name}: {str(e)}"))
+            logger.error(f"Error generating {paper_code} PDF for College: {college.name}, Dept: {dept_name}. Error: {str(e)}")
+            logger.error(traceback.format_exc())
+            self.stdout.write(self.style.ERROR(f"    Error generating {paper_code} PDF for {dept_name}: {str(e)}"))
             logger.error(traceback.format_exc())
