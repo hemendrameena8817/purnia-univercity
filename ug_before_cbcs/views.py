@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import get_template
 from weasyprint import HTML
 import os
+import re
 
 from .models import (
     UGBeforeCBCSStudentProfile,
@@ -627,6 +628,7 @@ class UGOldResultCreateView(APIView):
         registration_no = request.data.get("registration_no")
         roll_no = request.data.get("roll_no")
         exam_code = request.data.get("exam_code")
+        session_code = request.data.get("session_code")
         paper_code = request.data.get("paper_code")
         subject_name = request.data.get("subject_name")
         
@@ -637,9 +639,9 @@ class UGOldResultCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if not exam_code:
+        if not (exam_code or session_code):
             return Response(
-                {"error": "exam_code is required"},
+                {"error": "exam_code or session_code is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -656,7 +658,60 @@ class UGOldResultCreateView(APIView):
             student = get_object_or_404(UGBeforeCBCSStudentProfile, roll_no=roll_no)
         
         # Get exam
-        exam = get_object_or_404(UGBeforeCBCSExam, exam_code=exam_code)
+        if exam_code:
+            exam = get_object_or_404(UGBeforeCBCSExam, exam_code=exam_code)
+        else:
+            request_course_code = request.data.get("course_code")
+            request_part = request.data.get("part")
+
+            # Prefer explicit request values, fallback to student profile and paper code parsing
+            resolved_course_code = request_course_code or student.course_code
+
+            normalized_part = None
+            if request_part:
+                part_value = str(request_part).strip().upper()
+                if part_value.startswith("PART"):
+                    part_value = part_value[4:]
+                normalized_part = part_value
+            else:
+                paper_code_value = str(paper_code or "").upper()
+                part_match = re.search(r'(\d{3})', paper_code_value)
+                if part_match:
+                    normalized_part = part_match.group(1)[0]
+
+            exam_qs = UGBeforeCBCSExam.objects.filter(session_code__iexact=session_code)
+
+            if resolved_course_code:
+                exam_qs = exam_qs.filter(course_code__iexact=resolved_course_code)
+
+            if normalized_part:
+                exam_qs = exam_qs.filter(part=f"PART{normalized_part}")
+
+            matching_exams = list(
+                exam_qs.order_by('-exam_year', '-updated_at').values(
+                    'uid', 'exam_code', 'name', 'part', 'course_code', 'session_code'
+                )[:10]
+            )
+
+            if not matching_exams:
+                return Response(
+                    {
+                        "error": "No exam found for provided session_code.",
+                        "hint": "Send exam_code or include course_code/part for session_code-based resolution."
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            if len(matching_exams) > 1:
+                return Response(
+                    {
+                        "error": "Multiple exams found for provided session_code. Provide exam_code or include course_code and part.",
+                        "matches": matching_exams
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            exam = get_object_or_404(UGBeforeCBCSExam, uid=matching_exams[0]['uid'])
         
         # Optional fields
         status_field = request.data.get("status", "END_TERM")
