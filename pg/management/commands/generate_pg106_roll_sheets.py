@@ -51,113 +51,116 @@ class Command(BaseCommand):
         except PGExam.DoesNotExist:
             raise CommandError(f"PGExam with UID {exam_uid} does not exist.")
 
-        self.stdout.write(f"Generating PG306 roll sheets for Exam: {exam.name} ({exam.session})")
+        self.stdout.write(f"Generating null-date subject roll sheets for Exam: {exam.name} ({exam.session})")
 
-        # Base filters (PG305/PG306 filtering will be done via course enrollment)
         filters = {
             'exam': exam,
             'status': 'REGISTERED',
         }
-        
+
         if registration_no:
             filters['student__registration_no'] = registration_no
-        
+
         if college_uids:
             colleges_found = College.objects.filter(uid__in=college_uids)
+            if not colleges_found.exists():
+                raise CommandError("None of the specified college UIDs were found.")
             filters['student__college__in'] = colleges_found
 
-        from pg.models import PGStudentCourseAssessment
+        from pg.models import PGStudentCourseAssessment, PGExamSchedule
 
-        # Get all registrations for this exam (scoped to college/reg filters)
+        # Get all registrations for this exam
         all_regs = PGExamRegistration.objects.filter(**filters)
-
-        # Scope PG305/PG306 lookup to only students registered for this exam
         exam_student_ids = list(all_regs.values_list('student_id', flat=True).distinct())
 
-        # Get Music department (single query, cached)
-        music_dept = PGDepartment.objects.filter(name__icontains='Music').only('id').first()
-
-        # PG305 students (Music dept) — scoped to exam students only
-        pg305_qs = PGStudentCourseAssessment.objects.filter(
-            paper_code='PG305', student_id__in=exam_student_ids
+        # Find course codes whose exam_date is NULL in PGExamSchedule for this exam
+        null_date_course_codes = set(
+            PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
+            .exclude(common_course_structure=None)
+            .values_list('common_course_structure__course_code', flat=True)
+            .distinct()
         )
-        if music_dept:
-            pg305_qs = pg305_qs.filter(department=music_dept)
-        pg305_student_ids = set(pg305_qs.values_list('student_id', flat=True).distinct())
+        self.stdout.write(f"Null-date course codes: {sorted(null_date_course_codes)}")
 
-        # PG306 students (Non-Music) — scoped to exam students only
-        pg306_qs = PGStudentCourseAssessment.objects.filter(
-            paper_code='PG306', student_id__in=exam_student_ids
+        if not null_date_course_codes:
+            self.stdout.write(self.style.WARNING("No null exam_date schedules found for this exam."))
+            return
+
+        # Find registered students enrolled in those null-date course codes
+        target_student_ids = set(
+            PGStudentCourseAssessment.objects.filter(
+                student_id__in=exam_student_ids,
+                course_code__in=null_date_course_codes
+            ).values_list('student_id', flat=True).distinct()
         )
-        if music_dept:
-            pg306_qs = pg306_qs.exclude(department=music_dept)
-        pg306_student_ids = set(pg306_qs.values_list('student_id', flat=True).distinct())
+        self.stdout.write(f"Target students with null-date subjects: {len(target_student_ids)}")
 
-        target_student_ids = pg305_student_ids | pg306_student_ids
-        self.stdout.write(f"PG305: {len(pg305_student_ids)} | PG306: {len(pg306_student_ids)} | Total: {len(target_student_ids)}")
+        if not target_student_ids:
+            self.stdout.write(self.style.WARNING("No registered students found with null-date subjects."))
+            return
 
-        # Find colleges with matching registrations (no extra count query)
+        # Find colleges with matching registrations
         college_ids = all_regs.filter(student_id__in=target_student_ids).values_list('student__college_id', flat=True).distinct()
         colleges = list(College.objects.filter(id__in=college_ids))
 
         if not colleges:
-            self.stdout.write(self.style.WARNING("No PG305/PG306 registered students found matching the criteria."))
+            self.stdout.write(self.style.WARNING("No colleges found with matching students."))
             return
 
-        self.stdout.write(f"Found {len(colleges)} colleges with PG305/PG306 registrations.")
+        self.stdout.write(f"Found {len(colleges)} colleges.")
 
         for college in colleges:
             self.stdout.write(f"\nProcessing College: {college.name} ({college.college_code})")
-            
+
             dept_filters = filters.copy()
             dept_filters['student__college'] = college
-            
+
             if dept_uids:
                 depts_found = PGDepartment.objects.filter(uid__in=dept_uids)
                 dept_filters['student__department__in'] = depts_found
 
+            dept_filters['student_id__in'] = list(target_student_ids)
             dept_ids = PGExamRegistration.objects.filter(**dept_filters).values_list('student__department_id', flat=True).distinct()
             departments = list(PGDepartment.objects.filter(id__in=dept_ids))
-            
+
             if not departments:
-                self.process_generation(exam, college, None, output_dir, registration_no, pg305_student_ids, pg306_student_ids)
+                self.process_generation(exam, college, None, output_dir, registration_no, target_student_ids)
             else:
                 for dept in departments:
-                    self.process_generation(exam, college, dept, output_dir, registration_no, pg305_student_ids, pg306_student_ids)
+                    self.process_generation(exam, college, dept, output_dir, registration_no, target_student_ids)
 
         self.stdout.write(self.style.SUCCESS(f"\nPG106 Roll Sheet generation complete! Files saved in: {output_dir}"))
 
-    def process_generation(self, exam, college, department, output_dir, registration_no=None, pg305_student_ids=None, pg306_student_ids=None):
+    def process_generation(self, exam, college, department, output_dir, registration_no=None, target_student_ids=None):
         dept_name = department.name if department else "General"
         is_music = department and 'MUSIC' in department.name.upper()
         paper_code = 'PG305' if is_music else 'PG306'
-        
+
         self.stdout.write(f"  - Generating {paper_code} Roll Sheet for Department: {dept_name}...")
-        
+
         try:
             pdf_content = generate_pg_roll_sheet_pdf(
                 exam=exam,
                 college=college,
                 department=department,
-                registration_no=registration_no
+                registration_no=registration_no,
+                allowed_student_ids=target_student_ids
             )
-            
+
             if pdf_content:
                 safe_college = "".join(c if c.isalnum() else "_" for c in college.name)
                 safe_dept = "".join(c if c.isalnum() else "_" for c in dept_name)
-                
                 if registration_no:
                     safe_reg = registration_no.replace("/", "_")
                     filename = f"{paper_code}_Roll_Sheet_{safe_reg}.pdf"
                 else:
                     filename = f"{paper_code}_Roll_Sheet_{safe_college}_{safe_dept}.pdf"
-                
                 file_path = os.path.join(output_dir, filename)
                 with open(file_path, 'wb') as f:
                     f.write(pdf_content)
                 self.stdout.write(self.style.SUCCESS(f"    Saved: {filename}"))
             else:
-                self.stdout.write(self.style.WARNING(f"    No {paper_code} students found for {dept_name}."))
+                self.stdout.write(self.style.WARNING(f"    No students found for {dept_name}."))
         except Exception as e:
             logger.error(f"Error generating {paper_code} PDF for College: {college.name}, Dept: {dept_name}. Error: {str(e)}")
             logger.error(traceback.format_exc())
