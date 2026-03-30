@@ -1137,8 +1137,17 @@ class PGExamResultAdmin(ImportExportModelAdmin):
         })
     )
 
+class PGExamResource(resources.ModelResource):
+    class Meta:
+        model = PGExam
+        exclude = ('uid',)
+        import_id_fields = ('name', 'session', 'year')
+        export_order = ('id', 'name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at', 'updated_at')
+
+
 @admin.register(PGExam)
-class PGExamAdmin(admin.ModelAdmin):
+class PGExamAdmin(ImportExportModelAdmin):
+    resource_class = PGExamResource
     list_display = ('name', 'year', 'session', 'batch', 'exam_month_year', 'publication_date', 'created_at')
     list_filter = ('session', 'year', 'batch')
     search_fields = ('name', 'session', 'batch')
