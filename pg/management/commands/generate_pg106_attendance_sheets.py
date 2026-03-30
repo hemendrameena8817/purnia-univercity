@@ -51,7 +51,7 @@ class Command(BaseCommand):
         except PGExam.DoesNotExist:
             raise CommandError(f"PGExam with UID {exam_uid} does not exist.")
 
-        self.stdout.write(f"Generating PG305/PG306 attendance sheets for Exam: {exam.name} ({exam.session})")
+        self.stdout.write(f"Generating attendance sheets for Exam: {exam.name} ({exam.session})")
 
         filters = {
             'exam': exam,
@@ -67,36 +67,36 @@ class Command(BaseCommand):
                 raise CommandError("None of the specified college UIDs were found.")
             filters['student__college__in'] = colleges_found
 
-        from pg.models import PGStudentCourseAssessment
+        from pg.models import PGStudentCourseAssessment, PGExamSchedule
 
-        # Get all registrations for this exam (scoped)
+        # Get all registered students for this exam
         all_regs = PGExamRegistration.objects.filter(**filters)
         exam_student_ids = list(all_regs.values_list('student_id', flat=True).distinct())
 
-        # Music department for PG305 split
-        music_dept = PGDepartment.objects.filter(name__icontains='Music').only('id').first()
-
-        # PG305 students (Music) — scoped to exam students only
-        pg305_qs = PGStudentCourseAssessment.objects.filter(
-            paper_code='PG305', student_id__in=exam_student_ids
+        # Find course codes with null exam_date in schedule for this exam
+        null_date_course_codes = set(
+            PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
+            .exclude(common_course_structure=None)
+            .values_list('common_course_structure__course_code', flat=True)
+            .distinct()
         )
-        if music_dept:
-            pg305_qs = pg305_qs.filter(department=music_dept)
-        pg305_student_ids = set(pg305_qs.values_list('student_id', flat=True).distinct())
+        self.stdout.write(f"Null-date course codes: {sorted(null_date_course_codes)}")
 
-        # PG306 students (Non-Music) — scoped to exam students only
-        pg306_qs = PGStudentCourseAssessment.objects.filter(
-            paper_code='PG306', student_id__in=exam_student_ids
+        if not null_date_course_codes:
+            self.stdout.write(self.style.WARNING("No null exam_date schedules found for this exam."))
+            return
+
+        # Find registered students who have those course codes as paper_code in their assessment
+        target_student_ids = set(
+            PGStudentCourseAssessment.objects.filter(
+                student_id__in=exam_student_ids,
+                paper_code__in=null_date_course_codes
+            ).values_list('student_id', flat=True).distinct()
         )
-        if music_dept:
-            pg306_qs = pg306_qs.exclude(department=music_dept)
-        pg306_student_ids = set(pg306_qs.values_list('student_id', flat=True).distinct())
-
-        target_student_ids = pg305_student_ids | pg306_student_ids
-        self.stdout.write(f"PG305: {len(pg305_student_ids)} | PG306: {len(pg306_student_ids)} | Total: {len(target_student_ids)}")
+        self.stdout.write(f"Target students: {len(target_student_ids)}")
 
         if not target_student_ids:
-            self.stdout.write(self.style.WARNING("No PG305/PG306 enrolled students found."))
+            self.stdout.write(self.style.WARNING("No registered students found with null-date paper codes."))
             return
 
         # Find colleges with matching registrations
@@ -104,10 +104,10 @@ class Command(BaseCommand):
         colleges = list(College.objects.filter(id__in=college_ids))
 
         if not colleges:
-            self.stdout.write(self.style.WARNING("No colleges found with PG305/PG306 students."))
+            self.stdout.write(self.style.WARNING("No colleges found with matching students."))
             return
 
-        self.stdout.write(f"Found {len(colleges)} colleges with PG305/PG306 registrations.")
+        self.stdout.write(f"Found {len(colleges)} colleges.")
 
         try:
             for college in colleges:
@@ -133,6 +133,7 @@ class Command(BaseCommand):
                 else:
                     for dept in departments:
                         self.process_generation(exam, college, dept, output_dir, registration_no, target_student_ids)
+
         except Exception as e:
             logger.error(f"Critical error in PG106 batch generation: {str(e)}")
             logger.error(traceback.format_exc())
@@ -143,10 +144,8 @@ class Command(BaseCommand):
 
     def process_generation(self, exam, college, department, output_dir, registration_no=None, target_student_ids=None):
         dept_name = department.name if department else "General"
-        is_music = department and 'MUSIC' in department.name.upper()
-        paper_code = 'PG305' if is_music else 'PG306'
 
-        self.stdout.write(f"  - Generating {paper_code} Attendance for Department: {dept_name}...")
+        self.stdout.write(f"  - Generating Attendance for Department: {dept_name}...")
 
         try:
             pdf_content = generate_pg_attendance_sheet_pdf(
@@ -162,9 +161,9 @@ class Command(BaseCommand):
                 safe_dept = "".join(c if c.isalnum() else "_" for c in dept_name)
                 if registration_no:
                     safe_reg = registration_no.replace("/", "_")
-                    filename = f"{paper_code}_Attendance_Sheet_{safe_reg}.pdf"
+                    filename = f"PG106_Attendance_Sheet_{safe_reg}.pdf"
                 else:
-                    filename = f"{paper_code}_Attendance_Sheet_{safe_college}_{safe_dept}.pdf"
+                    filename = f"PG106_Attendance_Sheet_{safe_college}_{safe_dept}.pdf"
                 file_path = os.path.join(output_dir, filename)
                 with open(file_path, 'wb') as f:
                     f.write(pdf_content)
@@ -172,6 +171,6 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.WARNING(f"    No students found for {dept_name}."))
         except Exception as e:
-            logger.error(f"Error generating {paper_code} PDF for College: {college.name}, Dept: {dept_name}. Error: {str(e)}")
+            logger.error(f"Error generating PDF for College: {college.name}, Dept: {dept_name}. Error: {str(e)}")
             logger.error(traceback.format_exc())
-            self.stdout.write(self.style.ERROR(f"    Error generating {paper_code} PDF for {dept_name}: {str(e)}"))
+            self.stdout.write(self.style.ERROR(f"    Error generating PDF for {dept_name}: {str(e)}"))
