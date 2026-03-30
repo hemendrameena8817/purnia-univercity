@@ -614,12 +614,12 @@ class UGStudentAttendanceListView(APIView):
                 Q(exam_subject__department=department) |
                 (Q(department__isnull=True) & Q(mjc__isnull=True) & Q(exam_subject__department__isnull=True))
             )
-            todays_schedules = UGExamSchedule.objects.filter(schedule_filter).filter(dept_filter)
+            todays_schedules = UGExamSchedule.objects.filter(schedule_filter).filter(dept_filter).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
         else:
             # If no department selected, show ALL schedules for today
-            todays_schedules = UGExamSchedule.objects.filter(schedule_filter)
-
-        todays_schedules = todays_schedules.select_related('exam', 'exam_subject').order_by('exam_time').distinct()
+            todays_schedules = UGExamSchedule.objects.filter(
+            Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
+        ).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
         
         if exam_type_param:
             todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
@@ -667,7 +667,10 @@ class UGStudentAttendanceListView(APIView):
             slot = f"{s.exam_time} to {s.sitting}" if s.exam_time and s.sitting else (s.exam_time or s.sitting or "TBD")
             if slot not in time_slots:
                 time_slots.append(slot)
-        active_exam_time = ", ".join(time_slots)
+        active_exam_details = {
+            "exam_date": str(today),
+            "exam_time": ", ".join(time_slots)
+        }
 
         active_exam = active_schedules[0].exam
         relevant_paper_names = []
@@ -723,9 +726,8 @@ class UGStudentAttendanceListView(APIView):
         if not registered_student_ids:
             return Response({
                 "attendance_open": True,
-                "exam_time": active_exam_time,
-                "exam_date": str(today),
-                "message": "No registered students found for this college and department.",
+                "exam_details": active_exam_details,
+                "message": "No registered students found for this college.",
                 "students": [],
                 "total": 0
             }, status=status.HTTP_200_OK)
@@ -744,17 +746,29 @@ class UGStudentAttendanceListView(APIView):
         if q_filter:
             student_assessments = student_assessments.filter(q_filter)
 
+        search_query = request.query_params.get('search', '').strip()
+        if search_query:
+            student_assessments = student_assessments.filter(
+                Q(student__roll_no__icontains=search_query) | 
+                Q(student__registration_no__icontains=search_query)
+            )
+
         from .pagination import LargeResultsSetPagination
         paginator = LargeResultsSetPagination()
         paginated_qs = paginator.paginate_queryset(student_assessments, request)
-        serializer = UGAttendanceStudentSerializer(paginated_qs, many=True)
+        
+        # Pass both Global details and specific schedules for shift-matching
+        serializer_context = {
+            'exam_details': active_exam_details,
+            'todays_schedules': list(todays_schedules)
+        }
+        serializer = UGAttendanceStudentSerializer(paginated_qs, many=True, context=serializer_context)
 
 
         paginated_response = paginator.get_paginated_response(serializer.data)
         paginated_response.data.update({
             "attendance_open": True,
-            "exam_date": str(today),
-            "exam_time": active_exam_time,
+            # "exam_details": active_exam_details,
         })
         return paginated_response
 
