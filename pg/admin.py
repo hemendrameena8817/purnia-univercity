@@ -1182,10 +1182,14 @@ class PGGroupAdmin(admin.ModelAdmin):
     get_departments.short_description = 'Departments'
 
 class PGExamScheduleResource(resources.ModelResource):
-    exam = fields.Field(
-        column_name='exam',
-        attribute='exam',
-        widget=SafeForeignKeyWidget(PGExam, field='name')
+    exam_id = fields.Field(
+        column_name='exam_id',
+        attribute='exam_id',
+    )
+    exam_name = fields.Field(
+        column_name='exam_name',
+        attribute='exam__name',
+        readonly=True
     )
     common_course_structure = fields.Field(
         column_name='common_course_structure',
@@ -1200,28 +1204,13 @@ class PGExamScheduleResource(resources.ModelResource):
 
     class Meta:
         model = PGExamSchedule
-        exclude = ('uid',)
-        import_id_fields = ('exam', 'common_course_structure', 'group', 'session', 'semester')
+        exclude = ('uid', 'exam')
+        import_id_fields = ('exam_id', 'common_course_structure', 'group', 'session', 'semester')
         export_order = (
-            'id', 'exam', 'group', 'common_course_structure',
+            'id', 'exam_id', 'exam_name', 'group', 'common_course_structure',
             'session', 'semester', 'exam_date', 'exam_time', 'sitting',
             'created_at', 'updated_at',
         )
-
-    def before_import_row(self, row, **kwargs):
-        val = str(row.get('exam', '') or '').strip()
-        if val:
-            exam = None
-            if val.isdigit():
-                exam = PGExam.objects.filter(id=int(val)).first()
-            if not exam:
-                exam = PGExam.objects.filter(name=val).first()
-            if not exam:
-                exam = PGExam.objects.filter(name__iexact=val).first()
-            if not exam:
-                exam = PGExam.objects.filter(name__icontains=val).first()
-            if exam:
-                row['exam'] = exam.name
 
 
 @admin.register(PGExamSchedule)
