@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from pg.models import PGExam, PGExamRegistration, PGDepartment
 from colleges.models import College
-from pg.utils.pdf_generator import generate_pg_roll_sheet_pdf
+from pg.utils.pg106_pdf_generator import generate_pg106_roll_sheet_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("No colleges found with matching students."))
             return
 
+        self.null_date_css_ids = null_date_css_ids
         self.stdout.write(f"Found {len(colleges)} colleges.")
 
         for college in colleges:
@@ -147,12 +148,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  - Generating Roll Sheet for Department: {dept_name}...")
 
         try:
-            pdf_content = generate_pg_roll_sheet_pdf(
+            pdf_content = generate_pg106_roll_sheet_pdf(
                 exam=exam,
                 college=college,
                 department=department,
                 registration_no=registration_no,
-                allowed_student_ids=target_student_ids
+                allowed_student_ids=target_student_ids,
+                allowed_css_ids=self.null_date_css_ids
             )
 
             if pdf_content:
