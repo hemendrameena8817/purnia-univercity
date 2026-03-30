@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from pg.models import PGExam, PGExamRegistration, PGDepartment
 from colleges.models import College
-from pg.utils.pg305_306_pdf_generator import generate_pg305_306_attendance_pdf
+from pg.utils.pdf_generator import generate_pg_attendance_sheet_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -74,56 +74,45 @@ class Command(BaseCommand):
             
             filters['student__college__in'] = colleges_found
 
-        # Get all registrations first
-        all_regs = PGExamRegistration.objects.filter(**filters)
-        
-        # Filter students by paper code (PG305 for Music, PG306 for others)
         from pg.models import PGStudentCourseAssessment
-        
-        # Get Music department
-        music_dept = PGDepartment.objects.filter(name__icontains='Music').first()
-        
-        # Get PG305 students (Music department)
-        pg305_filter = {'paper_code': 'PG305'}
+
+        # Get all registrations for this exam (scoped to college/reg filters)
+        all_regs = PGExamRegistration.objects.filter(**filters)
+
+        # Scope PG305/PG306 lookup to only students registered for this exam
+        exam_student_ids = list(all_regs.values_list('student_id', flat=True).distinct())
+
+        # Get Music department (single query, cached)
+        music_dept = PGDepartment.objects.filter(name__icontains='Music').only('id').first()
+
+        # PG305 students (Music dept) — scoped to exam students only
+        pg305_qs = PGStudentCourseAssessment.objects.filter(
+            paper_code='PG305', student_id__in=exam_student_ids
+        )
         if music_dept:
-            pg305_filter['department'] = music_dept
-        
-        pg305_student_ids = set(PGStudentCourseAssessment.objects.filter(
-            **pg305_filter
-        ).values_list('student_id', flat=True).distinct())
-        
-        # Get PG306 students (Non-Music departments)
-        pg306_filter = {'paper_code': 'PG306'}
+            pg305_qs = pg305_qs.filter(department=music_dept)
+        pg305_student_ids = set(pg305_qs.values_list('student_id', flat=True).distinct())
+
+        # PG306 students (Non-Music) — scoped to exam students only
+        pg306_qs = PGStudentCourseAssessment.objects.filter(
+            paper_code='PG306', student_id__in=exam_student_ids
+        )
         if music_dept:
-            # Exclude Music department from PG306
-            pg306_student_ids = set(PGStudentCourseAssessment.objects.filter(
-                **pg306_filter
-            ).exclude(department=music_dept).values_list('student_id', flat=True).distinct())
-        else:
-            pg306_student_ids = set(PGStudentCourseAssessment.objects.filter(
-                **pg306_filter
-            ).values_list('student_id', flat=True).distinct())
-        
-        # Combine both sets
+            pg306_qs = pg306_qs.exclude(department=music_dept)
+        pg306_student_ids = set(pg306_qs.values_list('student_id', flat=True).distinct())
+
         target_student_ids = pg305_student_ids | pg306_student_ids
-        
-        # Filter registrations to only target students
-        target_regs = all_regs.filter(student_id__in=target_student_ids)
-        
-        self.stdout.write(f"DEBUG: Found {len(pg305_student_ids)} PG305 students (Music)")
-        self.stdout.write(f"DEBUG: Found {len(pg306_student_ids)} PG306 students (Non-Music)")
-        self.stdout.write(f"DEBUG: Total {target_regs.count()} registrations")
+        self.stdout.write(f"PG305: {len(pg305_student_ids)} | PG306: {len(pg306_student_ids)} | Total: {len(target_student_ids)}")
 
-        # Find colleges with matching PG305/PG306 registrations
-        college_ids = target_regs.values_list('student__college_id', flat=True).distinct()
-        colleges = College.objects.filter(id__in=college_ids)
-        total_colleges = colleges.count()
+        # Find colleges with matching registrations (no extra count query)
+        college_ids = all_regs.filter(student_id__in=target_student_ids).values_list('student__college_id', flat=True).distinct()
+        colleges = list(College.objects.filter(id__in=college_ids))
 
-        if total_colleges == 0:
+        if not colleges:
             self.stdout.write(self.style.WARNING("No PG305/PG306 registered students found matching the criteria."))
             return
 
-        self.stdout.write(f"Found {total_colleges} colleges with PG305/PG306 registrations.")
+        self.stdout.write(f"Found {len(colleges)} colleges with PG305/PG306 registrations.")
 
         try:
             for college in colleges:
@@ -158,22 +147,17 @@ class Command(BaseCommand):
 
     def process_generation(self, exam, college, department, output_dir, registration_no=None, pg305_student_ids=None, pg306_student_ids=None):
         dept_name = department.name if department else "General"
-        
-        # Determine paper code based on department
         is_music = department and 'MUSIC' in department.name.upper()
         paper_code = 'PG305' if is_music else 'PG306'
-        student_ids_filter = pg305_student_ids if is_music else pg306_student_ids
         
-        self.stdout.write(f"  - Generating {paper_code} for Department: {dept_name}...")
+        self.stdout.write(f"  - Generating {paper_code} Attendance for Department: {dept_name}...")
         
         try:
-            # Use new PG305/306 PDF generator with 4 students per page
-            pdf_content = generate_pg305_306_attendance_pdf(
+            pdf_content = generate_pg_attendance_sheet_pdf(
                 exam=exam,
                 college=college,
                 department=department,
-                paper_code=paper_code,
-                student_ids_filter=student_ids_filter
+                registration_no=registration_no
             )
             
             if pdf_content:
@@ -187,13 +171,11 @@ class Command(BaseCommand):
                     filename = f"{paper_code}_Attendance_Sheet_{safe_college}_{safe_dept}.pdf"
                 
                 file_path = os.path.join(output_dir, filename)
-                
                 with open(file_path, 'wb') as f:
                     f.write(pdf_content)
-                
                 self.stdout.write(self.style.SUCCESS(f"    Saved: {filename}"))
             else:
-                self.stdout.write(self.style.WARNING(f"    No {paper_code} students returned by generator for {dept_name}."))
+                self.stdout.write(self.style.WARNING(f"    No {paper_code} students found for {dept_name}."))
         except Exception as e:
             logger.error(f"Error generating {paper_code} PDF for College: {college.name}, Dept: {dept_name}. Error: {str(e)}")
             logger.error(traceback.format_exc())
