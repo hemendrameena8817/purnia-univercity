@@ -1182,31 +1182,47 @@ class PGGroupAdmin(admin.ModelAdmin):
     get_departments.short_description = 'Departments'
 
 class PGExamScheduleResource(resources.ModelResource):
-    exam = fields.Field(
+    exam_id = fields.Field(
         column_name='exam',
-        attribute='exam',
-        widget=ForeignKeyWidget(PGExam, field='name')
+        attribute='exam_id',
+    )
+    exam_name = fields.Field(
+        column_name='exam_name',
+        attribute='exam__name',
+        readonly=True
     )
     common_course_structure = fields.Field(
         column_name='common_course_structure',
         attribute='common_course_structure',
-        widget=ForeignKeyWidget(PGCommonCourseStructure, field='course_code')
+        widget=SafeForeignKeyWidget(PGCommonCourseStructure, field='course_code')
     )
     group = fields.Field(
         column_name='group',
         attribute='group',
-        widget=ForeignKeyWidget(PGGroup, field='name')
+        widget=SafeForeignKeyWidget(PGGroup, field='name')
     )
 
     class Meta:
         model = PGExamSchedule
-        exclude = ('uid',)
-        import_id_fields = ('exam', 'common_course_structure', 'group', 'session', 'semester')
+        exclude = ('uid', 'exam', 'id')
+        import_id_fields = ('exam_id', 'common_course_structure', 'group', 'session', 'semester')
         export_order = (
-            'id', 'exam', 'group', 'common_course_structure',
+            'exam_id', 'exam_name', 'group', 'common_course_structure',
             'session', 'semester', 'exam_date', 'exam_time', 'sitting',
-            'created_at', 'updated_at',
         )
+
+    def before_import_row(self, row, row_number=None, **kwargs):
+        row.pop('uid', None)
+        row.pop('id', None)
+        val = str(row.get('exam', '') or '').strip()
+        if val and not val.isdigit():
+            exam = (
+                PGExam.objects.filter(name=val).first() or
+                PGExam.objects.filter(name__iexact=val).first() or
+                PGExam.objects.filter(name__icontains=val).first()
+            )
+            if exam:
+                row['exam'] = str(exam.id)
 
 
 @admin.register(PGExamSchedule)
