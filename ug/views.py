@@ -600,29 +600,50 @@ class UGStudentAttendanceListView(APIView):
         now_local = timezone.localtime(timezone.now())
         today = now_local.date()
         current_time = now_local.time()
-
         exam_type_param = request.query_params.get('exam_type', '').strip().upper()
 
-        # Build schedule filter
+        # Build schedule filter for TODAY
         schedule_filter = Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
         
+        # Initial schedules queryset
+        todays_schedules = UGExamSchedule.objects.filter(schedule_filter).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
+
+        # If a specific department or category is selected, narrow down schedules
         if department:
-            # Filter schedules explicitly tied to this department or generic university-wide subjects
             dept_filter = (
                 Q(department=department) | 
                 Q(mjc=department) | 
                 Q(exam_subject__department=department) |
                 (Q(department__isnull=True) & Q(mjc__isnull=True) & Q(exam_subject__department__isnull=True))
             )
-            todays_schedules = UGExamSchedule.objects.filter(schedule_filter).filter(dept_filter).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
-        else:
-            # If no department selected, show ALL schedules for today
-            todays_schedules = UGExamSchedule.objects.filter(
-            Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
-        ).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
-        
+            todays_schedules = todays_schedules.filter(dept_filter)
+
         if exam_type_param:
             todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
+
+        # --- STRICT 1st SEMESTER AUTO-SELECTION ---
+        # Only show Semester-I exams by default as per requirement
+        todays_schedules = todays_schedules.filter(exam__semester__icontains="I")
+
+        # Pick the most recently added exam that matches today's Semester-I criteria
+        recent_exam_id = todays_schedules.order_by('exam__id').values_list('exam', flat=True).last()
+        
+        if not recent_exam_id:
+            # Absolute fallback to the last UG exam in the system if no schedules match today
+            last_exam = UGExam.objects.all().last()
+            if last_exam:
+                recent_exam_id = last_exam.id
+        
+        # If we have a resolve context (either from today or absolute fallback)
+        if recent_exam_id:
+            # Sync todays_schedules to the finalized exam ID
+            todays_schedules = UGExamSchedule.objects.filter(schedule_filter, exam_id=recent_exam_id).select_related('exam', 'exam_subject').prefetch_related('mjc', 'department').order_by('exam_time').distinct()
+            
+            # Re-apply dept/type filters if they were active
+            if department:
+                todays_schedules = todays_schedules.filter(dept_filter)
+            if exam_type_param:
+                todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
 
         print(f"{todays_schedules = }")
         if not todays_schedules.exists():
@@ -672,7 +693,7 @@ class UGStudentAttendanceListView(APIView):
             "exam_time": ", ".join(time_slots)
         }
 
-        active_exam = active_schedules[0].exam
+        active_exam = active_schedules[-1].exam
         relevant_paper_names = []
         relevant_course_types = []
         
@@ -735,6 +756,7 @@ class UGStudentAttendanceListView(APIView):
         student_assessments = StudentCourseAssessment.objects.filter(
             student_id__in=registered_student_ids,
             label__iregex=r'^ESE-Theory',
+            semester = '1ST'
         ).select_related('student').order_by('student__roll_no', 'student__registration_no')
 
         q_filter = Q()
