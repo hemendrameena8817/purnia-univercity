@@ -598,6 +598,8 @@ class UGStudentAttendanceListView(APIView):
         today = now_local.date()
         current_time = now_local.time()
 
+        exam_type_param = request.query_params.get('exam_type', '').strip().upper()
+
         # Filter schedules explicitly tied to this department or generic university-wide subjects
         dept_filter = (
             Q(department=department) | 
@@ -609,6 +611,10 @@ class UGStudentAttendanceListView(APIView):
         todays_schedules = UGExamSchedule.objects.filter(
             Q(exam_date=today) | Q(attendance_from__lte=now_local, attendance_to__gte=now_local)
         ).filter(dept_filter).select_related('exam', 'exam_subject').order_by('exam_time').distinct()
+        
+        if exam_type_param:
+            todays_schedules = todays_schedules.filter(exam_type__iexact=exam_type_param)
+
         print(f"{todays_schedules = }")
         if not todays_schedules.exists():
             return Response({
