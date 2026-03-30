@@ -6,7 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
 from pg.models import PGExam, PGExamRegistration, PGDepartment
 from colleges.models import College
-from pg.utils.pdf_generator import generate_pg_roll_sheet_pdf
+from pg.utils.pg106_pdf_generator import generate_pg106_roll_sheet_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -67,37 +67,37 @@ class Command(BaseCommand):
                 raise CommandError("None of the specified college UIDs were found.")
             filters['student__college__in'] = colleges_found
 
-        from pg.models import PGExamSchedule, PGGroup
+        from pg.models import PGExamSchedule, PGCommonCourseStructure
 
         # Get all registered students for this exam
         all_regs = PGExamRegistration.objects.filter(**filters)
 
-        # Find groups with null exam_date in schedule for this exam
-        null_date_group_ids = set(
+        # Find common_course_structure IDs with null exam_date in schedule for this exam
+        null_date_css_ids = set(
             PGExamSchedule.objects.filter(exam=exam, exam_date__isnull=True)
-            .exclude(group=None)
-            .values_list('group_id', flat=True)
+            .exclude(common_course_structure=None)
+            .values_list('common_course_structure_id', flat=True)
             .distinct()
         )
-        self.stdout.write(f"Null-date group IDs: {null_date_group_ids}")
+        self.stdout.write(f"Null-date course structure IDs: {null_date_css_ids}")
 
-        if not null_date_group_ids:
-            self.stdout.write(self.style.WARNING("No null exam_date schedules with groups found for this exam."))
+        if not null_date_css_ids:
+            self.stdout.write(self.style.WARNING("No null exam_date schedules with course structures found."))
             return
 
-        # Find departments belonging to those null-date groups
+        # Find departments linked to those course structures (M2M)
         null_date_dept_ids = set(
-            PGGroup.objects.filter(id__in=null_date_group_ids)
-            .values_list('department__id', flat=True)
+            PGCommonCourseStructure.objects.filter(id__in=null_date_css_ids)
+            .values_list('departments__id', flat=True)
             .distinct()
         )
-        self.stdout.write(f"Null-date group dept IDs: {null_date_dept_ids}")
+        self.stdout.write(f"Dept IDs from null-date course structures: {null_date_dept_ids}")
 
         if not null_date_dept_ids:
-            self.stdout.write(self.style.WARNING("No departments found in null-date groups."))
+            self.stdout.write(self.style.WARNING("No departments found in null-date course structures."))
             return
 
-        # Find registered students whose department is in null-date groups
+        # Find registered students whose department is in those course structures
         target_student_ids = set(
             all_regs.filter(
                 student__department_id__in=null_date_dept_ids
@@ -106,7 +106,7 @@ class Command(BaseCommand):
         self.stdout.write(f"Target students: {len(target_student_ids)}")
 
         if not target_student_ids:
-            self.stdout.write(self.style.WARNING("No registered students found in null-date group departments."))
+            self.stdout.write(self.style.WARNING("No registered students found for null-date subjects."))
             return
 
         # Find colleges with matching registrations
@@ -117,6 +117,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("No colleges found with matching students."))
             return
 
+        self.null_date_css_ids = null_date_css_ids
         self.stdout.write(f"Found {len(colleges)} colleges.")
 
         for college in colleges:
@@ -147,12 +148,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  - Generating Roll Sheet for Department: {dept_name}...")
 
         try:
-            pdf_content = generate_pg_roll_sheet_pdf(
+            pdf_content = generate_pg106_roll_sheet_pdf(
                 exam=exam,
                 college=college,
                 department=department,
                 registration_no=registration_no,
-                allowed_student_ids=target_student_ids
+                allowed_student_ids=target_student_ids,
+                allowed_css_ids=self.null_date_css_ids
             )
 
             if pdf_content:
