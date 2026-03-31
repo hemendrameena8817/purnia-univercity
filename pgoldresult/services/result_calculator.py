@@ -694,8 +694,10 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
         if center_map:
             center_name = center_map.center_name or ''
 
-    # Always read final_result from the effective session's records (freshly updated by recalculate_pgo_sgpa)
-    current_session_result = all_res.filter(session_code=effective_session).first() if effective_session else first_result
+    # Always read final_result from the REQUESTED session's records (not effective_session which may be carry-forward)
+    # This ensures session-specific marksheets show the correct PASS/FAIL status for that session
+    requested_session = session  # Use the session parameter passed to this function
+    current_session_result = all_res.filter(session_code=requested_session).first() if requested_session else first_result
     final_result_status = (current_session_result.final_result if current_session_result else '') or ''
 
     semester_result = {
