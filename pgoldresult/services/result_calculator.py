@@ -766,7 +766,20 @@ def get_pg_old_result_for_pdf(registration_no=None, roll_no=None, semester=None,
     # Handle Semester 4 CGPA Data
     cgpa_data = None
     if semester == '4TH':
-        cgpa_data = get_pg_cgpa_data(registration_no, roll_no)
+        cgpa_data = get_pg_cgpa_data(registration_no, roll_no, session=session)
+        
+        # Validation: If Sem 4 is PASS, ensure all previous semesters have valid GPA
+        if final_result_status == 'PASS' and cgpa_data:
+            missing_sems = []
+            for sem_key in ['sem1', 'sem2', 'sem3']:
+                sem_gpa = cgpa_data.get(sem_key, {}).get('gpa', 0)
+                if not sem_gpa or float(sem_gpa) == 0:
+                    missing_sems.append(sem_key.upper().replace('SEM', 'Semester '))
+            
+            if missing_sems:
+                return {
+                    'error': f'Cannot generate Semester 4 marksheet. Missing GPA data for: {", ".join(missing_sems)}. Please ensure all previous semesters have valid results.'
+                }
 
     return {
         'student_info': student_info,

@@ -340,6 +340,7 @@
         </thead>
         <tbody>
             <tr>
+                {% if semester_result.status|upper == 'PASS' %}
                 <td>{{ cgpa_data.sem1.gpa|default:"0.00" }}</td>
                 <td>{{ cgpa_data.sem1.credits|floatformat:0|default:"0" }}</td>
                 <td>{{ cgpa_data.sem2.gpa|default:"0.00" }}</td>
@@ -351,6 +352,19 @@
                 <td>{{ cgpa_data.cgpa|default:"0.00" }}</td>
                 <td>{{ cgpa_data.numerical_grade|default:"0" }}</td>
                 <td>{{ cgpa_data.letter_grade|default:"F" }}</td>
+                {% else %}
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                {% endif %}
             </tr>
         </tbody>
     </table>
