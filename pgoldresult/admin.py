@@ -113,7 +113,7 @@ class PGOldResultAdmin(ImportExportModelAdmin):
         'subject_name',
         'mark_secured',
         'subject_result',
-        'gpa',
+        # 'gpa',
         'imported_at',
         'total_ce'
 
@@ -127,7 +127,7 @@ class PGOldResultAdmin(ImportExportModelAdmin):
         'discipline_code',
         'status',
         'subject_result',
-        'final_result',
+        # 'final_result',
         'institute_code',)
     
     search_fields = (
