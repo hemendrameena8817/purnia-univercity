@@ -1,6 +1,9 @@
 from io import BytesIO
+from django.db.models import Q
+from difflib import SequenceMatcher
 import os
 import base64
+import qrcode
 import re
 import datetime
 from django.template.loader import render_to_string
@@ -269,30 +272,57 @@ def generate_ug_admit_card_pdf(student, exam):
 
             # --- SYSTEMATIC 3-STEP LOOKUP (Common Priority) ---
             sch = None
-            
-            # Condition 1: (1st Priority) Matching by Resolved Department
-            if curr_dept_id:
-                # 1a. Attempt Subject-Specific match first in this department
-                sch = sch_qs.filter(department__id=curr_dept_id, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
-                # 1b. Fallback to general department category if no subject match
-                if not sch:
-                    sch = sch_qs.filter(department__id=curr_dept_id, exam_type__iexact=base_cat).last()
+            if base_cat in ['AEC', 'VAC', 'SEC']:
+                # Priority 2: Student MJC Specific Mapping (MJC Overrides MUST be prioritized first)
+                student_major_course_id = student.major_course.id if student.major_course else None
+                if student_major_course_id:
+                    sch = find_strict_subject_schedule(
+                        sch_qs.filter(
+                            mjc__id=student_major_course_id,
+                            department__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
 
-            # Condition 2: (2nd Priority) Fallback to MJC mapping where Department is Null
-            if not sch and curr_dept_id:
-                # 2a. Attempt Subject-Specific match in MJC first
-                sch = sch_qs.filter(department__isnull=True, mjc__id=curr_dept_id, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
-                # 2b. Fallback to general MJC category
                 if not sch:
-                    sch = sch_qs.filter(department__isnull=True, mjc__id=curr_dept_id, exam_type__iexact=base_cat).last()
+                    # Priority 1: Common Paper Pool (Both Department and MJC NULL)
+                    # This fixes the 2:00 PM vs 10:00 AM problem for Art of Being Happy / Creative Writing
+                    sch = find_strict_subject_schedule(
+                        sch_qs.filter(
+                            department__isnull=True,
+                            mjc__isnull=True,
+                            exam_subject__isnull=False,
+                            exam_type__iexact=base_cat
+                        ),
+                        course_name,
+                        ass.paper_code,
+                        ass.new_course_code
+                    )
+            else:
+                # Standard Subjects (MJC, MIC, MDC)
+                
+                # Check 1: Find EXACT schedule mapped via mjc OR department to student major_course
+                if not sch and curr_dept_id:
+                    matches = sch_qs.filter(
+                            Q(mjc__id=curr_dept_id) | Q(department__id=curr_dept_id),
+                            exam_type__iexact=base_cat
+                    )
+                    if matches.count() == 1:
+                        sch = matches.first()
+                    elif matches.count() > 1:
+                        sch = matches.order_by('exam_date', 'exam_time').first()
 
-            # Condition 3: (3rd Priority) Final Fallback for General Common Papers (no dept/mjc)
-            if not sch:
-                # 3a. Attempt Subject-Specific match in Common pool
-                sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_type__iexact=base_cat, exam_subject__course_name__iexact=course_name).last()
-                # 3b. Truly general Category slot (e.g. university-wide common subject)
-                if not sch:
-                    sch = sch_qs.filter(department__isnull=True, mjc__isnull=True, exam_type__iexact=base_cat).last()
+                # Check 2: If Course mapping misses, fallback to the Student's real Department
+                if not sch and dept_id:
+                    matches = sch_qs.filter(department__id=dept_id, exam_type__iexact=base_cat)
+                    if matches.count() == 1:
+                        sch = matches.first()
+                    elif matches.count() > 1:
+                        sch = matches.order_by('exam_date', 'exam_time').first()
 
                 # Check 3: Final Resort, any schedule matching the category
                 if not sch:
