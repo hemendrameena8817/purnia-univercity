@@ -340,6 +340,7 @@
         </thead>
         <tbody>
             <tr>
+                {% if semester_result.status|upper == 'PASS' %}
                 <td>{{ cgpa_data.sem1.gpa|default:"0.00" }}</td>
                 <td>{{ cgpa_data.sem1.credits|floatformat:0|default:"0" }}</td>
                 <td>{{ cgpa_data.sem2.gpa|default:"0.00" }}</td>
@@ -351,6 +352,19 @@
                 <td>{{ cgpa_data.cgpa|default:"0.00" }}</td>
                 <td>{{ cgpa_data.numerical_grade|default:"0" }}</td>
                 <td>{{ cgpa_data.letter_grade|default:"F" }}</td>
+                {% else %}
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                {% endif %}
             </tr>
         </tbody>
     </table>
@@ -359,7 +373,7 @@
         <div style="width: 100%;">
             <div style="display: flex; justify-content: space-between; margin: 5px 0;">
                 <p style="margin: 0;">Remarks : <strong>{{ semester_result.status|upper }}</strong></p>
-                <p style="margin: 0;">Grade : <strong>{{ cgpa_data.grade_description|default:"--" }}</strong></p>
+                <p style="margin: 0;">Grade : <strong>{% if semester_result.status|upper == 'FAIL' %}Fail{% else %}{{ cgpa_data.grade_description|default:"--" }}{% endif %}</strong></p>
             </div>
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 10px;">
                 <div style="width: 35%; font-weight: normal; padding-top:50px;">

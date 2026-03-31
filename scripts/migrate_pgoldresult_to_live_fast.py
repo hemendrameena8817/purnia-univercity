@@ -165,7 +165,7 @@ def migrate_results():
     # Pre-build local profile UID map
     print("   🔗 Building local profile mapping...")
     local_profile_uid_map = {
-        str(p.uid): p.id for p in PGOldStudentProfile.objects.using(SOURCE_DB)
+        str(uid): pk for uid, pk in PGOldStudentProfile.objects.using(SOURCE_DB)
         .values_list('uid', 'id')
     }
 
