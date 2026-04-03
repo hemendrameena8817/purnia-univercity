@@ -49,10 +49,8 @@ class RegistrationEligibilityView(APIView):
         try:
             # Get student profile
             student = request.user.ug_student_profile
-            
             # Check eligibility
             result = SemesterRegistrationService.check_registration_eligibility(student)
-            
             # Return appropriate status code
             if result['eligible']:
                 return Response(result, status=status.HTTP_200_OK)
