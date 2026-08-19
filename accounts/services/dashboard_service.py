@@ -32,6 +32,8 @@ class DashboardService:
             'pg': cls._get_pg_data,
             'mca_sem': cls._get_mca_data,
             'plw': cls._get_plw_data,
+            'mba': cls._get_mba_data,
+            'mba_sem': cls._get_mba_data,
         }
         
         handler = handlers.get(profile_type)
@@ -130,3 +132,38 @@ class DashboardService:
                 'registration_open': False,
             }
         }
+
+    @classmethod
+    def _get_mba_data(cls, user) -> Dict:
+        """Get MBA student dashboard data"""
+        try:
+            student = user.mba_student_profile
+            return {
+                'student_info': {
+                    'registration_no': student.registration_no,
+                    'roll_no': student.roll_no,
+                    'name': f"{student.first_name or ''} {student.last_name or ''}".strip(),
+                    'course': student.course.name if student.course else None,
+                    'college': student.college.name if student.college else None,
+                    'batch': student.batch.name if student.batch else None,
+                    'current_semester': student.current_semester,
+                    'session': student.session_str,
+                    'profile_image': student.profile_image.url if student.profile_image else None,
+                },
+                'batch': student.batch.name if student.batch else None,
+                'registration': {
+                    'eligible': False,
+                    'reason': 'MBA registration service not yet implemented',
+                    'registration_open': False,
+                }
+            }
+        except ObjectDoesNotExist:
+            return {
+                'student_info': None,
+                'registration': {
+                    'eligible': False,
+                    'reason': 'No MBA student profile found for this user',
+                    'registration_open': False,
+                }
+            }
+
